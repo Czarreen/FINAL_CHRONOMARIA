@@ -33,12 +33,16 @@ def start_process(name: str, command: str, cwd: Path) -> subprocess.Popen:
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
         "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
     }
 
     # On Windows, many dev commands (e.g. npm) are .cmd shims.
     # shell=True ensures they are resolved consistently.
     if os.name == "nt":
-        return subprocess.Popen(command, shell=True, **popen_kwargs)
+        # Ensure cmd emits UTF-8 so symbols from Vite/Node logs render correctly.
+        win_command = f"chcp 65001>nul & {command}"
+        return subprocess.Popen(win_command, shell=True, **popen_kwargs)
 
     return subprocess.Popen(shlex.split(command), shell=False, **popen_kwargs)
 

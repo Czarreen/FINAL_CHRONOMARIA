@@ -43,7 +43,16 @@ export default function CourseOfferingView() {
         const { rows: data, total: count } = await fetchCourseOfferingsPage(page, PAGE_SIZE);
 
         if (!active) return;
-        setOfferings(data);
+        setOfferings(
+          data.map((row) => ({
+            ...row,
+            department_name:
+              row.departments?.department_name ??
+              (row.department_id !== null && row.department_id !== undefined
+                ? `Department #${row.department_id}`
+                : null),
+          }))
+        );
         setTotalRows(count);
       } catch (err) {
         if (!active) return;
@@ -104,7 +113,16 @@ export default function CourseOfferingView() {
         // request a large limit or let backend honor `search` param if supported
         const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: filterText });
         if (!active) return;
-        setOfferings(rows);
+        setOfferings(
+          rows.map((row) => ({
+            ...row,
+            department_name:
+              row.departments?.department_name ??
+              (row.department_id !== null && row.department_id !== undefined
+                ? `Department #${row.department_id}`
+                : null),
+          }))
+        );
         setTotalRows(rows.length);
       } catch (err) {
         if (!active) return;
@@ -136,6 +154,7 @@ export default function CourseOfferingView() {
       title: 'Curriculum',
       columns: [
         { key: 'curr_id', label: 'Curriculum ID', width: 'w-20' },
+        { key: 'department_name', label: 'Department', width: 'w-40' },
         { key: 'section', label: 'Section', width: 'w-16' },
         { key: 'units', label: 'Units', width: 'w-12' },
         { key: 'lec_hrs', label: 'Lecture Hrs', width: 'w-16' },
