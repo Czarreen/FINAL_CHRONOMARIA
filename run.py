@@ -33,6 +33,8 @@ def start_process(name: str, command: str, cwd: Path) -> subprocess.Popen:
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
         "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
     }
 
     # On Windows, many dev commands (e.g. npm) are .cmd shims.
