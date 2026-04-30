@@ -12,8 +12,9 @@ import {
   ChevronDown,
   Edit3,
   X,
+  Search,
 } from 'lucide-react';
-import { fetchCourseOfferingsPage } from '../services/courseOfferingsApi';
+import { fetchCourseOfferingsPage, fetchCourseOfferings } from '../services/courseOfferingsApi';
 
 const PAGE_SIZE = 50;
 
@@ -60,6 +61,8 @@ export default function CourseOfferingView() {
     };
   }, [page]);
 
+
+
   const startRow = totalRows === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endRow = Math.min(page * PAGE_SIZE, totalRows);
 
@@ -72,6 +75,52 @@ export default function CourseOfferingView() {
     }
     setExpandedRows(newExpanded);
   };
+
+  // Search / filter / sort state
+  const [filterText, setFilterText] = useState('');
+  const [filterColumn, setFilterColumn] = useState('all');
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const numericCols = new Set(['units', 'lec_hrs', 'lab_hrs', 'curr_id', 'mth_room_id', 'tfs_room_id']);
+
+  // When user types a global search, fetch across the whole DB (debounced).
+  useEffect(() => {
+    if (!filterText) return; // only run when there's a search term
+    let active = true;
+    const tid = setTimeout(async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // request a large limit or let backend honor `search` param if supported
+        const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: filterText });
+        if (!active) return;
+        setOfferings(rows);
+        setTotalRows(rows.length);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Failed to run global search.');
+        setOfferings([]);
+        setTotalRows(0);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(tid);
+    };
+  }, [filterText]);
 
   // Column groups for organized display
   const columnGroups = [
@@ -105,6 +154,43 @@ export default function CourseOfferingView() {
   ];
 
   const allColumns = columnGroups.flatMap(g => g.columns);
+
+  const filteredOfferings = useMemo(() => {
+    if (!filterText) return offerings;
+    const q = filterText.toLowerCase();
+    return offerings.filter((row) => {
+      const check = (val) => (val === null || val === undefined) ? false : String(val).toLowerCase().includes(q);
+      if (filterColumn === 'all') {
+        return allColumns.some((c) => check(row[c.key]));
+      }
+      const col = allColumns.find((c) => c.key === filterColumn);
+      return col ? check(row[col.key]) : false;
+    });
+  }, [offerings, filterText, filterColumn]);
+
+  const displayedOfferings = useMemo(() => {
+    const arr = Array.from(filteredOfferings);
+    if (!sortKey) return arr;
+    arr.sort((a, b) => {
+      const va = a[sortKey];
+      const vb = b[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (numericCols.has(sortKey)) {
+        const na = Number(va);
+        const nb = Number(vb);
+        return sortDir === 'asc' ? na - nb : nb - na;
+      }
+      const sa = String(va).toLowerCase();
+      const sb = String(vb).toLowerCase();
+      if (sa < sb) return sortDir === 'asc' ? -1 : 1;
+      if (sa > sb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filteredOfferings, sortKey, sortDir]);
+
 
   const renderCellValue = (value) => {
     if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
@@ -147,41 +233,92 @@ export default function CourseOfferingView() {
         </div>
       </div>
 
+      {/* Controls: Search / Filter / Sort */}
+      <div className="glass-panel flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 w-full sm:w-1/2">
+          <div className="relative flex w-full items-center">
+            <Search className="absolute left-3 text-on-surface-variant" />
+            <input
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Search (all columns)"
+              className="w-full rounded-lg border border-white/60 bg-white/70 px-10 py-3 text-sm text-on-surface-variant outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            {filterText && (
+              <button
+                onClick={() => setFilterText('')}
+                className="absolute right-3 rounded px-2 py-1 text-on-surface-variant hover:bg-white/60"
+                aria-label="Clear search"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <select
+            value={filterColumn}
+            onChange={(e) => setFilterColumn(e.target.value)}
+            className="rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm text-on-surface-variant"
+          >
+            <option value="all">All columns</option>
+            {allColumns.map((c) => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => { setFilterText(''); setFilterColumn('all'); setSortKey(null); setSortDir('asc'); }}
+            className="rounded-lg border border-white/60 bg-white px-3 py-2 text-sm font-semibold text-on-surface-variant hover:bg-slate-50"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
       {/* Data Table */}
       <div className="glass-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              {columnGroups.map((group, groupIdx) => (
-                <tr key={groupIdx} className="border-b border-white/30 bg-white/40">
-                  {groupIdx === 0 && (
-                    <th className="w-16 px-6 py-3 text-center">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  )}
-                  <th
-                    colSpan={group.columns.length}
-                    className="px-6 py-3 text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70"
-                  >
-                    {group.title}
+                <tr className="border-b border-white/30 bg-white/40">
+                  <th rowSpan={2} className="w-16 px-6 py-3 text-center">
+                    <span className="sr-only">Actions</span>
                   </th>
-                </tr>
-              ))}
-              <tr className="border-b border-white/50 bg-white/50">
-                <th className="w-16 px-6 py-4 text-center">
-                  <span className="sr-only">Actions</span>
-                </th>
-                {columnGroups.map((group) =>
-                  group.columns.map((col) => (
+                  {columnGroups.map((group) => (
                     <th
-                      key={col.key}
-                      className={`px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/80 ${col.width}`}
+                      key={group.title}
+                      colSpan={group.columns.length}
+                      className="px-6 py-3 text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70"
                     >
-                      {col.label}
+                      {group.title}
                     </th>
-                  ))
-                )}
-              </tr>
+                  ))}
+                </tr>
+                <tr className="border-b border-white/50 bg-white/50">
+                  {columnGroups.map((group) =>
+                    group.columns.map((col) => (
+                      <th
+                        key={col.key}
+                        className={`px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/80 ${col.width}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSort(col.key)}
+                          className="inline-flex items-center gap-2"
+                        >
+                          <span>{col.label}</span>
+                          <ChevronDown
+                            size={12}
+                            className={`transition-transform ${
+                              sortKey === col.key ? (sortDir === 'asc' ? 'rotate-180' : 'rotate-0') : 'opacity-30'
+                            }`}
+                          />
+                        </button>
+                      </th>
+                    ))
+                  )}
+                </tr>
             </thead>
             <tbody className="divide-y divide-white/40">
               {loading && (
@@ -217,7 +354,7 @@ export default function CourseOfferingView() {
                 </tr>
               )}
 
-              {!loading && !error && offerings.map((offering) => (
+              {!loading && !error && displayedOfferings.map((offering) => (
                 <tr key={offering.id} className="transition-colors hover:bg-white/30 group">
                   <td className="w-16 px-6 py-5 text-center">
                     <button
