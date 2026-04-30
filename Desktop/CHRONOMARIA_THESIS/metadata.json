@@ -1,0 +1,6 @@
+{
+  "name": "Chronomaria",
+  "description": "An intelligent faculty loading and scheduling system using genetic algorithms to optimize room and subject assignments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

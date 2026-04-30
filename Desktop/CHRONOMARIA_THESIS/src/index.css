@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-label-bold: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body-sm: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body-md: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-headline-lg: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-headline-xl: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-numeric-lg: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #4b2ab8;
+  --color-primary-container: #6347d1;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #dfd6ff;
+  --color-secondary: #006879;
+  --color-secondary-container: #9be9fd;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #006a7d;
+  --color-tertiary: #4b3e86;
+  --color-tertiary-container: #6356a0;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #e0d7ff;
+  --color-surface: #f9f9ff;
+  --color-surface-variant: #dce2f3;
+  --color-surface-container: #e7eefe;
+  --color-surface-container-high: #e2e8f8;
+  --color-surface-container-highest: #dce2f3;
+  --color-surface-container-low: #f0f3ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-surface: #151c27;
+  --color-on-surface-variant: #484554;
+  --color-background: #f9f9ff;
+  --color-on-background: #151c27;
+  --color-outline: #797585;
+  --color-outline-variant: #c9c4d6;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+
+  --spacing-container-padding: 24px;
+  --spacing-gutter: 24px;
+  --spacing-margin: 32px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-background text-on-surface font-sans antialiased;
+  }
+}
+
+@utility card {
+  @apply rounded-xl border border-white/60 bg-white/80 shadow-sm backdrop-blur-xl transition-all duration-200;
+}
+
+@layer components {
+  .btn-primary {
+    @apply rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply rounded-md border border-outline-variant bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 active:scale-95;
+  }
+
+  .badge {
+    @apply rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider;
+  }
+
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply bg-amber-100 text-amber-800;
+  }
+
+  .badge-error {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .glass-panel {
+    @apply rounded-xl border border-white/60 bg-white/70 shadow-[0_30px_40px_rgba(75,42,184,0.05)] backdrop-blur-[20px];
+  }
+
+  .glass-card {
+    @apply rounded-xl border border-white/60 bg-white/70 shadow-[0_30px_40px_rgba(75,42,184,0.05)] backdrop-blur-[20px];
+  }
+
+  .bg-mesh {
+    background-color: #f0f3ff;
+    background-image:
+      radial-gradient(at 10% 20%, rgba(202, 190, 255, 0.4) 0px, transparent 50%),
+      radial-gradient(at 80% 10%, rgba(155, 233, 253, 0.4) 0px, transparent 50%),
+      radial-gradient(at 40% 80%, rgba(226, 232, 248, 0.5) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
