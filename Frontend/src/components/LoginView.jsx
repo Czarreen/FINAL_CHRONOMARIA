@@ -1,8 +1,4 @@
-interface LoginViewProps {
-  onLogin: () => void;
-}
-
-export default function LoginView({ onLogin }: LoginViewProps) {
+export default function LoginView({ onLogin }) {
   return (
     <div className="min-h-screen bg-mesh px-4 py-6 text-on-surface md:px-8 md:py-10">
       <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-[2rem] border border-white/50 bg-white/60 shadow-[0_30px_80px_rgba(75,42,184,0.12)] backdrop-blur-[24px] lg:grid-cols-[1.1fr_0.9fr]">

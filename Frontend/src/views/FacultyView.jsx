@@ -1,7 +1,6 @@
 import { Users, Edit2, Trash2, Mail, Building2, BadgeCheck } from 'lucide-react';
-import { FacultyMember } from '../types';
 
-const MOCK_FACULTY: FacultyMember[] = [
+const MOCK_FACULTY = [
   { id: '1', name: 'Dr. Helena Vance', email: 'helena.v@chronomaria.edu', department: 'Computer Science', role: 'Associate Professor', status: 'active' },
   { id: '2', name: 'Prof. Robert Jenkins', email: 'robert.j@chronomaria.edu', department: 'Pure Mathematics', role: 'Department Head', status: 'on-leave' },
   { id: '3', name: 'Marcus Sterling', email: 'm.sterling@chronomaria.edu', department: 'Digital Arts', role: 'Lecturer', status: 'active' },

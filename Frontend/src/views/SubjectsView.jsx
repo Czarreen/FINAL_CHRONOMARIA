@@ -1,7 +1,6 @@
 import { BookOpen, PlusCircle, Edit2, Trash2, Clock, Layers, LibraryBig } from 'lucide-react';
-import { Subject } from '../types';
 
-const MOCK_SUBJECTS: Subject[] = [
+const MOCK_SUBJECTS = [
   { id: '1', code: 'CS-301', title: 'Advanced Algorithm Design', units: 3.0, category: 'major', lastUpdate: '2h ago' },
   { id: '2', code: 'ENG-102', title: 'Technical Report Writing', units: 2.0, category: 'minor', lastUpdate: 'Oct 12' },
   { id: '3', code: 'MATH-204', title: 'Differential Equations', units: 3.0, category: 'major', lastUpdate: 'Yesterday' },

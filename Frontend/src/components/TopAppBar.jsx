@@ -1,11 +1,6 @@
 import { Bell, Settings as SettingsIcon } from 'lucide-react';
 
-interface TopAppBarProps {
-  title: string;
-  onLogout: () => void;
-}
-
-export default function TopAppBar({ title, onLogout }: TopAppBarProps) {
+export default function TopAppBar({ title, onLogout }) {
   return (
     <header className="fixed top-0 right-0 z-40 ml-[260px] flex h-16 w-[calc(100%-260px)] items-center justify-between border-b border-white/40 bg-white/70 px-8 shadow-sm backdrop-blur-[20px]">
       <div className="hidden text-xl font-bold text-indigo-600 md:block">Chronomaria</div>

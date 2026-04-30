@@ -1,7 +1,6 @@
 import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, Layers3, Cpu } from 'lucide-react';
-import { Room } from '../types';
 
-const MOCK_ROOMS: Room[] = [
+const MOCK_ROOMS = [
   { 
     id: '1', 
     code: 'LH-A101', 

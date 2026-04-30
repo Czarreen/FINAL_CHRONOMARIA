@@ -7,21 +7,14 @@ import {
   LogOut,
   CircleUserRound,
 } from 'lucide-react';
-import { ViewType } from '../types';
 
-interface SidebarProps {
-  currentView: ViewType;
-  onViewChange: (view: ViewType) => void;
-  onLogout: () => void;
-}
-
-export default function Sidebar({ currentView, onViewChange, onLogout }: SidebarProps) {
+export default function Sidebar({ currentView, onViewChange, onLogout }) {
   const menuItems = [
-    { id: 'dashboard' as ViewType, icon: BarChart3, label: 'Dashboard' },
-    { id: 'faculty' as ViewType, icon: Users, label: 'Faculty' },
-    { id: 'subjects' as ViewType, icon: BookOpen, label: 'Subjects' },
-    { id: 'rooms' as ViewType, icon: DoorOpen, label: 'Rooms' },
-    { id: 'schedule' as ViewType, icon: Calendar, label: 'Schedule' },
+    { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
+    { id: 'faculty', icon: Users, label: 'Faculty' },
+    { id: 'subjects', icon: BookOpen, label: 'Subjects' },
+    { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
+    { id: 'schedule', icon: Calendar, label: 'Schedule' },
   ];
 
   return (

@@ -8,11 +8,10 @@ import FacultyView from './views/FacultyView';
 import SubjectsView from './views/SubjectsView';
 import RoomsView from './views/RoomsView';
 import ScheduleView from './views/ScheduleView';
-import { ViewType } from './types';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const [currentView, setCurrentView] = useState('dashboard');
 
   if (!isAuthenticated) {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
