@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     const { data, error, count } = await supabaseAdmin
       .from('course_offerings')
       .select(
-        'id,curr_id,code,course_no,section,descriptive_title,units,mth_schedule,mth_room_id,tfs_schedule,tfs_room_id',
+        'id,curr_id,code,course_no,section,descriptive_title,units,lec_hrs,lab_hrs,mth_schedule,mth_room_id,tfs_schedule,tfs_room_id',
         { count: 'exact' }
       )
       .order('id', { ascending: true })

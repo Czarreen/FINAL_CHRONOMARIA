@@ -7,6 +7,11 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  Edit3,
+  X,
 } from 'lucide-react';
 import { fetchCourseOfferingsPage } from '../services/courseOfferingsApi';
 
@@ -18,6 +23,8 @@ export default function CourseOfferingView() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [editingId, setEditingId] = useState(null);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -56,6 +63,54 @@ export default function CourseOfferingView() {
   const startRow = totalRows === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endRow = Math.min(page * PAGE_SIZE, totalRows);
 
+  const toggleRowExpand = (id) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  // Column groups for organized display
+  const columnGroups = [
+    {
+      title: 'Course Info',
+      columns: [
+        { key: 'code', label: 'Code', width: 'w-20' },
+        { key: 'course_no', label: 'Course #', width: 'w-16' },
+        { key: 'descriptive_title', label: 'Title', width: 'w-56' },
+      ],
+    },
+    {
+      title: 'Curriculum',
+      columns: [
+        { key: 'curr_id', label: 'Curriculum ID', width: 'w-20' },
+        { key: 'section', label: 'Section', width: 'w-16' },
+        { key: 'units', label: 'Units', width: 'w-12' },
+        { key: 'lec_hrs', label: 'Lecture Hrs', width: 'w-16' },
+        { key: 'lab_hrs', label: 'Lab Hrs', width: 'w-14' },
+      ],
+    },
+    {
+      title: 'Schedule',
+      columns: [
+        { key: 'mth_schedule', label: 'MTH Schedule', width: 'w-24' },
+        { key: 'mth_room_id', label: 'MTH Room', width: 'w-16' },
+        { key: 'tfs_schedule', label: 'TFS Schedule', width: 'w-24' },
+        { key: 'tfs_room_id', label: 'TFS Room', width: 'w-16' },
+      ],
+    },
+  ];
+
+  const allColumns = columnGroups.flatMap(g => g.columns);
+
+  const renderCellValue = (value) => {
+    if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
+    return String(value);
+  };
+
   return (
     <div className="space-y-gutter animate-in slide-in-from-right-4 duration-500">
       <div className="grid grid-cols-1 gap-gutter lg:grid-cols-12">
@@ -92,77 +147,114 @@ export default function CourseOfferingView() {
         </div>
       </div>
 
-      <div className="glass-panel overflow-x-auto p-0">
-        <table className="min-w-full text-left">
-          <thead className="border-b border-white/50 bg-white/50">
-            <tr className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/80">
-              <th className="px-6 py-4">Course</th>
-              <th className="px-6 py-4">Curriculum ID</th>
-              <th className="px-6 py-4">Section</th>
-              <th className="px-6 py-4">Units</th>
-              <th className="px-6 py-4">MTH Schedule / Room</th>
-              <th className="px-6 py-4">TFS Schedule / Room</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td className="px-6 py-10 text-center text-sm text-on-surface-variant" colSpan={6}>
-                  Loading course offerings...
-                </td>
+      {/* Data Table */}
+      <div className="glass-panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              {columnGroups.map((group, groupIdx) => (
+                <tr key={groupIdx} className="border-b border-white/30 bg-white/40">
+                  {groupIdx === 0 && (
+                    <th className="w-16 px-6 py-3 text-center">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
+                  <th
+                    colSpan={group.columns.length}
+                    className="px-6 py-3 text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70"
+                  >
+                    {group.title}
+                  </th>
+                </tr>
+              ))}
+              <tr className="border-b border-white/50 bg-white/50">
+                <th className="w-16 px-6 py-4 text-center">
+                  <span className="sr-only">Actions</span>
+                </th>
+                {columnGroups.map((group) =>
+                  group.columns.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/80 ${col.width}`}
+                    >
+                      {col.label}
+                    </th>
+                  ))
+                )}
               </tr>
-            )}
+            </thead>
+            <tbody className="divide-y divide-white/40">
+              {loading && (
+                <tr>
+                  <td
+                    className="px-6 py-12 text-center text-sm text-on-surface-variant"
+                    colSpan={1 + allColumns.length}
+                  >
+                    Loading course offerings...
+                  </td>
+                </tr>
+              )}
 
-            {!loading && error && (
-              <tr>
-                <td className="px-6 py-10 text-center text-sm text-error" colSpan={6}>
-                  {error}
-                </td>
-              </tr>
-            )}
+              {!loading && error && (
+                <tr>
+                  <td
+                    className="px-6 py-12 text-center text-sm text-error"
+                    colSpan={1 + allColumns.length}
+                  >
+                    {error}
+                  </td>
+                </tr>
+              )}
 
-            {!loading && !error && offerings.length === 0 && (
-              <tr>
-                <td className="px-6 py-10 text-center text-sm text-on-surface-variant" colSpan={6}>
-                  No course offerings found.
-                </td>
-              </tr>
-            )}
+              {!loading && !error && offerings.length === 0 && (
+                <tr>
+                  <td
+                    className="px-6 py-12 text-center text-sm text-on-surface-variant"
+                    colSpan={1 + allColumns.length}
+                  >
+                    No course offerings found.
+                  </td>
+                </tr>
+              )}
 
-            {!loading && !error && offerings.map((offering) => (
-              <tr key={offering.id} className="border-b border-white/40 last:border-b-0">
-                <td className="px-6 py-4">
-                  <div className="font-semibold text-on-surface">
-                    {offering.code || '-'} {offering.course_no || ''}
-                  </div>
-                  <div className="text-sm text-on-surface-variant">{offering.descriptive_title || '-'}</div>
-                </td>
-                <td className="px-6 py-4 text-sm text-on-surface-variant">{offering.curr_id ?? '-'}</td>
-                <td className="px-6 py-4 text-sm text-on-surface-variant">
-                  <span className="inline-flex items-center gap-2">
-                    <Layers size={14} className="text-slate-400" />
-                    {offering.section || '-'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm font-semibold text-on-surface">{offering.units ?? '-'}</td>
-                <td className="px-6 py-4 text-sm text-on-surface-variant">
-                  <span className="inline-flex items-center gap-2">
-                    <CalendarDays size={14} className="text-slate-400" />
-                    {(offering.mth_schedule || '-') + ' / ' + (offering.mth_room_id || '-')}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-on-surface-variant">
-                  <span className="inline-flex items-center gap-2">
-                    <Building2 size={14} className="text-slate-400" />
-                    {(offering.tfs_schedule || '-') + ' / ' + (offering.tfs_room_id || '-')}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              {!loading && !error && offerings.map((offering) => (
+                <tr key={offering.id} className="transition-colors hover:bg-white/30 group">
+                  <td className="w-16 px-6 py-5 text-center">
+                    <button
+                      onClick={() => setEditingId(offering.id)}
+                      className="rounded p-1.5 text-slate-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/60 hover:text-primary"
+                      type="button"
+                      title="Edit"
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                  </td>
+                  {allColumns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`px-6 py-5 text-sm text-on-surface-variant ${col.width}`}
+                    >
+                      {col.key === 'descriptive_title' ? (
+                        <div className="max-w-lg line-clamp-2 font-medium text-on-surface">
+                          {renderCellValue(offering[col.key])}
+                        </div>
+                      ) : col.key === 'units' ? (
+                        <span className="font-semibold text-on-surface">
+                          {renderCellValue(offering[col.key])}
+                        </span>
+                      ) : (
+                        <span className="text-xs">{renderCellValue(offering[col.key])}</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
+      {/* Pagination */}
       <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant/80">
           Showing {startRow}-{endRow} of {totalRows}
@@ -191,6 +283,67 @@ export default function CourseOfferingView() {
           </button>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+              <button
+                onClick={() => setEditingId(null)}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/60 hover:text-on-surface"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {editingId && offerings.find(o => o.id === editingId) && (
+              <div className="space-y-6">
+                {columnGroups.map((group) => (
+                  <div key={group.title} className="space-y-4 rounded-xl bg-white/40 p-4">
+                    <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                      {group.title}
+                    </h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {group.columns.map((col) => {
+                        const value = offerings.find(o => o.id === editingId)?.[col.key];
+                        return (
+                          <div key={col.key}>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70">
+                              {col.label}
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value={value ?? ''}
+                              className="w-full rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm text-on-surface-variant opacity-70 cursor-not-allowed"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex gap-3 pt-6">
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                  <button
+                    disabled
+                    className="flex-1 rounded-lg bg-primary/50 px-4 py-2.5 font-semibold text-white/60 cursor-not-allowed"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
