@@ -20,7 +20,7 @@ import {
 import { fetchCourseOfferingsPage, fetchCourseOfferings, createCourseOffering, updateCourseOffering, deleteCourseOffering } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { buildMissingDataNotifications } from '../utils/missingData';
+import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
 
 const PAGE_SIZE = 50;
 
@@ -404,26 +404,51 @@ export default function CourseOfferingView() {
     return items;
   }, [filteredOfferings, sortConfig]);
 
-  const notificationItems = useMemo(() => {
-    const importantFields = [
-      { key: 'code', label: 'Code' },
-      { key: 'course_no', label: 'Course #' },
-      { key: 'descriptive_title', label: 'Title' },
-      { key: 'section', label: 'Section' },
-      { key: 'units', label: 'Units' },
-      { key: 'lec_hrs', label: 'Lecture Hrs' },
-      { key: 'lab_hrs', label: 'Lab Hrs' },
-      { key: 'mth_schedule', label: 'MTH Schedule' },
-      { key: 'mth_room_id', label: 'MTH Room' },
-      { key: 'tfs_schedule', label: 'TFS Schedule' },
-      { key: 'tfs_room_id', label: 'TFS Room' },
-    ];
+  const [notifications, setNotifications] = useState([]);
 
-    return buildMissingDataNotifications(offerings, importantFields, {
-      titleKey: 'code',
-      subtitleKey: 'descriptive_title',
-    });
-  }, [offerings]);
+  useEffect(() => {
+    let active = true;
+    async function loadNotifications() {
+      try {
+        const { rows } = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+        if (!active) return;
+        setNotifications(rows || []);
+      } catch (err) {
+        console.error('Failed to load notifications:', err);
+        setNotifications([]);
+      }
+    }
+    loadNotifications();
+    return () => { active = false; };
+  }, []);
+
+  const focusNotificationItem = (item) => {
+    if (!item?.offeringId) return;
+    const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRow.classList.add('ring-2', 'ring-primary/40');
+      window.setTimeout(() => {
+        targetRow.classList.remove('ring-2', 'ring-primary/40');
+      }, 1200);
+    }
+
+  };
+
+  const editNotificationItem = (item) => {
+    const offering = offerings.find((row) => row.id === item.offeringId);
+    if (offering) {
+      handleEditOffering(offering);
+      const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetRow.classList.add('ring-2', 'ring-primary/40');
+        window.setTimeout(() => {
+          targetRow.classList.remove('ring-2', 'ring-primary/40');
+        }, 1200);
+      }
+    }
+  };
 
 
   const renderCellValue = (value) => {
@@ -573,7 +598,17 @@ export default function CourseOfferingView() {
               title="Missing Data"
               buttonLabel="Issues"
               emptyLabel="No missing data detected for the current page."
-              items={notificationItems}
+              items={notifications
+                .map((n) => ({
+                  id: n.id,
+                  title: n.message || `${n.issue_type || ''} ${n.field_name || ''}`.trim(),
+                  description: n.details?.note || '',
+                  missingFields: Array.isArray(n.details?.missing_fields) ? n.details.missing_fields : (n.field_name ? [n.field_name] : []),
+                  offeringId: n.entity_id,
+                }))
+                .filter((i) => offerings.some((o) => o.id === i.offeringId))}
+              onItemJump={focusNotificationItem}
+              onItemEdit={editNotificationItem}
             />
             <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
               <BookMarked size={14} className="text-primary" />
@@ -713,7 +748,7 @@ export default function CourseOfferingView() {
               )}
 
               {!loading && !error && displayedOfferings.map((offering) => (
-                <tr key={offering.id} className="transition-colors hover:bg-white/40">
+                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40">
                   {columns.map((col) => (
                     <td key={col.key} className="px-6 py-4">
                       {col.key === 'code' ? (

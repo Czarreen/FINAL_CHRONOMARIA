@@ -7,6 +7,8 @@ export default function NotificationButton({
   title = 'Notifications',
   emptyLabel = 'No issues found.',
   buttonLabel = 'Notifications',
+  onItemJump,
+  onItemEdit,
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
@@ -100,7 +102,10 @@ export default function NotificationButton({
               </div>
             ) : (
               items.map((item) => (
-                <div key={item.id} className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+                <div
+                  key={item.id}
+                  className="w-full rounded-xl border border-amber-200 bg-amber-50/80 p-3 transition-colors hover:border-amber-300 hover:bg-amber-100/70"
+                >
                   <div className="flex items-start gap-2">
                     <div className="mt-0.5 rounded-full bg-amber-100 p-1.5 text-amber-700">
                       <AlertCircle size={14} />
@@ -113,6 +118,32 @@ export default function NotificationButton({
                           Missing: {item.missingFields.join(', ')}
                         </p>
                       )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof onItemJump === 'function') {
+                              onItemJump(item);
+                            }
+                            setOpen(false);
+                          }}
+                          className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:bg-slate-50"
+                        >
+                          Go to row
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof onItemEdit === 'function') {
+                              onItemEdit(item);
+                            }
+                            setOpen(false);
+                          }}
+                          className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
