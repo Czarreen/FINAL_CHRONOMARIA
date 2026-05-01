@@ -598,6 +598,7 @@ export default function CourseOfferingView() {
               title="Missing Data"
               buttonLabel="Issues"
               emptyLabel="No missing data detected for the current page."
+              panelSize="lg"
               items={notifications
                 .map((n) => ({
                   id: n.id,

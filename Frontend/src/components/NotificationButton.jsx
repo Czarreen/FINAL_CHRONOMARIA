@@ -1,31 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bell } from 'lucide-react';
+import { AlertCircle, Bell, Maximize2, Minimize2 } from 'lucide-react';
 
 export default function NotificationButton({
   items = [],
   title = 'Notifications',
   emptyLabel = 'No issues found.',
   buttonLabel = 'Notifications',
+  panelSize = 'md',
   onItemJump,
   onItemEdit,
 }) {
   const [open, setOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const panelRef = useRef(null);
   const buttonRef = useRef(null);
 
   const panelStyle = useMemo(() => ({
     position: 'fixed',
-    top: `${position.top}px`,
-    left: `${position.left}px`,
-    width: `${position.width}px`,
-  }), [position]);
+    top: isExpanded ? '6vh' : `${position.top}px`,
+    left: isExpanded ? '50%' : `${position.left}px`,
+    width: isExpanded ? 'min(960px, calc(100vw - 32px))' : `${position.width}px`,
+    height: isExpanded ? 'min(84vh, 900px)' : 'auto',
+    transform: isExpanded ? 'translateX(-50%)' : 'none',
+  }), [position, isExpanded]);
+
+  const panelSizes = {
+    sm: { width: 336, maxHeightClass: 'max-h-72' },
+    md: { width: 384, maxHeightClass: 'max-h-80' },
+    lg: { width: 520, maxHeightClass: 'max-h-[34rem]' },
+    xl: { width: 640, maxHeightClass: 'max-h-[38rem]' },
+  };
+
+  const resolvedPanelSize = panelSizes[panelSize] || panelSizes.md;
 
   const updatePosition = () => {
+    if (isExpanded) return;
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const panelWidth = Math.min(384, window.innerWidth - 16);
+    const panelWidth = Math.min(resolvedPanelSize.width, window.innerWidth - 16);
     const left = Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8));
     const top = rect.bottom + 12;
     setPosition({ top, left, width: panelWidth });
@@ -59,6 +73,12 @@ export default function NotificationButton({
     }
 
     return undefined;
+  }, [open, isExpanded]);
+
+  useEffect(() => {
+    if (!open) {
+      setIsExpanded(false);
+    }
   }, [open]);
 
   return (
@@ -79,23 +99,37 @@ export default function NotificationButton({
       </button>
 
       {open && typeof document !== 'undefined' && createPortal(
-        <div ref={panelRef} style={panelStyle} className="z-[9999] rounded-2xl border border-white/60 bg-white p-4 shadow-2xl backdrop-blur">
+        <div
+          ref={panelRef}
+          style={panelStyle}
+          className={`z-[9999] overflow-hidden rounded-2xl border border-white/60 bg-white p-4 shadow-2xl backdrop-blur ${isExpanded ? 'flex flex-col' : ''}`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface">{title}</h3>
               <p className="text-xs text-on-surface-variant">{items.length ? `${items.length} item(s) need attention` : emptyLabel}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-slate-100 hover:text-on-surface"
-            >
-              <span className="sr-only">Close notifications</span>
-              <AlertCircle size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsExpanded((current) => !current)}
+                className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-slate-100 hover:text-on-surface"
+              >
+                <span className="sr-only">{isExpanded ? 'Shrink notifications window' : 'Expand notifications window'}</span>
+                {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-slate-100 hover:text-on-surface"
+              >
+                <span className="sr-only">Close notifications</span>
+                <AlertCircle size={16} />
+              </button>
+            </div>
           </div>
 
-          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+          <div className={`${isExpanded ? 'flex-1 max-h-none' : resolvedPanelSize.maxHeightClass} space-y-2 overflow-y-auto pr-1`}>
             {items.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-on-surface-variant">
                 {emptyLabel}
