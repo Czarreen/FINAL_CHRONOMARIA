@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { fetchCourseOfferingsPage, fetchCourseOfferings, createCourseOffering, updateCourseOffering, deleteCourseOffering } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
+import NotificationButton from '../components/NotificationButton';
+import { buildMissingDataNotifications } from '../utils/missingData';
 
 const PAGE_SIZE = 50;
 
@@ -402,6 +404,27 @@ export default function CourseOfferingView() {
     return items;
   }, [filteredOfferings, sortConfig]);
 
+  const notificationItems = useMemo(() => {
+    const importantFields = [
+      { key: 'code', label: 'Code' },
+      { key: 'course_no', label: 'Course #' },
+      { key: 'descriptive_title', label: 'Title' },
+      { key: 'section', label: 'Section' },
+      { key: 'units', label: 'Units' },
+      { key: 'lec_hrs', label: 'Lecture Hrs' },
+      { key: 'lab_hrs', label: 'Lab Hrs' },
+      { key: 'mth_schedule', label: 'MTH Schedule' },
+      { key: 'mth_room_id', label: 'MTH Room' },
+      { key: 'tfs_schedule', label: 'TFS Schedule' },
+      { key: 'tfs_room_id', label: 'TFS Room' },
+    ];
+
+    return buildMissingDataNotifications(offerings, importantFields, {
+      titleKey: 'code',
+      subtitleKey: 'descriptive_title',
+    });
+  }, [offerings]);
+
 
   const renderCellValue = (value) => {
     if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
@@ -537,15 +560,28 @@ export default function CourseOfferingView() {
   };
 
   return (
-    <div className="space-y-gutter animate-in slide-in-from-right-4 duration-500">
-      {/* Header with stats */}
-      <div className="grid grid-cols-1 gap-gutter lg:grid-cols-12">
-        <div className="glass-panel col-span-1 flex items-center justify-between p-8 lg:col-span-8">
+    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+      {/* Header with compact stats */}
+      <div className="glass-panel flex flex-col gap-4 p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="space-y-1">
             <h2 className="text-headline-xl font-headline-xl text-on-surface">Course Offerings</h2>
             <p className="text-body-md text-on-surface-variant">Manage course offerings, schedules, and room assignments.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <NotificationButton
+              title="Missing Data"
+              buttonLabel="Issues"
+              emptyLabel="No missing data detected for the current page."
+              items={notificationItems}
+            />
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
+              <BookMarked size={14} className="text-primary" />
+              {totalRows} total
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
+              Page {page}
+            </span>
             <button
               className="btn-primary flex items-center gap-2"
               onClick={() => setPage(1)}
@@ -568,24 +604,13 @@ export default function CourseOfferingView() {
             </button>
           </div>
         </div>
-
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <BookMarked size={24} className="text-primary" />
-          <span className="mt-3 text-3xl font-bold text-on-surface">{totalRows}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Total Offerings</span>
-        </div>
-
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <span className="text-3xl font-bold text-on-surface">{page}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Current Page</span>
-        </div>
       </div>
 
       {/* Controls: Search / Filter / Sort */}
-      <div className="glass-panel space-y-4 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="glass-panel space-y-3 p-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           {/* Search Input */}
-          <div className="relative flex-1 md:max-w-md">
+          <div className="relative flex-1 xl:max-w-md">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
@@ -599,7 +624,7 @@ export default function CourseOfferingView() {
           </div>
 
           {/* Column Filter */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 xl:justify-end">
             <select
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
@@ -636,10 +661,10 @@ export default function CourseOfferingView() {
 
       {/* Data Table */}
       <div className="glass-panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+        <div className="max-h-[calc(100vh-18rem)] overflow-auto">
+          <table className="min-w-[1100px] w-full text-left">
             <thead>
-                <tr className="border-b border-white/20 bg-white/30">
+                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
                   {columns.map((col) => (
                     <th key={col.key} className="px-6 py-4 text-left">
                       <button type="button" onClick={() => handleSort(col.key)} className={`flex w-full items-center justify-start gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
@@ -650,7 +675,7 @@ export default function CourseOfferingView() {
                       </button>
                     </th>
                   ))}
-                  <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Actions</th>
+                  <th className="sticky right-0 z-30 bg-white/95 px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Actions</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-white/20">
@@ -720,7 +745,7 @@ export default function CourseOfferingView() {
                       )}
                     </td>
                   ))}
-                  <td className="px-6 py-4">
+                  <td className="sticky right-0 z-10 bg-white/90 px-6 py-4 backdrop-blur">
                     <div className="flex justify-center gap-2">
                       <button
                         onClick={() => handleEditOffering(offering)}
