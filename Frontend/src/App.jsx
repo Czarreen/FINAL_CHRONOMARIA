@@ -12,7 +12,7 @@ import CourseOfferingView from './pages/CourseOfferingView';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentView, setCurrentView] = useState('course-offering');
+  const [currentView, setCurrentView] = useState('dashboard');
 
   if (!isAuthenticated) {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
@@ -63,7 +63,11 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.28, ease: 'easeOut' }}
               >
-                {renderView()}
+                {currentView === 'dashboard' ? (
+                  <DashboardView onNavigate={setCurrentView} />
+                ) : (
+                  renderView()
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

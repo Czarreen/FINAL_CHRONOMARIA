@@ -11,8 +11,8 @@ import {
 
 export default function Sidebar({ currentView, onViewChange, onLogout }) {
   const menuItems = [
-    { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
+    { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
     { id: 'faculty', icon: Users, label: 'Faculty' },
     { id: 'subjects', icon: BookOpen, label: 'Subjects' },
     { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
