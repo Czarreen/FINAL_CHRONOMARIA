@@ -63,7 +63,11 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.28, ease: 'easeOut' }}
               >
-                {renderView()}
+                {currentView === 'dashboard' ? (
+                  <DashboardView onNavigate={setCurrentView} />
+                ) : (
+                  renderView()
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
