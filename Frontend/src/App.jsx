@@ -3,15 +3,16 @@ import { AnimatePresence, motion } from 'motion/react';
 import Sidebar from './components/Sidebar';
 import TopAppBar from './components/TopAppBar';
 import LoginView from './components/LoginView';
-import DashboardView from './views/DashboardView';
-import FacultyView from './views/FacultyView';
-import SubjectsView from './views/SubjectsView';
-import RoomsView from './views/RoomsView';
-import ScheduleView from './views/ScheduleView';
+import DashboardView from './pages/DashboardView';
+import FacultyView from './pages/FacultyView';
+import SubjectsView from './pages/SubjectsView';
+import RoomsView from './pages/RoomsView';
+import ScheduleView from './pages/ScheduleView';
+import CourseOfferingView from './pages/CourseOfferingView';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState('course-offering');
 
   if (!isAuthenticated) {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
@@ -24,12 +25,16 @@ export default function App() {
       case 'subjects': return <SubjectsView />;
       case 'rooms': return <RoomsView />;
       case 'schedule': return <ScheduleView />;
+      case 'course-offering': return <CourseOfferingView />;
       default: return <DashboardView />;
     }
   };
 
   const getTitle = () => {
-    return currentView.charAt(0).toUpperCase() + currentView.slice(1);
+    return currentView
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   return (

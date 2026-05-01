@@ -1,0 +1,14 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Explicitly ignore environment files in subfolders (ensure these stay out of commits)
+/Backend/.env
+/Frontend/.env
+.env.local
+.env.*.local
