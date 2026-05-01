@@ -12,7 +12,7 @@ import CourseOfferingView from './pages/CourseOfferingView';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentView, setCurrentView] = useState('course-offering');
+  const [currentView, setCurrentView] = useState('dashboard');
 
   if (!isAuthenticated) {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
