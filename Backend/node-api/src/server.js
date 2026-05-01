@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
+import facultyRouter from './routes/faculty.js';
+import roomsRouter from './routes/rooms.js';
 
 const app = express();
 
@@ -17,6 +19,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'node-api' });
 });
 
+app.use('/api/faculty', facultyRouter);
+app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 
 app.listen(env.port, () => {
