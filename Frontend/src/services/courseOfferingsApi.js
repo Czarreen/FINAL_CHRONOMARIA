@@ -21,3 +21,46 @@ export async function fetchCourseOfferings({ page = 1, limit = 50, search = '' }
     total: Number(payload.total ?? payload.rows?.length ?? 0),
   };
 }
+
+export async function createCourseOffering(data) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function updateCourseOffering(id, data) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function deleteCourseOffering(id) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
