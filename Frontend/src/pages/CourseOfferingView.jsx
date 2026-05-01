@@ -36,6 +36,7 @@ export default function CourseOfferingView() {
   const [offeringError, setOfferingError] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [rooms, setRooms] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -134,10 +135,23 @@ export default function CourseOfferingView() {
     try {
       setSavingOffering(true);
       setOfferingError(null);
+      const mthIds = Array.isArray(editingData.mth_room_id)
+        ? editingData.mth_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+        : editingData.mth_room_id
+        ? [Number(editingData.mth_room_id)]
+        : [];
+      const tfsIds = Array.isArray(editingData.tfs_room_id)
+        ? editingData.tfs_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+        : editingData.tfs_room_id
+        ? [Number(editingData.tfs_room_id)]
+        : [];
+
       const payload = {
         ...editingData,
-        mth_room_id: editingData.mth_room_id ? Number(editingData.mth_room_id) : null,
-        tfs_room_id: editingData.tfs_room_id ? Number(editingData.tfs_room_id) : null,
+        mth_room_ids: mthIds,
+        tfs_room_ids: tfsIds,
+        mth_room_id: mthIds.length ? mthIds.join('/') : null,
+        tfs_room_id: tfsIds.length ? tfsIds.join('/') : null,
       };
       await createCourseOffering(payload);
       setShowAddModal(false);
@@ -163,26 +177,35 @@ export default function CourseOfferingView() {
       lec_hrs: offering.lec_hrs || 0,
       lab_hrs: offering.lab_hrs || 0,
       mth_schedule: offering.mth_schedule || '',
-      mth_room_id: offering.mth_room_id != null ? String(offering.mth_room_id) : '',
+      mth_room_id: resolveRoomIds(offering, 'mth').map(String),
       tfs_schedule: offering.tfs_schedule || '',
-      tfs_room_id: offering.tfs_room_id != null ? String(offering.tfs_room_id) : '',
+      tfs_room_id: resolveRoomIds(offering, 'tfs').map(String),
     });
     setOfferingError(null);
   }
 
-  async function handleSaveEdit() {
-    if (!editingData.code) {
-      setOfferingError('Course code is required');
-      return;
-    }
-    if (!confirm('Are you sure you want to save these changes?')) return;
+  async function performSaveEdit() {
     try {
       setSavingOffering(true);
       setOfferingError(null);
+      const mthIds = Array.isArray(editingData.mth_room_id)
+        ? editingData.mth_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+        : editingData.mth_room_id
+        ? [Number(editingData.mth_room_id)]
+        : [];
+      const tfsIds = Array.isArray(editingData.tfs_room_id)
+        ? editingData.tfs_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+        : editingData.tfs_room_id
+        ? [Number(editingData.tfs_room_id)]
+        : [];
+
       const payload = {
         ...editingData,
-        mth_room_id: editingData.mth_room_id ? Number(editingData.mth_room_id) : null,
-        tfs_room_id: editingData.tfs_room_id ? Number(editingData.tfs_room_id) : null,
+        mth_room_ids: mthIds,
+        tfs_room_ids: tfsIds,
+        // keep legacy field as slash-joined string for compatibility
+        mth_room_id: mthIds.length ? mthIds.join('/') : null,
+        tfs_room_id: tfsIds.length ? tfsIds.join('/') : null,
       };
       await updateCourseOffering(editingId, payload);
       setEditingId(null);
@@ -199,23 +222,49 @@ export default function CourseOfferingView() {
       setOfferingError(err.message || 'Failed to save offering');
     } finally {
       setSavingOffering(false);
+      setConfirmDialog(null);
     }
   }
 
-  async function handleDeleteOffering(offering) {
-    if (!confirm(`Delete "${offering.code} - ${offering.descriptive_title}"?`)) return;
-    try {
-      setUpdateError(null);
-      await deleteCourseOffering(offering.id);
-      await loadInitialPage();
-    } catch (err) {
-      if (String(err.message || '').includes('404')) {
-        await loadInitialPage();
-        setUpdateError('That offering was already removed. The list has been refreshed.');
-        return;
-      }
-      setUpdateError(err.message || 'Failed to delete offering');
+  async function handleSaveEdit() {
+    if (!editingData.code) {
+      setOfferingError('Course code is required');
+      return;
     }
+    setConfirmDialog({
+      title: 'Save changes?',
+      message: 'This will update the course offering with your current edits.',
+      confirmLabel: 'Save Changes',
+      cancelLabel: 'Keep Editing',
+      tone: 'primary',
+      onConfirm: performSaveEdit,
+    });
+  }
+
+  async function handleDeleteOffering(offering) {
+    setConfirmDialog({
+      title: 'Delete offering?',
+      message: `Delete "${offering.code} - ${offering.descriptive_title}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setUpdateError(null);
+          await deleteCourseOffering(offering.id);
+          await loadInitialPage();
+        } catch (err) {
+          if (String(err.message || '').includes('404')) {
+            await loadInitialPage();
+            setUpdateError('That offering was already removed. The list has been refreshed.');
+            return;
+          }
+          setUpdateError(err.message || 'Failed to delete offering');
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   }
 
   async function loadInitialPage() {
@@ -359,6 +408,116 @@ export default function CourseOfferingView() {
     return String(value);
   };
 
+  // Resolve room ids for an offering and a logical field key (mth or tfs)
+  const resolveRoomIds = (offering, key) => {
+    // key will be 'mth' or 'tfs' when called, we map to field names
+    const singleField = `${key}_room_id`;
+    const idsField = `${key}_room_ids`;
+    const objsField = `${key}_rooms`;
+
+    // 1) If API returns explicit ids array
+    if (Array.isArray(offering[idsField])) {
+      return offering[idsField].map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+    }
+
+    // 2) If API returns array of room objects
+    if (Array.isArray(offering[objsField])) {
+      return offering[objsField]
+        .map((r) => (r && (r.id ?? r.room_id) != null ? Number(r.id ?? r.room_id) : null))
+        .filter((v) => v !== null && !Number.isNaN(v));
+    }
+
+    // 3) If legacy single field contains slash-separated ids or single id
+    const singleVal = offering[singleField];
+    if (singleVal === null || singleVal === undefined || singleVal === '') return [];
+    // handle numbers, numeric strings, or '11/12' style
+    if (typeof singleVal === 'number') return [singleVal];
+    if (Array.isArray(singleVal)) return singleVal.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+    const parts = String(singleVal).split('/').map((p) => p.trim()).filter((p) => p !== '');
+    return parts.map((p) => Number(p)).filter((v) => !Number.isNaN(v));
+  };
+
+  const renderRoomCell = (offering, key) => {
+    const logical = key === 'mth_room_id' ? 'mth' : 'tfs';
+    const ids = resolveRoomIds(offering, logical);
+    if (!ids || ids.length === 0) return <span className="text-slate-400">—</span>;
+    const names = ids.map((id) => getRoomName(id));
+    return <span className="text-sm text-on-surface-variant">{names.join(' / ')}</span>;
+  };
+
+  const toggleRoomSelection = (field, roomId) => {
+    const roomValue = String(roomId);
+    setEditingData((current) => {
+      const currentValues = Array.isArray(current[field]) ? current[field].map(String) : [];
+      const nextValues = currentValues.includes(roomValue)
+        ? currentValues.filter((value) => value !== roomValue)
+        : [...currentValues, roomValue];
+
+      return {
+        ...current,
+        [field]: nextValues,
+      };
+    });
+  };
+
+  const renderRoomPicker = (field) => {
+    const selectedValues = Array.isArray(editingData[field]) ? editingData[field].map(String) : [];
+    const selectedRoomNames = selectedValues.map((roomId) => getRoomName(roomId));
+
+    return (
+      <div className="space-y-2 rounded-lg border border-white/60 bg-white/70 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
+            Currently selected:
+          </span>
+          {selectedRoomNames.length ? (
+            selectedRoomNames.map((roomName, index) => (
+              <span
+                key={`${field}-selected-${index}`}
+                className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+              >
+                {roomName}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-on-surface-variant/70">No room selected</span>
+          )}
+        </div>
+        <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+          {rooms.length === 0 ? (
+            <p className="text-xs text-on-surface-variant">Loading rooms...</p>
+          ) : (
+            rooms.map((room) => {
+              const roomId = String(room.id ?? room.room_id ?? '');
+              const isChecked = selectedValues.includes(roomId);
+
+              return (
+                <label
+                  key={roomId}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleRoomSelection(field, roomId)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                  />
+                  <span className="font-medium text-on-surface">
+                    {room.room_name || room.name || room.label || `Room ${roomId}`}
+                  </span>
+                  <span className="text-xs text-on-surface-variant/70">#{roomId}</span>
+                </label>
+              );
+            })
+          )}
+        </div>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant/60">
+          {selectedValues.length ? `${selectedValues.length} room(s) selected` : 'No room selected'}
+        </p>
+      </div>
+    );
+  };
+
   const getRoomName = (roomId) => {
     if (roomId === null || roomId === undefined || roomId === '') return '—';
     const idNum = Number(roomId);
@@ -399,7 +558,7 @@ export default function CourseOfferingView() {
               className="btn-primary flex items-center gap-2"
               onClick={() => {
                 setShowAddModal(true);
-                setEditingData({});
+                setEditingData({ mth_room_id: [], tfs_room_id: [] });
                 setOfferingError(null);
               }}
               type="button"
@@ -553,9 +712,7 @@ export default function CourseOfferingView() {
                           {renderCellValue(offering[col.key])}h
                         </span>
                       ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                        <span className="text-sm text-on-surface-variant">
-                          {getRoomName(offering[col.key])}
-                        </span>
+                        renderRoomCell(offering, col.key)
                       ) : (
                         <span className="text-sm text-on-surface-variant">
                           {renderCellValue(offering[col.key])}
@@ -616,6 +773,52 @@ export default function CourseOfferingView() {
         </div>
       </div>
 
+      {/* Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div
+                className={`mt-0.5 rounded-full p-2 ${confirmDialog.tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'}`}
+              >
+                <AlertCircle size={18} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-on-surface">{confirmDialog.title}</h3>
+                <p className="text-sm text-on-surface-variant">{confirmDialog.message}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+              >
+                {confirmDialog.cancelLabel || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  if (typeof action === 'function') {
+                    action();
+                  } else {
+                    setConfirmDialog(null);
+                  }
+                }}
+                className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition-colors disabled:opacity-50 ${
+                  confirmDialog.tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'
+                }`}
+                disabled={savingOffering}
+              >
+                {confirmDialog.confirmLabel || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       {editingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
@@ -651,18 +854,7 @@ export default function CourseOfferingView() {
                             {col.label}
                           </label>
                           {col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                            <select
-                              value={editingData[col.key] ?? ''}
-                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                              className="w-full rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            >
-                              <option value="">Select a room</option>
-                              {rooms.map((room) => (
-                                    <option key={room.id} value={String(room.id)}>
-                                      {room.room_name || room.name || `Room ${room.id}`}
-                                    </option>
-                              ))}
-                            </select>
+                            renderRoomPicker(col.key)
                           ) : (
                             <input
                               type={numericCols.has(col.key) ? 'number' : 'text'}
@@ -735,18 +927,7 @@ export default function CourseOfferingView() {
                           {col.label}
                         </label>
                         {col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                          <select
-                            value={editingData[col.key] ?? ''}
-                            onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                          >
-                            <option value="">Select a room</option>
-                            {rooms.map((room) => (
-                              <option key={room.id} value={String(room.id)}>
-                                {room.room_name || room.name || `Room ${room.id}`}
-                              </option>
-                            ))}
-                          </select>
+                          renderRoomPicker(col.key)
                         ) : (
                           <input
                             type={numericCols.has(col.key) ? 'number' : 'text'}
