@@ -17,9 +17,11 @@ router.get('/', async (req, res) => {
       .from('subjects')
       .select('*', { count: 'exact' });
 
-// Apply search filter (search in code and descriptive title)
+// Apply search filter (search in code, title, schedule, and rooms)
     if (search) {
-      query = query.or(`subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%`);
+      query = query.or(
+        `subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%`
+      );
     }
 
     // Apply status filter
@@ -74,6 +76,10 @@ router.post('/', async (req, res) => {
       'subject_units',
       'subject_lec_hrs',
       'subject_lab_hrs',
+      'mth_schedule',
+      'tfs_schedule',
+      'mth_room',
+      'tfs_room',
       'subject_status',
     ];
 
@@ -146,7 +152,7 @@ router.patch('/:id', async (req, res) => {
     const updates = req.body;
 
     // Only allow certain fields to be updated
-    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'subject_status'];
+    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status'];
     const sanitizedUpdates = {};
 
     for (const field of allowedFields) {
