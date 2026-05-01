@@ -25,6 +25,10 @@ export default function SubjectsView() {
     subject_units: 3,
     subject_lec_hrs: 3,
     subject_lab_hrs: 0,
+    mth_schedule: '',
+    tfs_schedule: '',
+    mth_room: '',
+    tfs_room: '',
     subject_status: 'active',
   });
   const [savingSubject, setSavingSubject] = useState(false);
@@ -96,6 +100,10 @@ export default function SubjectsView() {
       subject_units: subject.subject_units || 0,
       subject_lec_hrs: subject.subject_lec_hrs || 0,
       subject_lab_hrs: subject.subject_lab_hrs || 0,
+      mth_schedule: subject.mth_schedule || '',
+      tfs_schedule: subject.tfs_schedule || '',
+      mth_room: subject.mth_room || '',
+      tfs_room: subject.tfs_room || '',
       subject_status: subject.subject_status || 'active',
     });
     setShowEditModal(true);
@@ -172,6 +180,14 @@ export default function SubjectsView() {
           return String(subject.subject_descriptive_title ?? '');
         case 'subject_units':
           return Number(subject.subject_units ?? 0);
+        case 'mth_schedule':
+          return String(subject.mth_schedule ?? '');
+        case 'tfs_schedule':
+          return String(subject.tfs_schedule ?? '');
+        case 'mth_room':
+          return String(subject.mth_room ?? '');
+        case 'tfs_room':
+          return String(subject.tfs_room ?? '');
         case 'subject_lec_lab':
           return [Number(subject.subject_lec_hrs ?? 0), Number(subject.subject_lab_hrs ?? 0)];
         case 'subject_status':
@@ -222,6 +238,10 @@ export default function SubjectsView() {
         subject_units: 3,
         subject_lec_hrs: 3,
         subject_lab_hrs: 0,
+        mth_schedule: '',
+        tfs_schedule: '',
+        mth_room: '',
+        tfs_room: '',
         subject_status: 'active',
       });
       if ((createdSubject?.subject_status || 'active') === 'active') {
@@ -242,6 +262,15 @@ export default function SubjectsView() {
     return `flex w-full items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
       sortConfig.key === columnKey ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
     }`;
+  }
+
+  function extractTimeRange(value) {
+    if (!value) {
+      return '';
+    }
+
+    const match = String(value).match(/\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\b/);
+    return match ? match[0].replace(/\s+/g, '') : '';
   }
 
   return (
@@ -283,7 +312,7 @@ export default function SubjectsView() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
-              placeholder="Search by code or description..."
+              placeholder="Search by code, description, schedule, or room..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -367,6 +396,18 @@ export default function SubjectsView() {
                       <ArrowUpDown size={12} />
                     </button>
                   </th>
+                  <th className="px-6 py-4 text-left">
+                    <button type="button" onClick={() => handleSort('mth_schedule')} className={sortHeaderClass('mth_schedule')}>
+                      <span>MTH</span>
+                      <ArrowUpDown size={12} />
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-left">
+                    <button type="button" onClick={() => handleSort('tfs_schedule')} className={sortHeaderClass('tfs_schedule')}>
+                      <span>TFS</span>
+                      <ArrowUpDown size={12} />
+                    </button>
+                  </th>
                   <th className="px-6 py-4 text-center">
                     <button type="button" onClick={() => handleSort('subject_units')} className={sortHeaderClass('subject_units')}>
                       <span>Units</span>
@@ -389,8 +430,8 @@ export default function SubjectsView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20">
-                {sortedSubjects.map((subject) => (
-                  <tr key={subject.subject_id} className="transition-colors hover:bg-white/40">
+                {sortedSubjects.map((subject, index) => (
+                  <tr key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-6 py-4">
                       <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                         {subject.subject_code || 'N/A'}
@@ -401,8 +442,14 @@ export default function SubjectsView() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="max-w-xs">
-                        <p className="text-xs text-on-surface-variant">{subject.subject_descriptive_title}</p>
+                        <p className="text-sm font-medium text-on-surface">{subject.subject_descriptive_title || '—'}</p>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant">
+                      <span className="block text-sm text-on-surface-variant">{extractTimeRange(subject.mth_schedule)}</span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant">
+                      <span className="block text-sm text-on-surface-variant">{extractTimeRange(subject.tfs_schedule)}</span>
                     </td>
                     <td className="px-6 py-4 text-center text-sm font-medium text-on-surface">
                       {subject.subject_units || 0}
@@ -585,8 +632,59 @@ export default function SubjectsView() {
                   value={newSubject.subject_descriptive_title}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  placeholder="e.g., Introduction to Computer Science"
+                  placeholder="e.g., Introduction to Human Computer Interactions"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    MTH Schedule
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.mth_schedule}
+                    onChange={(e) => setNewSubject({ ...newSubject, mth_schedule: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., M 7:00-10:00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    MTH Room(s)
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.mth_room}
+                    onChange={(e) => setNewSubject({ ...newSubject, mth_room: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., 101/102"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    TFS Schedule
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.tfs_schedule}
+                    onChange={(e) => setNewSubject({ ...newSubject, tfs_schedule: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., T 1:00-4:00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    TFS Room(s)
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.tfs_room}
+                    onChange={(e) => setNewSubject({ ...newSubject, tfs_room: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., 201"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -722,6 +820,57 @@ export default function SubjectsView() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   placeholder="e.g., Introduction to Computer Science"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    MTH Schedule
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.mth_schedule}
+                    onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., M 7:00-10:00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    MTH Room(s)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.mth_room}
+                    onChange={(e) => setEditingData({ ...editingData, mth_room: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., 101/102"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    TFS Schedule
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.tfs_schedule}
+                    onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., T 1:00-4:00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    TFS Room(s)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.tfs_room}
+                    onChange={(e) => setEditingData({ ...editingData, tfs_room: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="e.g., 201"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
