@@ -174,7 +174,6 @@ export default function CourseOfferingView() {
       active = false;
     };
   }, [page, refreshToken]);
-  }, [page, filterText, refreshTrigger]);
 
   // Load rooms data
   useEffect(() => {
@@ -1149,6 +1148,8 @@ export default function CourseOfferingView() {
                 </div>
               </div>
             )}
+          </div>
+        )}
         {successMessage && (
           <div className="flex items-center gap-1 rounded-lg bg-green-50 p-2 text-xs text-green-700">
             <Check size={14} />

@@ -697,6 +697,10 @@ router.post('/import-csv', async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error during CSV import.',
+    });
+  }
+});
+
 // POST - Create new course offering
 router.post('/', async (req, res) => {
   try {
