@@ -29,10 +29,12 @@ import {
   createCourseOffering,
   updateCourseOffering,
   deleteCourseOffering,
-  importCourseOfferingsCsv,
+  previewCourseOfferingsCsv,
+  confirmCourseOfferingsCsv,
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
+import CsvImportReviewPanel from '../components/CsvImportReviewPanel';
 import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
 import { buildCourseOfferingNotifications } from '../utils/missingData';
 
@@ -57,6 +59,10 @@ export default function CourseOfferingView() {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState(null);
   const [importingCsv, setImportingCsv] = useState(false);
+  const [reviewingCsv, setReviewingCsv] = useState(false);
+  const [csvPreview, setCsvPreview] = useState(null);
+  const [showCsvReview, setShowCsvReview] = useState(false);
+  const [csvConfirmError, setCsvConfirmError] = useState('');
   const [importSummary, setImportSummary] = useState(null);
   const [importError, setImportError] = useState('');
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
@@ -368,20 +374,43 @@ export default function CourseOfferingView() {
     }
 
     try {
-      setImportingCsv(true);
+      setReviewingCsv(true);
       setImportError('');
       setImportSummary(null);
+      setCsvConfirmError('');
 
       const csvText = await selectedCsvFile.text();
-      const response = await importCourseOfferingsCsv({
+      const response = await previewCourseOfferingsCsv({
         csvText,
         fileName: selectedCsvFile.name,
       });
 
+      setCsvPreview(response?.preview ?? null);
+      setShowCsvReview(true);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Failed to preview CSV import.');
+    } finally {
+      setReviewingCsv(false);
+    }
+  }
+
+  async function handleConfirmCsvImport({ importToken, edits }) {
+    try {
+      setImportingCsv(true);
+      setCsvConfirmError('');
+      setImportError('');
+
+      const response = await confirmCourseOfferingsCsv({
+        importToken,
+        edits,
+      });
+
       setImportSummary(response?.summary ?? null);
+      setShowCsvReview(false);
+      setCsvPreview(null);
       await loadInitialPage();
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Failed to import CSV.');
+      setCsvConfirmError(err instanceof Error ? err.message : 'Failed to confirm CSV import.');
     } finally {
       setImportingCsv(false);
     }
@@ -1051,6 +1080,9 @@ export default function CourseOfferingView() {
                   setSelectedCsvFile(file);
                   setImportError('');
                   setImportSummary(null);
+                  setCsvPreview(null);
+                  setShowCsvReview(false);
+                  setCsvConfirmError('');
                 }}
               />
             </label>
@@ -1058,10 +1090,10 @@ export default function CourseOfferingView() {
               className="btn-primary flex items-center gap-2"
               onClick={handleImportCsv}
               type="button"
-              disabled={importingCsv}
+              disabled={reviewingCsv || importingCsv}
             >
               <Upload size={18} />
-              <span>{importingCsv ? 'Importing...' : 'Import CSV'}</span>
+              <span>{reviewingCsv ? 'Reviewing...' : 'Review CSV'}</span>
             </button>
           </div>
         </div>
@@ -1515,6 +1547,18 @@ export default function CourseOfferingView() {
           </div>
         </div>
       )}
+
+      <CsvImportReviewPanel
+        open={showCsvReview}
+        preview={csvPreview}
+        confirming={importingCsv}
+        confirmError={csvConfirmError}
+        onClose={() => {
+          if (importingCsv) return;
+          setShowCsvReview(false);
+        }}
+        onConfirm={handleConfirmCsvImport}
+      />
     </div>
   );
 }

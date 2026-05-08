@@ -79,3 +79,33 @@ export async function importCourseOfferingsCsv({ csvText, fileName }) {
 
   return response.json();
 }
+
+export async function previewCourseOfferingsCsv({ csvText, fileName }) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csvText, fileName }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function confirmCourseOfferingsCsv({ importToken, edits }) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ importToken, edits }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}

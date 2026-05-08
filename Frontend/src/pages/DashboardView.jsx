@@ -4,7 +4,11 @@ import { motion } from 'motion/react';
 import { fetchFacultyPage } from '../services/facultyApi.js';
 import { fetchSubjects } from '../services/subjectsApi.js';
 import { fetchRoomsPage } from '../services/roomsApi.js';
-import { importCourseOfferingsCsv } from '../services/courseOfferingsApi.js';
+import {
+  previewCourseOfferingsCsv,
+  confirmCourseOfferingsCsv,
+} from '../services/courseOfferingsApi.js';
+import CsvImportReviewPanel from '../components/CsvImportReviewPanel.jsx';
 
 export default function DashboardView({ onNavigate }) {
   const [facultyCount, setFacultyCount] = useState(0);
@@ -18,6 +22,10 @@ export default function DashboardView({ onNavigate }) {
   const [showRoomsInfo, setShowRoomsInfo] = useState(false);
   const [selectedCsvFile, setSelectedCsvFile] = useState(null);
   const [importingCsv, setImportingCsv] = useState(false);
+  const [reviewingCsv, setReviewingCsv] = useState(false);
+  const [csvPreview, setCsvPreview] = useState(null);
+  const [showCsvReview, setShowCsvReview] = useState(false);
+  const [csvConfirmError, setCsvConfirmError] = useState('');
   const [importSummary, setImportSummary] = useState(null);
   const [importError, setImportError] = useState('');
 
@@ -74,19 +82,42 @@ export default function DashboardView({ onNavigate }) {
     }
 
     try {
-      setImportingCsv(true);
+      setReviewingCsv(true);
       setImportError('');
       setImportSummary(null);
+      setCsvConfirmError('');
 
       const csvText = await selectedCsvFile.text();
-      const response = await importCourseOfferingsCsv({
+      const response = await previewCourseOfferingsCsv({
         csvText,
         fileName: selectedCsvFile.name,
       });
 
-      setImportSummary(response?.summary ?? null);
+      setCsvPreview(response?.preview ?? null);
+      setShowCsvReview(true);
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'CSV import failed.');
+      setImportError(error instanceof Error ? error.message : 'CSV preview failed.');
+    } finally {
+      setReviewingCsv(false);
+    }
+  };
+
+  const handleConfirmCsvImport = async ({ importToken, edits }) => {
+    try {
+      setImportingCsv(true);
+      setCsvConfirmError('');
+      setImportError('');
+
+      const response = await confirmCourseOfferingsCsv({
+        importToken,
+        edits,
+      });
+
+      setImportSummary(response?.summary ?? null);
+      setShowCsvReview(false);
+      setCsvPreview(null);
+    } catch (error) {
+      setCsvConfirmError(error instanceof Error ? error.message : 'CSV import confirm failed.');
     } finally {
       setImportingCsv(false);
     }
@@ -285,17 +316,20 @@ export default function DashboardView({ onNavigate }) {
                     setSelectedCsvFile(file);
                     setImportSummary(null);
                     setImportError('');
+                    setCsvPreview(null);
+                    setShowCsvReview(false);
+                    setCsvConfirmError('');
                   }}
                 />
               </label>
               <button
                 type="button"
                 onClick={handleCsvImport}
-                disabled={importingCsv}
+                disabled={importingCsv || reviewingCsv}
                 className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 <Upload size={14} />
-                {importingCsv ? 'Importing...' : 'Import CSV'}
+                {reviewingCsv ? 'Reviewing...' : 'Review CSV'}
               </button>
               <button
                 type="button"
@@ -321,6 +355,18 @@ export default function DashboardView({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      <CsvImportReviewPanel
+        open={showCsvReview}
+        preview={csvPreview}
+        confirming={importingCsv}
+        confirmError={csvConfirmError}
+        onClose={() => {
+          if (importingCsv) return;
+          setShowCsvReview(false);
+        }}
+        onConfirm={handleConfirmCsvImport}
+      />
     </div>
   );
 }
