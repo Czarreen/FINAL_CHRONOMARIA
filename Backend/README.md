@@ -14,3 +14,4 @@ All backend services read from `Backend/.env`.
 
 - `GET /health`
 - `GET /api/course-offerings?page=1&limit=50`
+- `POST /api/course-offerings/import-csv`
