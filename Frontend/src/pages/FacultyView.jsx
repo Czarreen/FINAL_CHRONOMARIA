@@ -63,6 +63,8 @@ export default function FacultyView() {
   const [notifications, setNotifications] = useState([]);
   const [notificationSearch, setNotificationSearch] = useState('');
   const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
+  const [pendingScrollToId, setPendingScrollToId] = useState(null);
+  const [findingRow, setFindingRow] = useState(false);
 
   useEffect(() => {
     loadFaculty();
@@ -75,6 +77,39 @@ export default function FacultyView() {
   useEffect(() => {
     loadFacultyNotifications();
   }, []);
+
+  // Handle scrolling to row when it appears (after page navigation)
+  useEffect(() => {
+    if (pendingScrollToId) {
+      const rowElement = document.getElementById(`faculty-row-${pendingScrollToId}`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rowElement.classList.add('animate-pulse');
+        setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+        setPendingScrollToId(null);
+      }
+    }
+  }, [pendingScrollToId, faculty]);
+
+  async function findFacultyPageNumber(facultyId) {
+    try {
+      // Fetch all faculty members to calculate which page the target is on
+      const { rows: allFaculty } = await fetchFaculty({
+        page: 1,
+        limit: 10000,
+        search: '',
+        status: statusFilter,
+      });
+
+      const facultyIndex = allFaculty.findIndex((f) => f.faculty_id === facultyId);
+      if (facultyIndex === -1) return null;
+
+      return Math.ceil((facultyIndex + 1) / limit);
+    } catch (err) {
+      console.error('Failed to find faculty page number:', err);
+      return null;
+    }
+  }
 
   async function loadFacultyNotifications() {
     try {
@@ -103,6 +138,11 @@ export default function FacultyView() {
       const memberRow = await fetchFacultyById(item.faculty_id);
       if (memberRow) {
         handleEditFaculty(memberRow);
+        // Navigate to the page this faculty member is on
+        const pageNum = await findFacultyPageNumber(item.faculty_id);
+        if (pageNum && pageNum !== page) {
+          setPage(pageNum);
+        }
       } else {
         console.error('Faculty member not found');
       }
@@ -112,13 +152,24 @@ export default function FacultyView() {
   }
 
   function handleNotificationJump(item) {
-    // Scroll to the faculty row or highlight it
     const rowElement = document.getElementById(`faculty-row-${item.faculty_id}`);
     if (rowElement) {
       rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Add a brief highlight effect
       rowElement.classList.add('animate-pulse');
       setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+    } else {
+      // Faculty member not on current page, find which page they're on
+      setFindingRow(true);
+      findFacultyPageNumber(item.faculty_id)
+        .then((pageNum) => {
+          if (pageNum && pageNum !== page) {
+            setPage(pageNum);
+            setPendingScrollToId(item.faculty_id);
+          } else if (!pageNum) {
+            console.warn('Faculty member not found');
+          }
+        })
+        .finally(() => setFindingRow(false));
     }
   }
 

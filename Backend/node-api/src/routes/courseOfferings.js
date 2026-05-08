@@ -486,18 +486,45 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const limit = Math.min(10000, Math.max(1, Number(req.query.limit || 50)));
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data, error, count } = await supabaseAdmin
+    // Sort parameters
+    const sortBy = String(req.query.sortBy || 'id').toLowerCase();
+    const sortOrder = String(req.query.sortOrder || 'asc').toLowerCase();
+
+    // Allowed sort columns
+    const allowedSortColumns = [
+      'id',
+      'code',
+      'course_no',
+      'descriptive_title',
+      'units',
+      'lec_hrs',
+      'lab_hrs',
+      'curr_id',
+      'department_id',
+      'section',
+      'mth_schedule',
+      'tfs_schedule',
+      'merged',
+    ];
+
+    // Validate sort column
+    const validSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+    const validSortOrder = sortOrder === 'desc' ? 'desc' : 'asc';
+
+    let query = supabaseAdmin
       .from('course_offerings')
       .select(
         '*,departments!course_offerings_department_id_fkey(department_id,department_name)',
         { count: 'exact' }
       )
-      .order('id', { ascending: true })
+      .order(validSortBy, { ascending: validSortOrder === 'asc' })
       .range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return res.status(500).json({ error: error.message });
@@ -509,6 +536,33 @@ router.get('/', async (req, res) => {
       total: count ?? 0,
       rows: data ?? [],
     });
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid offering ID' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('course_offerings')
+      .select(
+        '*,departments!course_offerings_department_id_fkey(department_id,department_name)'
+      )
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Course offering not found' });
+    }
+
+    return res.json(data);
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',

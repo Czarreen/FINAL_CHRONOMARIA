@@ -9,10 +9,20 @@ import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
+import { clearAllNotifications } from './services/notificationsApi';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
+
+  const handleLogout = async () => {
+    try {
+      await clearAllNotifications();
+    } catch (err) {
+      console.error('Failed to clear notifications on logout:', err);
+    }
+    setIsAuthenticated(false);
+  };
 
   if (!isAuthenticated) {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
@@ -45,13 +55,13 @@ export default function App() {
         <Sidebar
           currentView={currentView}
           onViewChange={setCurrentView}
-          onLogout={() => setIsAuthenticated(false)}
+          onLogout={handleLogout}
         />
 
         <main className="flex-1 min-h-screen ml-[260px] pt-16">
           <TopAppBar
             title={getTitle()}
-            onLogout={() => setIsAuthenticated(false)}
+            onLogout={handleLogout}
           />
 
           <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">

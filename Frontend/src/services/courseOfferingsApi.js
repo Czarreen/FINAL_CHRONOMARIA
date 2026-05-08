@@ -1,12 +1,14 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-export async function fetchCourseOfferingsPage(page = 1, limit = 50) {
-  return fetchCourseOfferings({ page, limit });
+export async function fetchCourseOfferingsPage(page = 1, limit = 50, sortBy = 'id', sortOrder = 'asc') {
+  return fetchCourseOfferings({ page, limit, sortBy, sortOrder });
 }
 
-export async function fetchCourseOfferings({ page = 1, limit = 50, search = '' } = {}) {
+export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', sortBy = 'id', sortOrder = 'asc' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
+  if (sortBy) params.sortBy = String(sortBy);
+  if (sortOrder) params.sortOrder = String(sortOrder);
   const query = new URLSearchParams(params);
   const response = await fetch(`${API_BASE_URL}/api/course-offerings?${query.toString()}`);
 
@@ -71,6 +73,17 @@ export async function importCourseOfferingsCsv({ csvText, fileName }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ csvText, fileName }),
   });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function fetchCourseOfferingById(id) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`);
 
   if (!response.ok) {
     const body = await response.text();

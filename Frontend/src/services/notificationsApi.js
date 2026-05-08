@@ -71,3 +71,12 @@ export async function resolveFacultyNotification(id) {
   }
   return res.json();
 }
+
+export async function clearAllNotifications() {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/clear-all`, { method: 'DELETE' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to clear notifications: ${res.status}`);
+  }
+  return res.json();
+}
