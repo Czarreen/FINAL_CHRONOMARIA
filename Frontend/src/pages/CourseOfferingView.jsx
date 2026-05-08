@@ -757,73 +757,71 @@ export default function CourseOfferingView() {
   };
 
   return (
-    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500 p-3">
       {/* Header with compact stats */}
-      <div className="glass-panel flex flex-col gap-4 p-5">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="glass-panel flex flex-col gap-2 p-3">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="space-y-1">
-            <h2 className="text-headline-xl font-headline-xl text-on-surface">Course Offerings</h2>
-            <p className="text-body-md text-on-surface-variant">Manage course offerings, schedules, and room assignments.</p>
+            <h2 className="text-lg font-bold text-on-surface">Course Offerings</h2>
+            <p className="text-xs text-on-surface-variant">Manage offerings, schedules, and room assignments.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <NotificationButton
               title="Missing Data"
               buttonLabel="Issues"
-              emptyLabel="No missing data detected for the current page."
+              emptyLabel="No missing data detected."
               panelSize="lg"
               items={notifications}
               onItemJump={focusNotificationItem}
               onItemEdit={editNotificationItem}
             />
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
-              <BookMarked size={14} className="text-primary" />
-              {totalRows} total
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
+              <BookMarked size={12} className="text-primary" />
+              {totalRows}
             </span>
             {selectedOfferings.size > 0 && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-primary/60 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary backdrop-blur">
-                {selectedOfferings.size} selected
+              <span className="inline-flex items-center gap-1 rounded-full border border-primary/60 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary backdrop-blur">
+                {selectedOfferings.size} sel
               </span>
             )}
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
-              Page {page}
-            </span>
             <button
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
               onClick={() => setPage(1)}
               type="button"
+              title="Reload data"
             >
-              <RefreshCw size={18} />
+              <RefreshCw size={14} />
               <span>Reload</span>
             </button>
             <button
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
               onClick={exportToCSV}
               type="button"
-              title="Export visible offerings to CSV"
+              title="Export to CSV"
             >
-              <Download size={18} />
+              <Download size={14} />
               <span>Export</span>
             </button>
             <div className="relative group">
               <button
-                className="btn-primary flex items-center gap-2"
+                className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
                 type="button"
-                title="Toggle column visibility"
+                title="Column visibility"
               >
-                <Settings size={18} />
-                <span>Columns</span>
+                <Settings size={14} />
+                <span>Cols</span>
               </button>
-              <div className="absolute right-0 mt-2 hidden group-hover:flex flex-col bg-white border border-white/60 rounded-lg shadow-lg p-2 min-w-fit z-50">
+              <div className="absolute right-0 mt-1 hidden group-hover:flex flex-col bg-white border border-white/60 rounded-lg shadow-lg p-1 min-w-fit z-50">
                 {columns.map((col) => (
                   <label
                     key={col.key}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-on-surface hover:bg-slate-50 rounded-md cursor-pointer"
+                    className="flex items-center gap-2 px-2 py-1 text-xs text-on-surface hover:bg-slate-50 rounded-md cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={visibleColumns.has(col.key)}
                       onChange={() => toggleColumnVisibility(col.key)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                     {col.label}
                   </label>
@@ -832,16 +830,16 @@ export default function CourseOfferingView() {
             </div>
             {selectedOfferings.size > 0 && (
               <button
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-red-700"
+                className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2 py-1 font-semibold text-white text-xs transition-colors hover:bg-red-700"
                 onClick={handleBulkDelete}
                 type="button"
               >
-                <Trash2 size={18} />
-                <span>Delete Selected</span>
+                <Trash2 size={14} />
+                <span>Delete</span>
               </button>
             )}
             <button
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
               onClick={() => {
                 setShowAddModal(true);
                 setEditingData({ mth_room_id: [], tfs_room_id: [] });
@@ -849,45 +847,45 @@ export default function CourseOfferingView() {
               }}
               type="button"
             >
-              <PlusCircle size={18} />
-              <span>Add Offering</span>
+              <PlusCircle size={14} />
+              <span>Add</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Controls: Search / Filter / Sort */}
-      <div className="glass-panel space-y-3 p-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="glass-panel space-y-2 p-3">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           {/* Search Input */}
-          <div className="relative flex-1 xl:max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+          <div className="relative flex-1 xl:max-w-xs">
+            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
-              placeholder="Search by code or title..."
+              placeholder="Search..."
               value={filterText}
               onChange={(e) => {
                 setFilterText(e.target.value);
               }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-8 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
             />
           </div>
 
-          {/* Column Filter */}
-          <div className="flex flex-wrap gap-2 xl:justify-end">
+          {/* Column Filter and Reset */}
+          <div className="flex flex-wrap gap-1 xl:justify-end">
             <select
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
-              className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white"
+              className="rounded-lg border border-white/30 bg-white/50 px-2 py-1.5 text-xs text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white"
             >
-              <option value="all">All columns</option>
+              <option value="all">All cols</option>
               {columns.map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
             <button
               onClick={() => { setFilterText(''); setFilterColumn('all'); setSortConfig({ key: 'code', direction: 'asc' }); }}
-              className="rounded-lg border border-white/60 bg-white px-3 py-2 text-sm font-bold text-on-surface-variant transition-all hover:bg-slate-50"
+              className="rounded-lg border border-white/60 bg-white px-2 py-1.5 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50"
             >
               Reset
             </button>
@@ -896,58 +894,58 @@ export default function CourseOfferingView() {
 
         {/* Error Messages */}
         {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+            <AlertCircle size={14} />
             {error}
           </div>
         )}
         {updateError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+            <AlertCircle size={14} />
             {updateError}
           </div>
         )}
       </div>
 
-      {/* Data Table */}
-      <div className="glass-panel overflow-hidden">
-        <div className="max-h-[calc(100vh-18rem)] overflow-auto">
-          <table className="min-w-[1100px] w-full text-left">
+      {/* Data Table - Compact */}
+      <div className="glass-panel overflow-hidden flex-1">
+        <div className="max-h-[calc(100vh-24rem)] overflow-auto">
+          <table className="min-w-full w-full text-left text-xs">
             <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
-                  <th className="px-4 py-4 text-center w-12">
+                  <th className="px-3 py-2 text-center w-10">
                     <input
                       type="checkbox"
                       checked={offerings.length > 0 && selectedOfferings.size === offerings.length}
                       indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < offerings.length}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </th>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <th key={col.key} className="px-6 py-4 text-left">
-                        <button type="button" onClick={() => handleSort(col.key)} className={`flex w-full items-center justify-start gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
+                      <th key={col.key} className="px-3 py-2 text-left">
+                        <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
                           sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
                         }`}>
                           <span>{col.label}</span>
-                          <ArrowUpDown size={12} />
+                          <ArrowUpDown size={10} />
                         </button>
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-30 bg-white/95 px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Actions</th>
+                  <th className="sticky right-0 z-30 bg-white/95 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/70 backdrop-blur">Act</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-white/20">
               {loading && (
                 <tr>
                   <td
-                    className="px-6 py-12 text-center text-sm text-on-surface-variant"
+                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
-                    Loading course offerings...
+                    Loading...
                   </td>
                 </tr>
               )}
@@ -955,7 +953,7 @@ export default function CourseOfferingView() {
               {!loading && error && (
                 <tr>
                   <td
-                    className="px-6 py-12 text-center text-sm text-error"
+                    className="px-3 py-4 text-center text-xs text-error"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     {error}
@@ -966,71 +964,71 @@ export default function CourseOfferingView() {
               {!loading && !error && offerings.length === 0 && (
                 <tr>
                   <td
-                    className="px-6 py-12 text-center text-sm text-on-surface-variant"
+                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
-                    No course offerings found.
+                    No offerings found.
                   </td>
                 </tr>
               )}
 
               {!loading && !error && displayedOfferings.map((offering) => (
-                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40">
-                  <td className="px-4 py-4 text-center">
+                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40 text-xs">
+                  <td className="px-3 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={selectedOfferings.has(offering.id)}
                       onChange={() => toggleSelectOffering(offering.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </td>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <td key={col.key} className="px-6 py-4">
+                      <td key={col.key} className="px-3 py-2 truncate">
                         {col.key === 'code' ? (
-                          <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                          <span className="inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'course_no' ? (
-                          <span className="text-sm font-medium text-on-surface">
+                          <span className="text-[11px] font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'descriptive_title' ? (
-                          <div className="max-w-xs">
-                            <p className="text-xs text-on-surface-variant">{renderCellValue(offering[col.key])}</p>
-                          </div>
+                          <span className="text-[10px] text-on-surface-variant truncate max-w-xs block">{renderCellValue(offering[col.key])}</span>
                         ) : col.key === 'units' ? (
-                          <span className="text-sm font-medium text-on-surface">
+                          <span className="text-[11px] font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'lec_hrs' || col.key === 'lab_hrs' ? (
-                          <span className="text-sm font-medium text-on-surface-variant">
+                          <span className="text-[11px] font-medium text-on-surface-variant">
                             {renderCellValue(offering[col.key])}h
                           </span>
                         ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                          renderRoomCell(offering, col.key)
+                          <span className="text-[10px] text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
                         ) : (
-                          <span className="text-sm text-on-surface-variant">
+                          <span className="text-[11px] text-on-surface-variant truncate">
                             {renderCellValue(offering[col.key])}
                           </span>
                         )}
                       </td>
                     );
                   })}
-                  <td className="sticky right-0 z-10 bg-white/90 px-6 py-4 backdrop-blur">
-                    <div className="flex justify-center gap-2">
+                  <td className="sticky right-0 z-10 bg-white/90 px-2 py-2 backdrop-blur">
+                    <div className="flex justify-center gap-1">
                       <button
                         onClick={() => handleEditOffering(offering)}
-                        className="rounded-md p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
+                        className="rounded-md p-1 text-slate-400 transition-colors hover:bg-white hover:text-primary"
+                        title="Edit"
                       >
-                        <Edit3 size={16} />
+                        <Edit3 size={14} />
                       </button>
                       <button
                         onClick={() => handleDeleteOffering(offering)}
-                        className="rounded-md p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Delete"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>
@@ -1041,32 +1039,34 @@ export default function CourseOfferingView() {
         </div>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant/80">
-          Showing {startRow}-{endRow} of {totalRows}
+      {/* Pagination - Always visible and compact */}
+      <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-3 py-2 gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
+          {startRow}-{endRow} / {totalRows}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-0.5 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page <= 1 || loading}
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             type="button"
+            title="Previous page"
           >
-            <ChevronLeft size={14} />
-            Prev
+            <ChevronLeft size={12} />
+            <span>Prev</span>
           </button>
-          <span className="text-xs font-semibold text-on-surface-variant">
-            Page {page} of {totalPages}
+          <span className="text-xs font-semibold text-on-surface-variant px-1">
+            {page} / {totalPages}
           </span>
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-0.5 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page >= totalPages || loading}
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             type="button"
+            title="Next page"
           >
-            Next
-            <ChevronRight size={14} />
+            <span>Next</span>
+            <ChevronRight size={12} />
           </button>
         </div>
       </div>
