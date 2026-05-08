@@ -544,7 +544,7 @@ export default function CourseOfferingView() {
       <div className="space-y-2 rounded-lg border border-white/60 bg-white/70 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
-            Currently selected:
+            Selected Rooms:
           </span>
           {selectedRoomNames.length ? (
             selectedRoomNames.map((roomName, index) => (
@@ -556,38 +556,44 @@ export default function CourseOfferingView() {
               </span>
             ))
           ) : (
-            <span className="text-xs text-on-surface-variant/70">No room selected</span>
+            <span className="text-xs text-on-surface-variant/70">None selected</span>
           )}
         </div>
-        <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
           {rooms.length === 0 ? (
             <p className="text-xs text-on-surface-variant">Loading rooms...</p>
           ) : (
             rooms.map((room) => {
-              const roomId = String(room.id ?? room.room_id ?? '');
-              const isChecked = selectedValues.includes(roomId);
-              const conflicts = getConflictingOfferings(roomId, scheduleType);
+              const roomId = room.room_id ?? room.id ?? '';
+              const roomIdStr = String(roomId);
+              const isChecked = selectedValues.includes(roomIdStr);
+              const conflicts = getConflictingOfferings(roomIdStr, scheduleType);
               const conflictCount = conflicts.filter((o) => o.id !== editingId).length;
 
               return (
-                <div key={roomId}>
-                  <label
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50"
-                  >
+                <div key={roomIdStr}>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50">
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={() => toggleRoomSelection(field, roomId)}
+                      onChange={() => toggleRoomSelection(field, roomIdStr)}
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
-                    <span className="font-medium text-on-surface">
-                      {room.room_name || room.name || room.label || `Room ${roomId}`}
-                    </span>
+                    <div className="flex-1">
+                      <span className="font-medium text-on-surface">
+                        {room.room_name || `Room ${roomId}`}
+                      </span>
+                      {room.room_type && (
+                        <span className="ml-2 text-xs text-on-surface-variant/70">
+                          ({room.room_type})
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-on-surface-variant/70">#{roomId}</span>
                   </label>
                   {conflictCount > 0 && (
                     <p className="ml-7 text-xs text-amber-600">
-                      ⚠️ Already assigned to {conflictCount} other offering(s)
+                      ⚠️ Used by {conflictCount} other offering(s)
                     </p>
                   )}
                 </div>
@@ -596,7 +602,7 @@ export default function CourseOfferingView() {
           )}
         </div>
         <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant/60">
-          {selectedValues.length ? `${selectedValues.length} room(s) selected` : 'No room selected'}
+          {selectedValues.length ? `${selectedValues.length} room(s) selected` : 'No rooms selected'}
         </p>
       </div>
     );
@@ -604,19 +610,28 @@ export default function CourseOfferingView() {
 
   const getRoomName = (roomId) => {
     if (roomId === null || roomId === undefined || roomId === '') return '—';
+
     const idNum = Number(roomId);
+    if (isNaN(idNum)) return `Room ${roomId}`;
+
+    // Look up by room_id (integer)
     const room = rooms.find((r) => {
-      // handle numeric and string id fields
-      if (r == null) return false;
-      if (r.id !== undefined && r.id !== null && Number(r.id) === idNum) return true;
-      if (r.room_id !== undefined && r.room_id !== null && Number(r.room_id) === idNum) return true;
-      // fall back to string compare
-      if (String(r.id) === String(roomId)) return true;
-      if (String(r.room_id) === String(roomId)) return true;
+      if (!r) return false;
+      // Try matching by room_id as number
+      if (r.room_id !== undefined && r.room_id !== null) {
+        if (Number(r.room_id) === idNum) return true;
+      }
+      // Try matching by id as number (fallback)
+      if (r.id !== undefined && r.id !== null) {
+        if (Number(r.id) === idNum) return true;
+      }
       return false;
     });
 
-    if (room) return room.room_name || room.name || room.label || `Room ${roomId}`;
+    if (room) {
+      return room.room_name || room.name || `Room ${roomId}`;
+    }
+
     return `Room ${roomId}`;
   };
 
