@@ -771,15 +771,7 @@ export default function CourseOfferingView() {
               buttonLabel="Issues"
               emptyLabel="No missing data detected for the current page."
               panelSize="lg"
-              items={notifications
-                .map((n) => ({
-                  id: n.id,
-                  title: n.message || `${n.issue_type || ''} ${n.field_name || ''}`.trim(),
-                  description: n.details?.note || '',
-                  missingFields: Array.isArray(n.details?.missing_fields) ? n.details.missing_fields : (n.field_name ? [n.field_name] : []),
-                  offeringId: n.entity_id,
-                }))
-                .filter((i) => offerings.some((o) => o.id === i.offeringId))}
+              items={notifications}
               onItemJump={focusNotificationItem}
               onItemEdit={editNotificationItem}
             />
