@@ -60,6 +60,9 @@ export default function CourseOfferingView() {
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
+  const [allOfferingsForNotifications, setAllOfferingsForNotifications] = useState([]);
+  const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
+  const [notificationSearch, setNotificationSearch] = useState('');
 
   useEffect(() => {
     if (!offeringError) return;
@@ -480,11 +483,40 @@ export default function CourseOfferingView() {
 
   const [notifications, setNotifications] = useState([]);
 
+  // Fetch all offerings for notification scanning (not paginated)
+  useEffect(() => {
+    let active = true;
+
+    async function loadAllOfferingsForNotifications() {
+      try {
+        const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: '' });
+        if (!active) return;
+        setAllOfferingsForNotifications(
+          (rows || []).map((row) => ({
+            ...row,
+            department_name:
+              row.departments?.department_name ??
+              (row.department_id !== null && row.department_id !== undefined
+                ? `Department #${row.department_id}`
+                : null),
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to load all offerings for notifications:', err);
+        setAllOfferingsForNotifications([]);
+      }
+    }
+
+    loadAllOfferingsForNotifications();
+    return () => { active = false; };
+  }, [refreshTrigger]);
+
+  // Build notifications from all offerings (not just current page)
   useEffect(() => {
     let active = true;
     async function loadNotifications() {
       try {
-        const localNotifications = buildCourseOfferingNotifications(offerings);
+        const localNotifications = buildCourseOfferingNotifications(allOfferingsForNotifications);
         if (!active) return;
         setNotifications(localNotifications);
       } catch (err) {
@@ -494,7 +526,39 @@ export default function CourseOfferingView() {
     }
     loadNotifications();
     return () => { active = false; };
-  }, [offerings]);
+  }, [allOfferingsForNotifications]);
+
+  // Filter notifications by severity and search
+  const filteredNotifications = useMemo(() => {
+    let filtered = notifications;
+
+    // Filter by severity
+    if (notificationFilter !== 'all') {
+      filtered = filtered.filter((notif) => notif.severity === notificationFilter);
+    }
+
+    // Filter by search text (code or title)
+    if (notificationSearch.trim()) {
+      const q = notificationSearch.toLowerCase();
+      filtered = filtered.filter((notif) => {
+        const title = (notif.title || '').toLowerCase();
+        const code = (notif.code || '').toLowerCase();
+        return title.includes(q) || code.includes(q);
+      });
+    }
+
+    return filtered;
+  }, [notifications, notificationFilter, notificationSearch]);
+
+  // Calculate notification stats
+  const notificationStats = useMemo(() => {
+    return {
+      total: notifications.length,
+      critical: notifications.filter((n) => n.severity === 'critical').length,
+      medium: notifications.filter((n) => n.severity === 'medium').length,
+      low: notifications.filter((n) => n.severity === 'low').length,
+    };
+  }, [notifications]);
 
   const focusNotificationItem = (item) => {
     if (!item?.offeringId) return;
@@ -838,9 +902,14 @@ export default function CourseOfferingView() {
               buttonLabel="Issues"
               emptyLabel="No missing data detected."
               panelSize="lg"
-              items={notifications}
+              items={filteredNotifications}
               onItemJump={focusNotificationItem}
               onItemEdit={editNotificationItem}
+              severityFilter={notificationFilter}
+              onSeverityFilterChange={setNotificationFilter}
+              notificationSearch={notificationSearch}
+              onNotificationSearchChange={setNotificationSearch}
+              notificationStats={notificationStats}
             />
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
               <BookMarked size={12} className="text-primary" />

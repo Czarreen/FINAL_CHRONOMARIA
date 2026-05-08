@@ -10,6 +10,11 @@ export default function NotificationButton({
   panelSize = 'md',
   onItemJump,
   onItemEdit,
+  severityFilter = 'all',
+  onSeverityFilterChange,
+  notificationSearch = '',
+  onNotificationSearchChange,
+  notificationStats = { total: 0, critical: 0, medium: 0, low: 0 },
 }) {
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -127,6 +132,68 @@ export default function NotificationButton({
                 <AlertCircle size={16} />
               </button>
             </div>
+          </div>
+
+          {/* Notification Stats & Filters */}
+          <div className="mb-3 space-y-2 border-b border-slate-200 pb-3">
+            {/* Summary Stats */}
+            <div className="flex gap-2 text-xs">
+              <button
+                onClick={() => onSeverityFilterChange?.('all')}
+                className={`rounded px-2 py-1 font-semibold transition-colors ${
+                  severityFilter === 'all'
+                    ? 'bg-slate-200 text-on-surface'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+              >
+                All ({notificationStats.total})
+              </button>
+              {notificationStats.critical > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('critical')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'critical'
+                      ? 'bg-red-200 text-red-900'
+                      : 'text-red-700 hover:bg-red-100'
+                  }`}
+                >
+                  🔴 {notificationStats.critical}
+                </button>
+              )}
+              {notificationStats.medium > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('medium')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'medium'
+                      ? 'bg-amber-200 text-amber-900'
+                      : 'text-amber-700 hover:bg-amber-100'
+                  }`}
+                >
+                  🟡 {notificationStats.medium}
+                </button>
+              )}
+              {notificationStats.low > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('low')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'low'
+                      ? 'bg-blue-200 text-blue-900'
+                      : 'text-blue-700 hover:bg-blue-100'
+                  }`}
+                >
+                  🔵 {notificationStats.low}
+                </button>
+              )}
+            </div>
+
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder="Search by code or title..."
+              value={notificationSearch}
+              onChange={(e) => onNotificationSearchChange?.(e.target.value)}
+              className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
           </div>
 
           <div className={`${isExpanded ? 'flex-1 max-h-none' : resolvedPanelSize.maxHeightClass} space-y-2 overflow-y-auto pr-1`}>
