@@ -392,6 +392,71 @@ function resolveRoomIds(roomValue, roomLookup) {
   };
 }
 
+async function syncSubjectFromCourseOffering(courseOffering) {
+  const subjectCode = normalizeCell(courseOffering?.code);
+  if (!subjectCode) {
+    return { action: 'skipped', reason: 'Missing course code.' };
+  }
+
+  const subjectPayload = {
+    subject_code: subjectCode,
+    subject_course_no: normalizeCell(courseOffering.course_no),
+    subject_descriptive_title: normalizeCell(courseOffering.descriptive_title),
+    department_id: courseOffering.department_id ?? null,
+    subject_section: normalizeCell(courseOffering.section),
+    subject_units: courseOffering.units ?? null,
+    subject_lec_hrs: courseOffering.lec_hrs ?? null,
+    subject_lab_hrs: courseOffering.lab_hrs ?? null,
+    mth_schedule: normalizeCell(courseOffering.mth_schedule),
+    tfs_schedule: normalizeCell(courseOffering.tfs_schedule),
+    mth_room: normalizeCell(courseOffering.mth_room_id),
+    tfs_room: normalizeCell(courseOffering.tfs_room_id),
+  };
+
+  const { data: existingRows, error: lookupError } = await supabaseAdmin
+    .from('subjects')
+    .select('subject_id,subject_status')
+    .eq('subject_code', subjectCode)
+    .limit(1);
+
+  if (lookupError) {
+    throw new Error(`Subject lookup failed for ${subjectCode}: ${lookupError.message}`);
+  }
+
+  const existingSubject = Array.isArray(existingRows) ? existingRows[0] : null;
+
+  if (existingSubject) {
+    const { error: updateError } = await supabaseAdmin
+      .from('subjects')
+      .update({
+        ...subjectPayload,
+        subject_status: existingSubject.subject_status || 'active',
+      })
+      .eq('subject_id', existingSubject.subject_id);
+
+    if (updateError) {
+      throw new Error(`Subject sync update failed for ${subjectCode}: ${updateError.message}`);
+    }
+
+    return { action: 'updated', subject_id: existingSubject.subject_id };
+  }
+
+  const { data: insertedSubject, error: insertError } = await supabaseAdmin
+    .from('subjects')
+    .insert({
+      ...subjectPayload,
+      subject_status: 'active',
+    })
+    .select('subject_id')
+    .single();
+
+  if (insertError) {
+    throw new Error(`Subject sync insert failed for ${subjectCode}: ${insertError.message}`);
+  }
+
+  return { action: 'inserted', subject_id: insertedSubject?.subject_id ?? null };
+}
+
 function toRowObject(rowCells, mapping) {
   const record = {};
   for (const mapped of mapping) {
@@ -589,6 +654,8 @@ router.post('/import-csv', async (req, res) => {
       processedRows: 0,
       insertedRows: 0,
       updatedRows: 0,
+      syncedSubjectRows: 0,
+      failedSubjectSyncRows: 0,
       failedRows: 0,
       skippedRows: 0,
       errors: [],
@@ -671,6 +738,20 @@ router.post('/import-csv', async (req, res) => {
 
         summary.updatedRows += 1;
         summary.processedRows += 1;
+
+        try {
+          await syncSubjectFromCourseOffering(payload);
+          summary.syncedSubjectRows += 1;
+        } catch (syncError) {
+          summary.failedSubjectSyncRows += 1;
+          summary.warnings.push({
+            row: rowNumber,
+            id: targetId,
+            messages: [
+              `Subject sync failed after update: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`,
+            ],
+          });
+        }
       } else {
         const { error: insertError } = await supabaseAdmin
           .from('course_offerings')
@@ -687,6 +768,19 @@ router.post('/import-csv', async (req, res) => {
 
         summary.insertedRows += 1;
         summary.processedRows += 1;
+
+        try {
+          await syncSubjectFromCourseOffering(payload);
+          summary.syncedSubjectRows += 1;
+        } catch (syncError) {
+          summary.failedSubjectSyncRows += 1;
+          summary.warnings.push({
+            row: rowNumber,
+            messages: [
+              `Subject sync failed after insert: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`,
+            ],
+          });
+        }
       }
     }
 
@@ -734,7 +828,24 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(201).json(data?.[0] ?? {});
+    const inserted = data?.[0] ?? {};
+
+    try {
+      const subjectSync = await syncSubjectFromCourseOffering(inserted);
+      return res.status(201).json({
+        ...inserted,
+        subjectSync,
+      });
+    } catch (syncError) {
+      console.error('Subject sync error:', syncError);
+      return res.status(201).json({
+        ...inserted,
+        subjectSync: {
+          action: 'failed',
+          error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
+        },
+      });
+    }
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
@@ -781,7 +892,24 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Course offering not found' });
     }
 
-    return res.json(data[0]);
+    const updated = data[0];
+
+    try {
+      const subjectSync = await syncSubjectFromCourseOffering(updated);
+      return res.json({
+        ...updated,
+        subjectSync,
+      });
+    } catch (syncError) {
+      console.error('Subject sync error:', syncError);
+      return res.json({
+        ...updated,
+        subjectSync: {
+          action: 'failed',
+          error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
+        },
+      });
+    }
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',

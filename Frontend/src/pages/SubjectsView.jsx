@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle } from 'lucide-react';
 import { fetchSubjects, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchRooms } from '../services/roomsApi';
 
 export default function SubjectsView() {
   const [subjects, setSubjects] = useState([]);
@@ -15,6 +16,7 @@ export default function SubjectsView() {
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
+  const [roomNameById, setRoomNameById] = useState({});
   
   // Add Subject modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -45,6 +47,39 @@ export default function SubjectsView() {
   useEffect(() => {
     loadSubjects();
   }, [page, limit, search, statusFilter]);
+
+  useEffect(() => {
+    loadRoomLookup();
+  }, []);
+
+  async function loadRoomLookup() {
+    try {
+      const nextLookup = {};
+      const pageSize = 200;
+      let currentPage = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const result = await fetchRooms({ page: currentPage, limit: pageSize });
+        const rows = Array.isArray(result.rows) ? result.rows : [];
+
+        for (const row of rows) {
+          const roomId = String(row.room_id ?? '').trim();
+          const roomName = String(row.room_name ?? '').trim();
+          if (roomId && roomName) {
+            nextLookup[roomId] = roomName;
+          }
+        }
+
+        hasMore = rows.length === pageSize;
+        currentPage += 1;
+      }
+
+      setRoomNameById(nextLookup);
+    } catch {
+      setRoomNameById({});
+    }
+  }
 
   async function loadSubjects() {
     try {
@@ -102,8 +137,8 @@ export default function SubjectsView() {
       subject_lab_hrs: subject.subject_lab_hrs || 0,
       mth_schedule: subject.mth_schedule || '',
       tfs_schedule: subject.tfs_schedule || '',
-      mth_room: subject.mth_room || '',
-      tfs_room: subject.tfs_room || '',
+      mth_room: subject.mth_room || subject.mth_room_id || '',
+      tfs_room: subject.tfs_room || subject.tfs_room_id || '',
       subject_status: subject.subject_status || 'active',
     });
     setShowEditModal(true);
@@ -185,9 +220,11 @@ export default function SubjectsView() {
         case 'tfs_schedule':
           return String(subject.tfs_schedule ?? '');
         case 'mth_room':
-          return String(subject.mth_room ?? '');
+          return String(subject.mth_room ?? subject.mth_room_id ?? '');
         case 'tfs_room':
-          return String(subject.tfs_room ?? '');
+          return String(subject.tfs_room ?? subject.tfs_room_id ?? '');
+        case 'room':
+          return extractRoomSummary(subject);
         case 'subject_lec_lab':
           return [Number(subject.subject_lec_hrs ?? 0), Number(subject.subject_lab_hrs ?? 0)];
         case 'subject_status':
@@ -271,6 +308,37 @@ export default function SubjectsView() {
 
     const match = String(value).match(/\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\b/);
     return match ? match[0].replace(/\s+/g, '') : '';
+  }
+
+  function resolveRoomDisplayValue(value) {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const tokens = normalized
+      .split(/\s*[,/]\s*/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+
+    if (tokens.length === 0) {
+      return '';
+    }
+
+    return tokens
+      .map((token) => roomNameById[token] || token)
+      .join(' / ');
+  }
+
+  function extractRoomSummary(subject) {
+    const mthRoom = resolveRoomDisplayValue(subject.mth_room ?? subject.mth_room_id ?? '');
+    const tfsRoom = resolveRoomDisplayValue(subject.tfs_room ?? subject.tfs_room_id ?? '');
+
+    if (mthRoom && tfsRoom && mthRoom !== tfsRoom) {
+      return `MTH: ${mthRoom} | TFS: ${tfsRoom}`;
+    }
+
+    return mthRoom || tfsRoom || '—';
   }
 
   return (
@@ -408,6 +476,12 @@ export default function SubjectsView() {
                       <ArrowUpDown size={12} />
                     </button>
                   </th>
+                  <th className="px-6 py-4 text-left">
+                    <button type="button" onClick={() => handleSort('room')} className={sortHeaderClass('room')}>
+                      <span>Room</span>
+                      <ArrowUpDown size={12} />
+                    </button>
+                  </th>
                   <th className="px-6 py-4 text-center">
                     <button type="button" onClick={() => handleSort('subject_units')} className={sortHeaderClass('subject_units')}>
                       <span>Units</span>
@@ -450,6 +524,9 @@ export default function SubjectsView() {
                     </td>
                     <td className="px-6 py-4 text-sm text-on-surface-variant">
                       <span className="block text-sm text-on-surface-variant">{extractTimeRange(subject.tfs_schedule)}</span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant">
+                      <span className="block text-sm text-on-surface-variant">{extractRoomSummary(subject)}</span>
                     </td>
                     <td className="px-6 py-4 text-center text-sm font-medium text-on-surface">
                       {subject.subject_units || 0}
