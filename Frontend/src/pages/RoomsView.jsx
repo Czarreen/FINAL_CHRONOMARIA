@@ -7,8 +7,8 @@ export default function RoomsView() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentTypeIndex, setCurrentTypeIndex] = useState(0);
-  const PAGE_SIZE = 9999;
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -19,23 +19,22 @@ export default function RoomsView() {
 
   // Info overlay states
   const [showAddInfo, setShowAddInfo] = useState(false);
-  const [showAddButtonTooltip, setShowAddButtonTooltip] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({ room_name: '', room_type: '', room_status: 'available' });
   const [formError, setFormError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const loadRooms = async () => {
     setLoading(true);
     try {
-      const data = await fetchRoomsPage(1, PAGE_SIZE);
+      const data = await fetchRoomsPage(1, 9999);
       setRooms(data.rows || []);
       setError(null);
-      setCurrentTypeIndex(0);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Failed to fetch rooms:', err);
       setError(err.message);
@@ -49,9 +48,9 @@ export default function RoomsView() {
     loadRooms();
   }, []);
 
-  const { stats, roomTypes, currentType, currentRooms } = useMemo(() => {
-    // Filter rooms by search query only if search query is not empty
-    const filteredRooms = searchQuery.trim() === '' 
+  const { stats, totalPages, currentRooms } = useMemo(() => {
+    // Filter rooms by search query and status
+    let filteredRooms = searchQuery.trim() === '' 
       ? rooms 
       : rooms.filter((r) => {
         const query = searchQuery.toLowerCase();
@@ -62,49 +61,34 @@ export default function RoomsView() {
         );
       });
 
-    const totalRooms = filteredRooms.length;
-    const availableRooms = filteredRooms.filter((r) => r.room_status === 'available').length;
-    
-    // If searching, show all matching rooms without type filtering
-    if (searchQuery.trim() !== '') {
-      const roomTypeCount = new Set(filteredRooms.map(r => r.room_type || 'Unassigned')).size;
-      return {
-        stats: { totalRooms, availableRooms, roomTypeCount },
-        roomTypes: [],
-        currentType: null,
-        currentRooms: filteredRooms,
-      };
+    // Apply status filter
+    if (statusFilter) {
+      filteredRooms = filteredRooms.filter((r) => r.room_status === statusFilter);
     }
 
-    const typeMap = {};
-    filteredRooms.forEach((r) => {
-      const typeName = r.room_type || 'Unassigned';
-      if (!typeMap[typeName]) {
-        typeMap[typeName] = [];
-      }
-      typeMap[typeName].push(r);
-    });
+    const totalRooms = filteredRooms.length;
+    const availableRooms = filteredRooms.filter((r) => r.room_status === 'available').length;
+    const roomTypeCount = new Set(filteredRooms.map(r => r.room_type || 'Unassigned')).size;
     
-    const types = Object.keys(typeMap).sort();
-    const roomTypeCount = types.length;
-    
-    const current = types[currentTypeIndex] || null;
-    const members = current ? typeMap[current] : [];
+    // Calculate pagination
+    const pages = Math.ceil(totalRooms / PAGE_SIZE);
+    const startIdx = (currentPage - 1) * PAGE_SIZE;
+    const endIdx = startIdx + PAGE_SIZE;
+    const paginatedRooms = filteredRooms.slice(startIdx, endIdx);
 
     return {
       stats: { totalRooms, availableRooms, roomTypeCount },
-      roomTypes: types,
-      currentType: current,
-      currentRooms: members,
+      totalPages: pages,
+      currentRooms: paginatedRooms,
     };
-  }, [rooms, currentTypeIndex, searchQuery]);
+  }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE]);
 
-  const handlePrevType = () => {
-    setCurrentTypeIndex((prev) => Math.max(0, prev - 1));
+  const handlePrevPage = () => {
+    setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
-  const handleNextType = () => {
-    setCurrentTypeIndex((prev) => Math.min(roomTypes.length - 1, prev + 1));
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
   // Form handlers
@@ -221,26 +205,11 @@ export default function RoomsView() {
         <div className="relative">
           <button
             onClick={handleAddClick}
-            onMouseEnter={() => setShowAddButtonTooltip(true)}
-            onMouseLeave={() => setShowAddButtonTooltip(false)}
             className="btn-primary flex items-center gap-2"
           >
             <Plus size={18} />
             <span>Add New Room</span>
           </button>
-          {showAddButtonTooltip && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.2 }}
-              className="absolute right-0 top-full mt-2 w-64 rounded-lg bg-white/95 shadow-lg border border-white/60 p-3 z-50 pointer-events-none"
-            >
-              <p className="text-sm text-on-surface-variant leading-relaxed">
-                Create a new room. Fill in the name and details then save.
-              </p>
-            </motion.div>
-          )}
         </div>
       </div>
 
@@ -268,15 +237,39 @@ export default function RoomsView() {
         </div>
 
         <div className="border-b border-white/50 px-6 py-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" size={16} />
-            <input
-              type="text"
-              placeholder="Search by name, type, or status..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-white/30 bg-white/60 pl-9 pr-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative flex-1 md:max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" size={16} />
+              <input
+                type="text"
+                placeholder="Search by name, type, or status..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-lg border border-white/30 bg-white/60 pl-9 pr-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              {['', 'available', 'maintenance', 'occupied'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setStatusFilter(status);
+                    setCurrentPage(1);
+                  }}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                    statusFilter === status
+                      ? 'bg-primary text-white shadow-md shadow-primary/20'
+                      : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
+                  }`}
+                >
+                  {status === '' ? 'All' : status === 'available' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -286,7 +279,6 @@ export default function RoomsView() {
               <tr className="border-b border-white/50 bg-white/50">
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Room Name</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Room Type</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Room ID</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Status</th>
                 <th className="px-6 py-4 text-right text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Actions</th>
               </tr>
@@ -294,25 +286,25 @@ export default function RoomsView() {
             <tbody className="divide-y divide-white/50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-on-surface-variant">
+                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
                     Loading rooms data...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-red-500">
+                  <td colSpan="4" className="px-6 py-8 text-center text-red-500">
                     Error: {error}
                   </td>
                 </tr>
               ) : rooms.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-on-surface-variant">
+                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
                     No rooms found.
                   </td>
                 </tr>
               ) : currentRooms.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-on-surface-variant">
+                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
                     No rooms in this type.
                   </td>
                 </tr>
@@ -323,10 +315,6 @@ export default function RoomsView() {
                       <p className="font-bold text-on-surface">{room.room_name}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-on-surface-variant">{room.room_type || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant/70 flex items-center gap-2">
-                      <MapPin size={14} className="text-slate-400" />
-                      {room.room_id}
-                    </td>
                     <td className="px-6 py-4">
                       <span
                         className={`badge ${
@@ -366,34 +354,34 @@ export default function RoomsView() {
         {searchQuery.trim() === '' && (
           <div className="flex items-center justify-between border-t border-white/50 bg-white/35 px-6 py-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">
-              {currentType ? `${currentType} (${currentRooms.length} rooms)` : 'No room types'}
+              {totalPages > 0 ? `Page ${currentPage} of ${totalPages}` : 'No rooms'}
             </p>
             <div className="flex items-center gap-2">
               <button
-                onClick={handlePrevType}
-                disabled={currentTypeIndex === 0}
+                onClick={handlePrevPage}
+                disabled={currentPage === 1}
                 className="h-8 w-8 rounded-md border border-white/60 bg-white text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 <ChevronLeft size={16} />
               </button>
               <div className="flex items-center gap-1">
-                {roomTypes.map((_, idx) => (
+                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => (
                   <button
-                    key={idx}
-                    onClick={() => setCurrentTypeIndex(idx)}
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
                     className={`h-8 w-8 rounded-md text-xs font-bold transition-colors ${
-                      idx === currentTypeIndex
+                      pageNum === currentPage
                         ? 'bg-primary text-white shadow-sm'
                         : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
                     }`}
                   >
-                    {idx + 1}
+                    {pageNum}
                   </button>
                 ))}
               </div>
               <button
-                onClick={handleNextType}
-                disabled={currentTypeIndex === roomTypes.length - 1}
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
                 className="h-8 w-8 rounded-md border border-white/60 bg-white text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 <ChevronRight size={16} />
@@ -407,13 +395,14 @@ export default function RoomsView() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="relative">
-            <div className="glass-panel w-full max-w-md animate-in fade-in duration-300 rounded-lg shadow-xl">
+            <div className="glass-panel w-full max-w-lg animate-in fade-in duration-300 rounded-lg shadow-xl">
               <div
-                className="flex items-center justify-between border-b border-white/20 p-6 cursor-help"
-                onMouseEnter={() => setShowAddInfo(true)}
-                onMouseLeave={() => setShowAddInfo(false)}
+                className="flex items-center justify-between border-b border-white/20 p-6"
               >
-                <h3 className="text-lg font-bold text-on-surface">Add New Room</h3>
+                <div>
+                  <h3 className="text-lg font-bold text-on-surface">Add New Room</h3>
+                  <p className="mt-1 text-sm text-on-surface-variant">Fill in the room details to create a new room.</p>
+                </div>
                 <button
                   onClick={() => setShowAddModal(false)}
                   className="rounded p-1 text-slate-400 hover:bg-white/20 hover:text-on-surface"
@@ -421,20 +410,6 @@ export default function RoomsView() {
                   <X size={20} />
                 </button>
               </div>
-              
-              {showAddInfo && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute left-0 right-0 -top-20 w-72 rounded-lg bg-white/95 shadow-lg border border-white/60 p-4 z-50"
-                >
-                  <p className="text-sm text-on-surface-variant leading-relaxed">
-                    Create a new room. Fill in the name and details then save.
-                  </p>
-                </motion.div>
-              )}
 
             <form onSubmit={handleAddRoom} className="space-y-4 p-6">
               {formError && <p className="rounded bg-red-100 p-3 text-sm text-red-700">{formError}</p>}
@@ -504,7 +479,7 @@ export default function RoomsView() {
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="relative">
-            <div className="glass-panel w-full max-w-md animate-in fade-in duration-300 rounded-lg shadow-xl">
+            <div className="glass-panel w-full max-w-lg animate-in fade-in duration-300 rounded-lg shadow-xl">
               <div
                 className="flex items-center justify-between border-b border-white/20 p-6"
               >
