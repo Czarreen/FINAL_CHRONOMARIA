@@ -690,39 +690,69 @@ export default function CourseOfferingView() {
     });
   };
 
-  const exportToCSV = () => {
+  const exportToCSV = async () => {
     if (offerings.length === 0) {
       setUpdateError('No offerings to export');
       return;
     }
 
-    const headers = Array.from(visibleColumns).map((key) => {
-      const col = columns.find((c) => c.key === key);
-      return col ? col.label : key;
-    });
+    try {
+      setLoading(true);
+      setUpdateError(null);
 
-    const rows = offerings.map((offering) =>
-      Array.from(visibleColumns).map((key) => {
-        let value = offering[key];
-        if (key === 'mth_room_id' || key === 'tfs_room_id') {
-          const logical = key === 'mth_room_id' ? 'mth' : 'tfs';
-          const ids = resolveRoomIds(offering, logical);
-          value = ids.map((id) => getRoomName(id)).join(' / ');
+      let allOfferings = offerings;
+
+      if (!filterText) {
+        try {
+          const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000 });
+          allOfferings = rows.map((row) => ({
+            ...row,
+            department_name:
+              row.departments?.department_name ??
+              (row.department_id !== null && row.department_id !== undefined
+                ? `Department #${row.department_id}`
+                : null),
+          }));
+        } catch (err) {
+          console.error('Failed to fetch all offerings for export:', err);
+          setUpdateError('Failed to fetch all offerings. Exporting current page only.');
         }
-        if (value === null || value === undefined) return '';
-        return String(value);
-      })
-    );
+      }
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
-    ].join('\n');
+      const headers = Array.from(visibleColumns).map((key) => {
+        const col = columns.find((c) => c.key === key);
+        return col ? col.label : key;
+      });
 
-    const link = document.createElement('a');
-    link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
-    link.download = `course-offerings-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+      const rows = allOfferings.map((offering) =>
+        Array.from(visibleColumns).map((key) => {
+          let value = offering[key];
+          if (key === 'mth_room_id' || key === 'tfs_room_id') {
+            const logical = key === 'mth_room_id' ? 'mth' : 'tfs';
+            const ids = resolveRoomIds(offering, logical);
+            value = ids.map((id) => getRoomName(id)).join(' / ');
+          }
+          if (value === null || value === undefined) return '';
+          return String(value);
+        })
+      );
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
+      ].join('\n');
+
+      const link = document.createElement('a');
+      link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+      link.download = `course-offerings-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+
+      setUpdateError(null);
+    } catch (err) {
+      setUpdateError(err.message || 'Failed to export offerings');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
