@@ -839,11 +839,11 @@ export default function CourseOfferingView() {
                 <Settings size={14} />
                 <span>Cols</span>
               </button>
-              <div className="absolute right-0 mt-1 hidden group-hover:flex flex-col bg-white border border-white/60 rounded-lg shadow-lg p-1 min-w-fit z-50">
+              <div className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max z-[9999]">
                 {columns.map((col) => (
                   <label
                     key={col.key}
-                    className="flex items-center gap-2 px-2 py-1 text-xs text-on-surface hover:bg-slate-50 rounded-md cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap"
                   >
                     <input
                       type="checkbox"
