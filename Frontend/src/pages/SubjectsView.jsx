@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle } from 'lucide-react';
-import { fetchSubjects, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
+import NotificationButton from '../components/NotificationButton';
+import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification } from '../services/notificationsApi';
 
 export default function SubjectsView() {
   const [subjects, setSubjects] = useState([]);
@@ -42,11 +44,66 @@ export default function SubjectsView() {
   const [editingData, setEditingData] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [subjectNotifications, setSubjectNotifications] = useState([]);
+  const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
+  const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
+  const [notifSearch, setNotifSearch] = useState('');
+
+  function normalizeNotificationSeverity(severity) {
+    if (severity === 'high') return 'critical';
+    if (severity === 'critical' || severity === 'medium' || severity === 'low') return severity;
+    return 'medium';
+  }
+
+  const visibleSubjectNotifications = useMemo(() => {
+    const searchTerm = String(notifSearch || '').trim().toLowerCase();
+
+    return subjectNotifications.filter((item) => {
+      const severity = normalizeNotificationSeverity(item.severity);
+      if (notifSeverityFilter !== 'all' && severity !== notifSeverityFilter) {
+        return false;
+      }
+
+      if (!searchTerm) {
+        return true;
+      }
+
+      const haystack = [
+        item.title,
+        item.description,
+        ...(Array.isArray(item.missingFields) ? item.missingFields : []),
+        ...(Array.isArray(item.issues) ? item.issues.map((issue) => issue.message) : []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(searchTerm);
+    });
+  }, [subjectNotifications, notifSeverityFilter, notifSearch]);
+
+  const subjectNotificationStats = useMemo(() => {
+    const stats = { total: 0, critical: 0, medium: 0, low: 0 };
+
+    for (const item of subjectNotifications) {
+      const severity = normalizeNotificationSeverity(item.severity);
+      stats.total += 1;
+      if (severity === 'critical') stats.critical += 1;
+      else if (severity === 'medium') stats.medium += 1;
+      else if (severity === 'low') stats.low += 1;
+    }
+
+    return stats;
+  }, [visibleSubjectNotifications]);
 
   // Load subjects data
   useEffect(() => {
     loadSubjects();
   }, [page, limit, search, statusFilter]);
+
+  useEffect(() => {
+    loadSubjectNotifications();
+  }, []);
 
   useEffect(() => {
     loadRoomLookup();
@@ -98,6 +155,131 @@ export default function SubjectsView() {
       setError(err.message || 'Failed to load subjects');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSubjectNotifications() {
+    try {
+      setSubjectNotificationsLoading(true);
+      // Prefer persisted notifications (allows resolving); fallback to computed live
+      try {
+        const persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
+        const rows = Array.isArray(persisted.rows) ? persisted.rows : [];
+
+        // Enrich with subject data for better display and action wiring
+        const uniqueIds = Array.from(new Set(rows.map((r) => r.entity_id).filter(Boolean))).slice(0, 500);
+        const subjectById = {};
+        await Promise.all(uniqueIds.map(async (id) => {
+          try {
+            const s = await fetchSubjectById(id);
+            subjectById[id] = s;
+          } catch (_) {
+            // ignore missing subjects
+          }
+        }));
+
+        // Map persisted rows into the NotificationButton item shape
+        const items = rows.map((r) => {
+          const subj = subjectById[r.entity_id] || null;
+          return {
+            id: r.id,
+            title: subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
+            description: subj?.subject_code || null,
+            severity: normalizeNotificationSeverity(r.severity),
+            missingFields: r.field_name ? [r.field_name] : [],
+            issues: [{ message: r.message, details: r.details }],
+            rowId: r.entity_id,
+            subject: subj,
+            raw: r,
+          };
+        });
+
+        setSubjectNotifications(items);
+      } catch (err) {
+        const data = await fetchSubjectNotifications({ page: 1, limit: 500 });
+        // fallback: map computed live rows to expected shape
+        const items = (Array.isArray(data.rows) ? data.rows : []).map((r) => ({
+          id: r.id || `subject-${r.rowId}`,
+          title: r.title || r.message || `Subject #${r.rowId}`,
+          description: r.description || null,
+          severity: normalizeNotificationSeverity(r.severity),
+          missingFields: r.missingFields || [],
+          issues: r.issues || (r.message ? [{ message: r.message }] : []),
+          rowId: r.rowId,
+          subject: r.subject || null,
+          raw: r,
+        }));
+        setSubjectNotifications(items);
+      }
+    } catch (err) {
+      setSubjectNotifications([]);
+    } finally {
+      setSubjectNotificationsLoading(false);
+    }
+  }
+
+  function scrollToSubjectRowById(subjectId) {
+    const rowElement = document.getElementById(`subject-row-${subjectId}`);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      rowElement.classList.add('animate-pulse');
+      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+      return;
+    }
+
+    const numericId = Number(subjectId);
+    if (!numericId || Number.isNaN(numericId)) {
+      return;
+    }
+
+    (async () => {
+      try {
+        const maxSearchPages = 200;
+        for (let candidatePage = 1; candidatePage <= maxSearchPages; candidatePage += 1) {
+          const result = await fetchSubjects({
+            page: candidatePage,
+            limit,
+            search,
+            status: statusFilter,
+          });
+
+          const rows = Array.isArray(result.rows) ? result.rows : [];
+          if (rows.some((row) => Number(row.subject_id) === numericId)) {
+            if (candidatePage !== page) {
+              setPage(candidatePage);
+            }
+
+            window.setTimeout(() => {
+              const target = document.getElementById(`subject-row-${subjectId}`);
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.classList.add('animate-pulse');
+                setTimeout(() => target.classList.remove('animate-pulse'), 2000);
+              }
+            }, 150);
+
+            break;
+          }
+
+          if (rows.length < limit) {
+            break;
+          }
+        }
+      } catch (_) {
+        // ignore fallback failures
+      }
+    })();
+  }
+
+  async function handleResolveNotification(item) {
+    try {
+      // item.id from persisted table should be numeric; ignore computed ids like 'subject-123'
+      const numericId = Number(item.id);
+      if (!numericId || Number.isNaN(numericId)) return;
+      await resolveSubjectNotification(numericId);
+      await loadSubjectNotifications();
+    } catch (err) {
+      // ignore or set a UI error state if desired
     }
   }
 
@@ -162,6 +344,7 @@ export default function SubjectsView() {
       }
       setShowEditModal(false);
       setEditingSubject(null);
+      await loadSubjectNotifications();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
@@ -184,6 +367,7 @@ export default function SubjectsView() {
         setActiveCount((currentCount) => Math.max(0, currentCount - 1));
       }
       await loadSubjects();
+      await loadSubjectNotifications();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadSubjects();
@@ -286,6 +470,7 @@ export default function SubjectsView() {
       }
       // Reload subjects
       await loadSubjects();
+      await loadSubjectNotifications();
     } catch (err) {
       setSubjectError(err.message || 'Failed to create subject');
     } finally {
@@ -351,7 +536,27 @@ export default function SubjectsView() {
             <p className="text-body-md text-on-surface-variant">Manage subjects, credit units, and classifications.</p>
           </div>
           <div className="flex gap-2">
-<button 
+              <NotificationButton
+              items={visibleSubjectNotifications}
+              title="Subject Notifications"
+              emptyLabel="No subject issues"
+              buttonLabel="Issues"
+              onItemEdit={(item) => {
+                const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
+                if (subj) handleEditSubject(subj);
+              }}
+              onItemJump={(item) => {
+                const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
+                if (rowId) scrollToSubjectRowById(rowId);
+              }}
+              onItemResolve={(item) => handleResolveNotification(item)}
+              severityFilter={notifSeverityFilter}
+              onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
+              notificationSearch={notifSearch}
+              onNotificationSearchChange={(v) => setNotifSearch(v)}
+              notificationStats={subjectNotificationStats}
+            />
+            <button 
               onClick={() => setShowAddModal(true)}
               className="btn-primary flex items-center gap-2"
             >
@@ -505,7 +710,7 @@ export default function SubjectsView() {
               </thead>
               <tbody className="divide-y divide-white/20">
                 {sortedSubjects.map((subject, index) => (
-                  <tr key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-6 py-4">
                       <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                         {subject.subject_code || 'N/A'}
