@@ -320,6 +320,11 @@ router.patch('/subjects/:id/resolve', async (req, res) => {
 
     if (resp.error) return res.status(500).json({ error: resp.error.message });
     return res.json({ updated: resp.data });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 router.delete('/clear-all', async (req, res) => {
   try {
     // Delete all unresolved notifications from both tables
