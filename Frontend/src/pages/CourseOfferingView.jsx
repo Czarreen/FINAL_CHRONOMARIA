@@ -17,11 +17,20 @@ import {
   AlertCircle,
   PlusCircle,
   Trash2,
+  FileUp,
+  Upload,
   Download,
   Settings,
   Check,
 } from 'lucide-react';
-import { fetchCourseOfferingsPage, fetchCourseOfferings, createCourseOffering, updateCourseOffering, deleteCourseOffering } from '../services/courseOfferingsApi';
+import {
+  fetchCourseOfferingsPage,
+  fetchCourseOfferings,
+  createCourseOffering,
+  updateCourseOffering,
+  deleteCourseOffering,
+  importCourseOfferingsCsv,
+} from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
@@ -33,6 +42,7 @@ export default function CourseOfferingView() {
   const [offerings, setOfferings] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
   const [page, setPage] = useState(1);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
@@ -45,6 +55,10 @@ export default function CourseOfferingView() {
   const [successMessage, setSuccessMessage] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [selectedCsvFile, setSelectedCsvFile] = useState(null);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importSummary, setImportSummary] = useState(null);
+  const [importError, setImportError] = useState('');
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
@@ -159,6 +173,7 @@ export default function CourseOfferingView() {
     return () => {
       active = false;
     };
+  }, [page, refreshToken]);
   }, [page, filterText, refreshTrigger]);
 
   // Load rooms data
@@ -344,6 +359,33 @@ export default function CourseOfferingView() {
 
   async function loadInitialPage() {
     setPage(1);
+    setRefreshToken((current) => current + 1);
+  }
+
+  async function handleImportCsv() {
+    if (!selectedCsvFile) {
+      setImportError('Choose a CSV file first.');
+      return;
+    }
+
+    try {
+      setImportingCsv(true);
+      setImportError('');
+      setImportSummary(null);
+
+      const csvText = await selectedCsvFile.text();
+      const response = await importCourseOfferingsCsv({
+        csvText,
+        fileName: selectedCsvFile.name,
+      });
+
+      setImportSummary(response?.summary ?? null);
+      await loadInitialPage();
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Failed to import CSV.');
+    } finally {
+      setImportingCsv(false);
+    }
     setRefreshTrigger((prev) => prev + 1);
   }
 
@@ -998,6 +1040,30 @@ export default function CourseOfferingView() {
               <PlusCircle size={14} />
               <span>Add</span>
             </button>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/60 bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur hover:bg-white">
+              <FileUp size={16} className="text-primary" />
+              <span>{selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}</span>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedCsvFile(file);
+                  setImportError('');
+                  setImportSummary(null);
+                }}
+              />
+            </label>
+            <button
+              className="btn-primary flex items-center gap-2"
+              onClick={handleImportCsv}
+              type="button"
+              disabled={importingCsv}
+            >
+              <Upload size={18} />
+              <span>{importingCsv ? 'Importing...' : 'Import CSV'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1053,6 +1119,36 @@ export default function CourseOfferingView() {
             {updateError}
           </div>
         )}
+        {importError && (
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle size={16} />
+            {importError}
+          </div>
+        )}
+        {importSummary && (
+          <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-emerald-900">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 font-medium">
+              <span>Total: {importSummary.totalRows}</span>
+              <span>Processed: {importSummary.processedRows}</span>
+              <span>Inserted: {importSummary.insertedRows}</span>
+              <span>Updated: {importSummary.updatedRows}</span>
+              <span>Failed: {importSummary.failedRows}</span>
+              <span>Skipped: {importSummary.skippedRows}</span>
+            </div>
+            {Array.isArray(importSummary.errors) && importSummary.errors.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-800/80">
+                  Row Errors
+                </p>
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-emerald-100 bg-white/80 p-2">
+                  {importSummary.errors.slice(0, 20).map((issue) => (
+                    <p key={`csv-error-${issue.row}-${(issue.messages || []).join('|')}`} className="text-xs text-red-700">
+                      Row {issue.row}: {Array.isArray(issue.messages) ? issue.messages.join('; ') : 'Unknown row error'}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
         {successMessage && (
           <div className="flex items-center gap-1 rounded-lg bg-green-50 p-2 text-xs text-green-700">
             <Check size={14} />

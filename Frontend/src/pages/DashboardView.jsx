@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Calendar, CheckCircle2, DoorOpen, BookOpen, Users, UserPlus, Info } from 'lucide-react';
+import { Calendar, CheckCircle2, DoorOpen, BookOpen, Users, UserPlus, Info, FileUp, Upload, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchFacultyPage } from '../services/facultyApi.js';
 import { fetchSubjects } from '../services/subjectsApi.js';
 import { fetchRoomsPage } from '../services/roomsApi.js';
+import { importCourseOfferingsCsv } from '../services/courseOfferingsApi.js';
 
 export default function DashboardView({ onNavigate }) {
   const [facultyCount, setFacultyCount] = useState(0);
@@ -15,6 +16,10 @@ export default function DashboardView({ onNavigate }) {
   const [showFacultyInfo, setShowFacultyInfo] = useState(false);
   const [showSubjectsInfo, setShowSubjectsInfo] = useState(false);
   const [showRoomsInfo, setShowRoomsInfo] = useState(false);
+  const [selectedCsvFile, setSelectedCsvFile] = useState(null);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importSummary, setImportSummary] = useState(null);
+  const [importError, setImportError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,6 +66,31 @@ export default function DashboardView({ onNavigate }) {
   ].filter(Boolean).length;
   
   const systemReadiness = Math.round((readinessScore / 4) * 100);
+
+  const handleCsvImport = async () => {
+    if (!selectedCsvFile) {
+      setImportError('Choose a CSV file first.');
+      return;
+    }
+
+    try {
+      setImportingCsv(true);
+      setImportError('');
+      setImportSummary(null);
+
+      const csvText = await selectedCsvFile.text();
+      const response = await importCourseOfferingsCsv({
+        csvText,
+        fileName: selectedCsvFile.name,
+      });
+
+      setImportSummary(response?.summary ?? null);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'CSV import failed.');
+    } finally {
+      setImportingCsv(false);
+    }
+  };
 
   return (
     <div className="space-y-gutter animate-in fade-in duration-500">
@@ -234,6 +264,59 @@ export default function DashboardView({ onNavigate }) {
                   View and manage all available rooms and facilities. Add new rooms, edit room details, and set capacity limits.
                 </p>
               </motion.div>
+            )}
+          </div>
+
+          <div className="glass-panel rounded-xl p-4 sm:col-span-3 lg:col-span-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Upload size={16} className="text-primary" />
+              <p className="text-label-bold font-label-bold text-on-surface">Import Course Offerings CSV</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/60 bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface-variant hover:bg-white">
+                <FileUp size={16} className="text-primary" />
+                <span>{selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setSelectedCsvFile(file);
+                    setImportSummary(null);
+                    setImportError('');
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleCsvImport}
+                disabled={importingCsv}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Upload size={14} />
+                {importingCsv ? 'Importing...' : 'Import CSV'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('course-offering')}
+                className="rounded-lg border border-white/60 bg-white px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+              >
+                Open Course Offerings
+              </button>
+            </div>
+            {importError && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700">
+                <AlertCircle size={14} />
+                {importError}
+              </div>
+            )}
+            {importSummary && (
+              <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-900">
+                <p className="font-semibold">
+                  Total {importSummary.totalRows} • Processed {importSummary.processedRows} • Inserted {importSummary.insertedRows} • Updated {importSummary.updatedRows} • Failed {importSummary.failedRows} • Skipped {importSummary.skippedRows}
+                </p>
+              </div>
             )}
           </div>
         </div>
