@@ -41,9 +41,11 @@ export default function CourseOfferingView() {
   const [savingOffering, setSavingOffering] = useState(false);
   const [offeringError, setOfferingError] = useState(null);
   const [updateError, setUpdateError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
     new Set([
       'code', 'course_no', 'descriptive_title', 'department_name', 'section',
@@ -55,10 +57,10 @@ export default function CourseOfferingView() {
   const [sortConfig, setSortConfig] = useState({ key: 'code', direction: 'asc' });
 
   useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(''), 5000);
+    if (!offeringError) return;
+    const timer = setTimeout(() => setOfferingError(null), 5000);
     return () => clearTimeout(timer);
-  }, [error]);
+  }, [offeringError]);
 
   useEffect(() => {
     if (!updateError) return;
@@ -67,10 +69,10 @@ export default function CourseOfferingView() {
   }, [updateError]);
 
   useEffect(() => {
-    if (!offeringError) return;
-    const timer = setTimeout(() => setOfferingError(null), 5000);
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(null), 3000);
     return () => clearTimeout(timer);
-  }, [offeringError]);
+  }, [successMessage]);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -115,7 +117,7 @@ export default function CourseOfferingView() {
     return () => {
       active = false;
     };
-  }, [page, filterText]);
+  }, [page, filterText, refreshTrigger]);
 
   // Load rooms data
   useEffect(() => {
@@ -185,6 +187,7 @@ export default function CourseOfferingView() {
       };
 
       await createCourseOffering(payload);
+      setSuccessMessage(`Created "${editingData.code}"`);
       setShowAddModal(false);
       setEditingData({});
       await loadInitialPage();
@@ -236,6 +239,7 @@ export default function CourseOfferingView() {
       };
 
       await updateCourseOffering(editingId, payload);
+      setSuccessMessage(`Updated "${editingData.code}"`);
       setEditingId(null);
       setEditingData({});
       await loadInitialPage();
@@ -280,6 +284,7 @@ export default function CourseOfferingView() {
         try {
           setUpdateError(null);
           await deleteCourseOffering(offering.id);
+          setSuccessMessage(`Deleted "${offering.code}"`);
           await loadInitialPage();
         } catch (err) {
           if (String(err.message || '').includes('404')) {
@@ -297,6 +302,7 @@ export default function CourseOfferingView() {
 
   async function loadInitialPage() {
     setPage(1);
+    setRefreshTrigger((prev) => prev + 1);
   }
 
   const numericCols = new Set(['units', 'lec_hrs', 'lab_hrs', 'curr_id', 'mth_room_id', 'tfs_room_id']);
@@ -392,7 +398,7 @@ export default function CourseOfferingView() {
       active = false;
       clearTimeout(tid);
     };
-  }, [filterText]);
+  }, [filterText, refreshTrigger]);
 
   const filteredOfferings = useMemo(() => {
     if (!filterText) return offerings;
@@ -694,6 +700,7 @@ export default function CourseOfferingView() {
           );
           await Promise.all(deletePromises);
           setSelectedOfferings(new Set());
+          setSuccessMessage(`Deleted ${selectedOfferings.size} offering(s)`);
           await loadInitialPage();
         } catch (err) {
           setUpdateError(err.message || 'Failed to delete offerings');
@@ -924,6 +931,12 @@ export default function CourseOfferingView() {
           <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-700">
             <AlertCircle size={14} />
             {updateError}
+          </div>
+        )}
+        {successMessage && (
+          <div className="flex items-center gap-1 rounded-lg bg-green-50 p-2 text-xs text-green-700">
+            <Check size={14} />
+            {successMessage}
           </div>
         )}
       </div>
