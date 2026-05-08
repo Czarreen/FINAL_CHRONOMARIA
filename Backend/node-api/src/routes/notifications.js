@@ -320,6 +320,25 @@ router.patch('/subjects/:id/resolve', async (req, res) => {
 
     if (resp.error) return res.status(500).json({ error: resp.error.message });
     return res.json({ updated: resp.data });
+router.delete('/clear-all', async (req, res) => {
+  try {
+    // Delete all unresolved notifications from both tables
+    const [facultyResp, courseOfferingResp] = await Promise.all([
+      supabaseAdmin
+        .from('faculty_notifications')
+        .delete()
+        .eq('is_resolved', false),
+      supabaseAdmin
+        .from('data_quality_notifications')
+        .delete()
+        .eq('is_resolved', false),
+    ]);
+
+    if (facultyResp.error) return res.status(500).json({ error: facultyResp.error.message });
+    if (courseOfferingResp.error) return res.status(500).json({ error: courseOfferingResp.error.message });
+
+    const clearedCount = (facultyResp.count ?? 0) + (courseOfferingResp.count ?? 0);
+    return res.json({ cleared: clearedCount, message: `Cleared ${clearedCount} unresolved notifications` });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }

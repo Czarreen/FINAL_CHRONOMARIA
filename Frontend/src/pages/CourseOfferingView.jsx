@@ -30,6 +30,7 @@ import {
   updateCourseOffering,
   deleteCourseOffering,
   importCourseOfferingsCsv,
+  fetchCourseOfferingById,
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
@@ -77,6 +78,8 @@ export default function CourseOfferingView() {
   const [allOfferingsForNotifications, setAllOfferingsForNotifications] = useState([]);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
+  const [pendingScrollToOfferingId, setPendingScrollToOfferingId] = useState(null);
+  const [findingNotificationRow, setFindingNotificationRow] = useState(false);
 
   useEffect(() => {
     if (!offeringError) return;
@@ -145,7 +148,12 @@ export default function CourseOfferingView() {
       setError('');
 
       try {
-        const { rows: data, total: count } = await fetchCourseOfferingsPage(page, PAGE_SIZE);
+        const { rows: data, total: count } = await fetchCourseOfferingsPage(
+          page,
+          PAGE_SIZE,
+          sortConfig.key,
+          sortConfig.direction
+        );
 
         if (!active) return;
         setOfferings(
@@ -173,7 +181,7 @@ export default function CourseOfferingView() {
     return () => {
       active = false;
     };
-  }, [page, refreshToken]);
+  }, [page, refreshToken, sortConfig]);
 
   // Load rooms data
   useEffect(() => {
@@ -195,6 +203,39 @@ export default function CourseOfferingView() {
       active = false;
     };
   }, []);
+
+  // Handle scrolling to offering when it appears (after page navigation)
+  useEffect(() => {
+    if (pendingScrollToOfferingId) {
+      const rowElement = document.getElementById(`offering-row-${pendingScrollToOfferingId}`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rowElement.classList.add('ring-2', 'ring-primary/40');
+        setTimeout(() => rowElement.classList.remove('ring-2', 'ring-primary/40'), 1200);
+        setPendingScrollToOfferingId(null);
+      }
+    }
+  }, [pendingScrollToOfferingId, offerings]);
+
+  async function findOfferingPageNumber(offeringId) {
+    try {
+      // Fetch all offerings with current sort/search to find the correct position
+      const { rows: allSortedOfferings } = await fetchCourseOfferings({
+        page: 1,
+        limit: 100000,
+        search: '',
+        sortBy: sortConfig.key,
+        sortOrder: sortConfig.direction,
+      });
+
+      const index = allSortedOfferings.findIndex((o) => o.id === offeringId);
+      if (index === -1) return null;
+      return Math.ceil((index + 1) / PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to find offering page number:', err);
+      return null;
+    }
+  }
 
 
 
@@ -497,30 +538,9 @@ export default function CourseOfferingView() {
   }, [offerings, filterText, filterColumn]);
 
   const displayedOfferings = useMemo(() => {
-    const items = Array.from(filteredOfferings);
-    const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
-
-    const getComparableValue = (offering, key) => {
-      const value = offering[key];
-      if (numericCols.has(key)) {
-        return Number(value ?? 0);
-      }
-      return String(value ?? '');
-    };
-
-    items.sort((a, b) => {
-      const aVal = getComparableValue(a, sortConfig.key);
-      const bVal = getComparableValue(b, sortConfig.key);
-
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return (aVal - bVal) * directionMultiplier;
-      }
-
-      return String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' }) * directionMultiplier;
-    });
-
-    return items;
-  }, [filteredOfferings, sortConfig]);
+    // Filtering happens on the client, sorting is done server-side
+    return Array.from(filteredOfferings);
+  }, [filteredOfferings]);
 
   const [notifications, setNotifications] = useState([]);
 
@@ -610,12 +630,31 @@ export default function CourseOfferingView() {
       window.setTimeout(() => {
         targetRow.classList.remove('ring-2', 'ring-primary/40');
       }, 1200);
+    } else {
+      // Offering not on current page, find which page it's on
+      setFindingNotificationRow(true);
+      findOfferingPageNumber(item.offeringId)
+        .then((pageNum) => {
+          if (pageNum && pageNum !== page) {
+            // Clear search filter before navigating - allows pagination effect to run
+            if (filterText) {
+              setFilterText('');
+            }
+            setPage(pageNum);
+            setPendingScrollToOfferingId(item.offeringId);
+          } else if (!pageNum) {
+            console.warn('Offering not found');
+          }
+        })
+        .finally(() => setFindingNotificationRow(false));
     }
-
   };
 
   const editNotificationItem = (item) => {
-    const offering = offerings.find((row) => row.id === item.offeringId);
+    if (!item?.offeringId) return;
+
+    let offering = offerings.find((row) => row.id === item.offeringId);
+
     if (offering) {
       handleEditOffering(offering);
       const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
@@ -626,6 +665,33 @@ export default function CourseOfferingView() {
           targetRow.classList.remove('ring-2', 'ring-primary/40');
         }, 1200);
       }
+    } else {
+      // Offering not on current page, fetch it by ID
+      setFindingNotificationRow(true);
+      fetchCourseOfferingById(item.offeringId)
+        .then((offering) => {
+          if (offering) {
+            handleEditOffering(offering);
+            // Navigate to the page this offering is on
+            return findOfferingPageNumber(item.offeringId);
+          }
+          throw new Error('Offering not found');
+        })
+        .then((pageNum) => {
+          if (pageNum && pageNum !== page) {
+            // Clear search filter before navigating - allows pagination effect to run
+            if (filterText) {
+              setFilterText('');
+            }
+            setPage(pageNum);
+            setPendingScrollToOfferingId(item.offeringId);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to edit offering from notification:', err);
+          setOfferingError('Could not load offering for editing');
+        })
+        .finally(() => setFindingNotificationRow(false));
     }
   };
 
@@ -963,7 +1029,7 @@ export default function CourseOfferingView() {
             )}
             <button
               className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={() => setPage(1)}
+              onClick={loadInitialPage}
               type="button"
               title="Reload data"
             >

@@ -20,8 +20,62 @@ export default function NotificationButton({
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const panelRef = useRef(null);
   const buttonRef = useRef(null);
+
+  // Extract and count categories from notifications
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    items.forEach((notif) => {
+      (notif.issues || []).forEach((issue) => {
+        const field = issue.field || 'Other';
+        let category = 'Other';
+
+        if (field.toLowerCase().includes('room')) category = 'Missing Room';
+        else if (field.toLowerCase().includes('schedule')) category = 'Missing Schedule';
+        else if (field.toLowerCase().includes('code')) category = 'Missing Code';
+        else if (field.toLowerCase().includes('title')) category = 'Missing Title';
+        else if (field.toLowerCase().includes('department')) category = 'Missing Department';
+
+        counts[category] = (counts[category] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [items]);
+
+  // Filter items by category
+  const filteredByCategory = useMemo(() => {
+    if (categoryFilter === 'all') return items;
+
+    return items.filter((notif) => {
+      return (notif.issues || []).some((issue) => {
+        const field = issue.field || 'Other';
+        let category = 'Other';
+
+        if (field.toLowerCase().includes('room')) category = 'Missing Room';
+        else if (field.toLowerCase().includes('schedule')) category = 'Missing Schedule';
+        else if (field.toLowerCase().includes('code')) category = 'Missing Code';
+        else if (field.toLowerCase().includes('title')) category = 'Missing Title';
+        else if (field.toLowerCase().includes('department')) category = 'Missing Department';
+
+        return category === categoryFilter;
+      });
+    });
+  }, [items, categoryFilter]);
+
+  // Combine category filter with severity filter
+  const displayedNotifications = useMemo(() => {
+    return filteredByCategory.filter((notif) => {
+      if (severityFilter === 'all') return true;
+      return notif.severity === severityFilter;
+    }).filter((notif) => {
+      if (!notificationSearch.trim()) return true;
+      const q = notificationSearch.toLowerCase();
+      return (notif.title?.toLowerCase() || '').includes(q) ||
+             (notif.code?.toLowerCase() || '').includes(q);
+    });
+  }, [filteredByCategory, severityFilter, notificationSearch]);
 
   const panelStyle = useMemo(() => ({
     position: 'fixed',
@@ -203,6 +257,39 @@ export default function NotificationButton({
               )}
             </div>
 
+            {/* Category Filters */}
+            {Object.keys(categoryCounts).length > 0 && (
+              <div className="flex flex-wrap gap-1 text-xs">
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    categoryFilter === 'all'
+                      ? 'bg-slate-300 text-on-surface'
+                      : 'text-on-surface-variant hover:bg-slate-100'
+                  }`}
+                >
+                  All
+                </button>
+                {['Missing Room', 'Missing Schedule', 'Missing Code', 'Missing Title', 'Missing Department', 'Other'].map((category) => {
+                  const count = categoryCounts[category];
+                  if (!count) return null;
+                  return (
+                    <button
+                      key={category}
+                      onClick={() => setCategoryFilter(category)}
+                      className={`rounded px-2 py-1 font-semibold transition-colors ${
+                        categoryFilter === category
+                          ? 'bg-slate-300 text-on-surface'
+                          : 'text-on-surface-variant hover:bg-slate-100'
+                      }`}
+                    >
+                      {category} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Search Input */}
             <input
               type="text"
@@ -214,12 +301,12 @@ export default function NotificationButton({
           </div>
 
           <div className={`${isExpanded ? 'flex-1 max-h-none' : resolvedPanelSize.maxHeightClass} space-y-2 overflow-y-auto pr-1`}>
-            {items.length === 0 ? (
+            {displayedNotifications.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-on-surface-variant">
                 {emptyLabel}
               </div>
             ) : (
-              items.map((item) => {
+              displayedNotifications.map((item) => {
                 const severityConfig = {
                   critical: {
                     border: 'border-red-300',
