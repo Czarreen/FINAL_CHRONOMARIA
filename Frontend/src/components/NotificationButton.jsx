@@ -143,6 +143,7 @@ export default function NotificationButton({
                     hover: 'hover:border-red-400 hover:bg-red-100/70',
                     icon: 'bg-red-100 text-red-700',
                     badge: 'bg-red-100 text-red-800',
+                    textBadge: 'text-red-800',
                   },
                   medium: {
                     border: 'border-amber-200',
@@ -150,6 +151,7 @@ export default function NotificationButton({
                     hover: 'hover:border-amber-300 hover:bg-amber-100/70',
                     icon: 'bg-amber-100 text-amber-700',
                     badge: 'bg-amber-100 text-amber-800',
+                    textBadge: 'text-amber-800',
                   },
                   low: {
                     border: 'border-blue-200',
@@ -157,6 +159,7 @@ export default function NotificationButton({
                     hover: 'hover:border-blue-300 hover:bg-blue-100/70',
                     icon: 'bg-blue-100 text-blue-700',
                     badge: 'bg-blue-100 text-blue-800',
+                    textBadge: 'text-blue-800',
                   },
                 };
 
@@ -174,33 +177,39 @@ export default function NotificationButton({
                         <AlertCircle size={14} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-on-surface">{item.title}</p>
-                            <p className="text-xs text-on-surface-variant">{item.description}</p>
+                        <div className="flex items-start gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            {item.title && (
+                              <p className="text-sm font-semibold text-on-surface break-words">{item.title}</p>
+                            )}
+                            {item.description && (
+                              <p className="text-xs text-on-surface-variant mt-0.5">{item.description}</p>
+                            )}
                           </div>
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.badge} whitespace-nowrap`}>
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.badge} whitespace-nowrap flex-shrink-0 ml-2`}>
                             {severityLabel}
                           </span>
                         </div>
                         {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
-                          <p className={`mt-1 text-[11px] uppercase tracking-[0.16em] ${config.badge.replace('bg-', 'text-').replace(' text-', '/80')} opacity-80`}>
-                            Issues: {item.missingFields.join(', ')}
+                          <p className={`text-[10px] uppercase tracking-[0.14em] ${config.textBadge} opacity-75 mb-2`}>
+                            Fields: {item.missingFields.join(', ')}
                           </p>
                         )}
                         {Array.isArray(item.issues) && item.issues.length > 0 && (
-                          <div className="mt-2 space-y-2">
+                          <div className="mt-2 space-y-2 mb-3">
                             {item.issues.map((issue, idx) => (
-                              <div key={idx} className="rounded-lg bg-white/40 p-2">
+                              <div key={idx} className="rounded-lg bg-white/50 p-2.5 border border-white/60">
                                 <p className="text-xs font-semibold text-on-surface">{issue.message}</p>
-                                <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
-                                  {issue.details || issue.message}
-                                </p>
+                                {issue.details && (
+                                  <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
+                                    {issue.details}
+                                  </p>
+                                )}
                               </div>
                             ))}
                           </div>
                         )}
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => {
