@@ -189,11 +189,14 @@ export default function NotificationButton({
                           </p>
                         )}
                         {Array.isArray(item.issues) && item.issues.length > 0 && (
-                          <div className="mt-2 space-y-1">
+                          <div className="mt-2 space-y-2">
                             {item.issues.map((issue, idx) => (
-                              <p key={idx} className="text-[10px] text-on-surface-variant leading-relaxed">
-                                • {issue.message}
-                              </p>
+                              <div key={idx} className="rounded-lg bg-white/40 p-2">
+                                <p className="text-xs font-semibold text-on-surface">{issue.message}</p>
+                                <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
+                                  {issue.details || issue.message}
+                                </p>
+                              </div>
                             ))}
                           </div>
                         )}
