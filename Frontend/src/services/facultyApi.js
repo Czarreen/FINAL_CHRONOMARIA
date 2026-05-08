@@ -27,48 +27,69 @@ export async function fetchFaculty({ page = 1, limit = 50, search = '', status =
 }
 
 export async function fetchFacultyById(id) {
-  const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`);
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API error (${response.status}): ${body}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${id}`);
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 export async function createFaculty(facultyData) {
-  const response = await fetch(`${API_BASE_URL}/api/faculty`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(facultyData),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(facultyData),
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API error (${response.status}): ${body}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/faculty`);
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 export async function updateFaculty(id, updates) {
-  const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(updates),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API error (${response.status}): ${body}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${id}`);
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 export async function updateFacultyStatus(id, status) {
@@ -76,14 +97,21 @@ export async function updateFacultyStatus(id, status) {
 }
 
 export async function deleteFaculty(id) {
-  const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
-    method: 'DELETE',
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
+      method: 'DELETE',
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API error (${response.status}): ${body}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${id}`);
+    }
+    throw err;
   }
-
-  return response.json();
 }

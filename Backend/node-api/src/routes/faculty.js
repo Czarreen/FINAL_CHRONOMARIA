@@ -176,6 +176,67 @@ router.patch('/:id', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // After updating faculty, recompute notification state
+    try {
+      const f = data;
+      const missingFields = [];
+      const issues = [];
+
+      if (!f.faculty_name || String(f.faculty_name).trim() === '') {
+        missingFields.push('faculty_name');
+        issues.push({ message: 'Missing faculty name' });
+      }
+
+      if (!f.department_id) {
+        missingFields.push('department_id');
+        issues.push({ message: 'No department assigned' });
+      }
+
+      if (!f.faculty_role || String(f.faculty_role).trim() === '') {
+        missingFields.push('faculty_role');
+        issues.push({ message: 'Missing role/title' });
+      }
+
+      if (!f.faculty_status || String(f.faculty_status).trim() === '') {
+        missingFields.push('faculty_status');
+        issues.push({ message: 'Missing status (active/inactive/on-leave)' });
+      }
+
+      if (!f.faculty_specialization || String(f.faculty_specialization).trim() === '') {
+        issues.push({ message: 'No specializations provided' });
+      }
+
+      if (!f.faculty_max_units) {
+        issues.push({ message: 'Max units not set' });
+      }
+
+      const severity = missingFields.length > 0 ? 'critical' : issues.length > 0 ? 'medium' : 'low';
+
+      if (missingFields.length === 0 && issues.length === 0) {
+        // mark any existing notification as resolved
+        await supabaseAdmin
+          .from('faculty_notifications')
+          .update({ is_resolved: true, updated_at: new Date().toISOString() })
+          .eq('faculty_id', f.faculty_id);
+      } else {
+        // upsert the notification with latest content and mark unresolved
+        const payload = {
+          faculty_id: f.faculty_id,
+          title: f.faculty_name || `Faculty #${f.faculty_id}`,
+          description: f.departments?.department_name || null,
+          severity,
+          missing_fields: JSON.stringify(missingFields),
+          issues: JSON.stringify(issues),
+          is_resolved: false,
+          metadata: JSON.stringify({}),
+          updated_at: new Date().toISOString(),
+        };
+        await supabaseAdmin.from('faculty_notifications').upsert(payload, { onConflict: 'faculty_id' });
+      }
+    } catch (notifErr) {
+      console.error('Failed to update faculty_notifications after faculty PATCH:', notifErr);
+    }
+
     return res.json(data);
   } catch (err) {
     return res.status(500).json({
