@@ -10,6 +10,11 @@ export default function NotificationButton({
   panelSize = 'md',
   onItemJump,
   onItemEdit,
+  severityFilter = 'all',
+  onSeverityFilterChange,
+  notificationSearch = '',
+  onNotificationSearchChange,
+  notificationStats = { total: 0, critical: 0, medium: 0, low: 0 },
 }) {
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -129,59 +134,179 @@ export default function NotificationButton({
             </div>
           </div>
 
+          {/* Notification Stats & Filters */}
+          <div className="mb-3 space-y-2 border-b border-slate-200 pb-3">
+            {/* Summary Stats */}
+            <div className="flex gap-2 text-xs">
+              <button
+                onClick={() => onSeverityFilterChange?.('all')}
+                className={`rounded px-2 py-1 font-semibold transition-colors ${
+                  severityFilter === 'all'
+                    ? 'bg-slate-200 text-on-surface'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+              >
+                All ({notificationStats.total})
+              </button>
+              {notificationStats.critical > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('critical')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'critical'
+                      ? 'bg-red-200 text-red-900'
+                      : 'text-red-700 hover:bg-red-100'
+                  }`}
+                >
+                  🔴 {notificationStats.critical}
+                </button>
+              )}
+              {notificationStats.medium > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('medium')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'medium'
+                      ? 'bg-amber-200 text-amber-900'
+                      : 'text-amber-700 hover:bg-amber-100'
+                  }`}
+                >
+                  🟡 {notificationStats.medium}
+                </button>
+              )}
+              {notificationStats.low > 0 && (
+                <button
+                  onClick={() => onSeverityFilterChange?.('low')}
+                  className={`rounded px-2 py-1 font-semibold transition-colors ${
+                    severityFilter === 'low'
+                      ? 'bg-blue-200 text-blue-900'
+                      : 'text-blue-700 hover:bg-blue-100'
+                  }`}
+                >
+                  🔵 {notificationStats.low}
+                </button>
+              )}
+            </div>
+
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder="Search by code or title..."
+              value={notificationSearch}
+              onChange={(e) => onNotificationSearchChange?.(e.target.value)}
+              className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </div>
+
           <div className={`${isExpanded ? 'flex-1 max-h-none' : resolvedPanelSize.maxHeightClass} space-y-2 overflow-y-auto pr-1`}>
             {items.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-on-surface-variant">
                 {emptyLabel}
               </div>
             ) : (
-              items.map((item) => (
-                <div
-                  key={item.id}
-                  className="w-full rounded-xl border border-amber-200 bg-amber-50/80 p-3 transition-colors hover:border-amber-300 hover:bg-amber-100/70"
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5 rounded-full bg-amber-100 p-1.5 text-amber-700">
-                      <AlertCircle size={14} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-on-surface">{item.title}</p>
-                      <p className="text-xs text-on-surface-variant">{item.description}</p>
-                      {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-amber-800/80">
-                          Missing: {item.missingFields.join(', ')}
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof onItemJump === 'function') {
-                              onItemJump(item);
-                            }
-                            setOpen(false);
-                          }}
-                          className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:bg-slate-50"
-                        >
-                          Go to row
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof onItemEdit === 'function') {
-                              onItemEdit(item);
-                            }
-                            setOpen(false);
-                          }}
-                          className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
-                        >
-                          Edit
-                        </button>
+              items.map((item) => {
+                const severityConfig = {
+                  critical: {
+                    border: 'border-red-300',
+                    bg: 'bg-red-50/80',
+                    hover: 'hover:border-red-400 hover:bg-red-100/70',
+                    icon: 'bg-red-100 text-red-700',
+                    badge: 'bg-red-100 text-red-800',
+                    textBadge: 'text-red-800',
+                  },
+                  medium: {
+                    border: 'border-amber-200',
+                    bg: 'bg-amber-50/80',
+                    hover: 'hover:border-amber-300 hover:bg-amber-100/70',
+                    icon: 'bg-amber-100 text-amber-700',
+                    badge: 'bg-amber-100 text-amber-800',
+                    textBadge: 'text-amber-800',
+                  },
+                  low: {
+                    border: 'border-blue-200',
+                    bg: 'bg-blue-50/80',
+                    hover: 'hover:border-blue-300 hover:bg-blue-100/70',
+                    icon: 'bg-blue-100 text-blue-700',
+                    badge: 'bg-blue-100 text-blue-800',
+                    textBadge: 'text-blue-800',
+                  },
+                };
+
+                const severity = item.severity || 'medium';
+                const config = severityConfig[severity] || severityConfig.medium;
+                const severityLabel = severity.charAt(0).toUpperCase() + severity.slice(1);
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`w-full rounded-xl border ${config.border} ${config.bg} p-3 transition-colors ${config.hover}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`mt-0.5 rounded-full p-1.5 ${config.icon}`}>
+                        <AlertCircle size={14} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            {item.title && (
+                              <p className="text-sm font-semibold text-on-surface break-words">{item.title}</p>
+                            )}
+                            {item.description && (
+                              <p className="text-xs text-on-surface-variant mt-0.5">{item.description}</p>
+                            )}
+                          </div>
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.badge} whitespace-nowrap flex-shrink-0 ml-2`}>
+                            {severityLabel}
+                          </span>
+                        </div>
+                        {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
+                          <p className={`text-[10px] uppercase tracking-[0.14em] ${config.textBadge} opacity-75 mb-2`}>
+                            Fields: {item.missingFields.join(', ')}
+                          </p>
+                        )}
+                        {Array.isArray(item.issues) && item.issues.length > 0 && (
+                          <div className="mt-2 space-y-2 mb-3">
+                            {item.issues.map((issue, idx) => (
+                              <div key={idx} className="rounded-lg bg-white/50 p-2.5 border border-white/60">
+                                <p className="text-xs font-semibold text-on-surface">{issue.message}</p>
+                                {issue.details && (
+                                  <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
+                                    {issue.details}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof onItemJump === 'function') {
+                                onItemJump(item);
+                              }
+                              setOpen(false);
+                            }}
+                            className={`rounded-full border ${config.border} bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:bg-slate-50`}
+                          >
+                            Go to row
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof onItemEdit === 'function') {
+                                onItemEdit(item);
+                              }
+                              setOpen(false);
+                            }}
+                            className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>,
