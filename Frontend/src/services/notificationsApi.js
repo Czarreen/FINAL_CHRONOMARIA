@@ -90,7 +90,11 @@ export async function fetchPersistedFacultyNotifications({ page = 1, limit = 200
       description: row.description,
       severity: row.severity,
       missingFields: row.missing_fields ? JSON.parse(row.missing_fields) : [],
-      issues: row.issues ? JSON.parse(row.issues) : [],
+      issues: (row.issues ? JSON.parse(row.issues) : []).map((issue) => ({
+        message: issue.message || issue.msg || '',
+        details: issue.details ?? issue.meta ?? null,
+        field: issue.field || (row.field_name ?? null) || (row.missing_fields ? (JSON.parse(row.missing_fields)[0] || null) : null),
+      })),
       is_resolved: row.is_resolved,
       metadata: row.metadata,
       created_at: row.created_at,

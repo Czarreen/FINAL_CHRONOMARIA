@@ -181,13 +181,14 @@ export default function SubjectsView() {
         // Map persisted rows into the NotificationButton item shape
         const items = rows.map((r) => {
           const subj = subjectById[r.entity_id] || null;
+          const field = r.field_name || null;
           return {
             id: r.id,
             title: subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
             description: subj?.subject_code || null,
             severity: normalizeNotificationSeverity(r.severity),
-            missingFields: r.field_name ? [r.field_name] : [],
-            issues: [{ message: r.message, details: r.details }],
+            missingFields: field ? [field] : [],
+            issues: [{ message: r.message, details: r.details, field }],
             rowId: r.entity_id,
             subject: subj,
             raw: r,
@@ -204,7 +205,7 @@ export default function SubjectsView() {
           description: r.description || null,
           severity: normalizeNotificationSeverity(r.severity),
           missingFields: r.missingFields || [],
-          issues: r.issues || (r.message ? [{ message: r.message }] : []),
+          issues: r.issues || (r.message ? [{ message: r.message, field: (r.field_name || (r.missingFields && r.missingFields[0]) || null) }] : []),
           rowId: r.rowId,
           subject: r.subject || null,
           raw: r,

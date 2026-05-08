@@ -32,11 +32,12 @@ export default function NotificationButton({
         const field = issue.field || 'Other';
         let category = 'Other';
 
-        if (field.toLowerCase().includes('room')) category = 'Missing Room';
-        else if (field.toLowerCase().includes('schedule')) category = 'Missing Schedule';
-        else if (field.toLowerCase().includes('code')) category = 'Missing Code';
-        else if (field.toLowerCase().includes('title')) category = 'Missing Title';
-        else if (field.toLowerCase().includes('department')) category = 'Missing Department';
+        const f = field.toLowerCase();
+        if (f.includes('room')) category = 'Missing Room';
+        else if (f.includes('schedule')) category = 'Missing Schedule';
+        else if (f.includes('code')) category = 'Missing Code';
+        else if (f.includes('title') || f.includes('role') || f.includes('name')) category = 'Missing Title';
+        else if (f.includes('department')) category = 'Missing Department';
 
         counts[category] = (counts[category] || 0) + 1;
       });
@@ -52,12 +53,12 @@ export default function NotificationButton({
       return (notif.issues || []).some((issue) => {
         const field = issue.field || 'Other';
         let category = 'Other';
-
-        if (field.toLowerCase().includes('room')) category = 'Missing Room';
-        else if (field.toLowerCase().includes('schedule')) category = 'Missing Schedule';
-        else if (field.toLowerCase().includes('code')) category = 'Missing Code';
-        else if (field.toLowerCase().includes('title')) category = 'Missing Title';
-        else if (field.toLowerCase().includes('department')) category = 'Missing Department';
+        const f2 = field.toLowerCase();
+        if (f2.includes('room')) category = 'Missing Room';
+        else if (f2.includes('schedule')) category = 'Missing Schedule';
+        else if (f2.includes('code')) category = 'Missing Code';
+        else if (f2.includes('title') || f2.includes('role') || f2.includes('name')) category = 'Missing Title';
+        else if (f2.includes('department')) category = 'Missing Department';
 
         return category === categoryFilter;
       });
@@ -268,7 +269,7 @@ export default function NotificationButton({
                       : 'text-on-surface-variant hover:bg-slate-100'
                   }`}
                 >
-                  All
+                  All ({notificationStats.total})
                 </button>
                 {['Missing Room', 'Missing Schedule', 'Missing Code', 'Missing Title', 'Missing Department', 'Other'].map((category) => {
                   const count = categoryCounts[category];

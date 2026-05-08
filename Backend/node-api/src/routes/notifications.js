@@ -82,31 +82,31 @@ router.get('/faculty', async (req, res) => {
 
       if (!f.faculty_name || String(f.faculty_name).trim() === '') {
         missingFields.push('faculty_name');
-        issues.push({ message: 'Missing faculty name' });
+        issues.push({ message: 'Missing faculty name', field: 'faculty_name' });
       }
 
       if (!f.department_id) {
         missingFields.push('department_id');
-        issues.push({ message: 'No department assigned' });
+        issues.push({ message: 'No department assigned', field: 'department_id' });
       }
 
       if (!f.faculty_role || String(f.faculty_role).trim() === '') {
         missingFields.push('faculty_role');
-        issues.push({ message: 'Missing role/title' });
+        issues.push({ message: 'Missing role/title', field: 'faculty_role' });
       }
 
       if (!f.faculty_status || String(f.faculty_status).trim() === '') {
         missingFields.push('faculty_status');
-        issues.push({ message: 'Missing status (active/inactive/on-leave)' });
+        issues.push({ message: 'Missing status (active/inactive/on-leave)', field: 'faculty_status' });
       }
 
       // low-severity: no specializations or max units
       if (!f.faculty_specialization || String(f.faculty_specialization).trim() === '') {
-        issues.push({ message: 'No specializations provided' });
+        issues.push({ message: 'No specializations provided', field: 'faculty_specialization' });
       }
 
       if (!f.faculty_max_units) {
-        issues.push({ message: 'Max units not set' });
+        issues.push({ message: 'Max units not set', field: 'faculty_max_units' });
       }
 
       const severity = missingFields.length > 0 ? 'critical' : issues.length > 0 ? 'medium' : 'low';
