@@ -16,12 +16,15 @@ import {
 } from 'lucide-react';
 import {
   fetchFaculty,
+  fetchFacultyById,
   createFaculty,
   updateFaculty,
   updateFacultyStatus,
   deleteFaculty,
 } from '../services/facultyApi.js';
 import { fetchDepartments } from '../services/departmentsApi.js';
+import NotificationButton from '../components/NotificationButton.jsx';
+import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification } from '../services/notificationsApi.js';
 
 export default function FacultyView() {
   const [faculty, setFaculty] = useState([]);
@@ -57,6 +60,9 @@ export default function FacultyView() {
   });
   const [editingData, setEditingData] = useState({});
   const [departments, setDepartments] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationSearch, setNotificationSearch] = useState('');
+  const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
 
   useEffect(() => {
     loadFaculty();
@@ -65,6 +71,56 @@ export default function FacultyView() {
   useEffect(() => {
     loadDepartments();
   }, []);
+
+  useEffect(() => {
+    loadFacultyNotifications();
+  }, []);
+
+  async function loadFacultyNotifications() {
+    try {
+      // Prefer persisted notifications when available
+      const payload = await fetchPersistedFacultyNotifications({ page: 1, limit: 200, unresolvedOnly: true });
+      setNotifications(payload.rows || []);
+    } catch (err) {
+      console.error('Failed to load faculty notifications:', err);
+      setNotifications([]);
+    }
+  }
+
+  async function handleResolveNotification(item) {
+    try {
+      await resolveFacultyNotification(item.id);
+      // Refresh notifications after resolving
+      await loadFacultyNotifications();
+    } catch (err) {
+      console.error('Failed to resolve notification:', err);
+    }
+  }
+
+  async function handleNotificationEdit(item) {
+    // Fetch full faculty data to edit
+    try {
+      const memberRow = await fetchFacultyById(item.faculty_id);
+      if (memberRow) {
+        handleEditFaculty(memberRow);
+      } else {
+        console.error('Faculty member not found');
+      }
+    } catch (err) {
+      console.error('Failed to fetch faculty for editing:', err);
+    }
+  }
+
+  function handleNotificationJump(item) {
+    // Scroll to the faculty row or highlight it
+    const rowElement = document.getElementById(`faculty-row-${item.faculty_id}`);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Add a brief highlight effect
+      rowElement.classList.add('animate-pulse');
+      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+    }
+  }
 
   async function loadFaculty() {
     try {
@@ -153,6 +209,33 @@ export default function FacultyView() {
     return new Set(faculty.map((member) => member.departments?.department_name || 'Unassigned')).size;
   }, [faculty]);
 
+  const notificationStats = useMemo(() => {
+    const stats = { total: notifications.length, critical: 0, medium: 0, low: 0 };
+    notifications.forEach((notif) => {
+      if (notif.severity === 'critical') stats.critical += 1;
+      else if (notif.severity === 'medium') stats.medium += 1;
+      else if (notif.severity === 'low') stats.low += 1;
+    });
+    return stats;
+  }, [notifications]);
+
+  const filteredNotifications = useMemo(() => {
+    let filtered = [...notifications];
+    if (notificationSeverityFilter !== 'all') {
+      filtered = filtered.filter((notif) => notif.severity === notificationSeverityFilter);
+    }
+    if (notificationSearch) {
+      const searchLower = notificationSearch.toLowerCase();
+      filtered = filtered.filter(
+        (notif) =>
+          (notif.title || '').toLowerCase().includes(searchLower) ||
+          (notif.description || '').toLowerCase().includes(searchLower) ||
+          (notif.id || '').toString().includes(searchLower)
+      );
+    }
+    return filtered;
+  }, [notifications, notificationSeverityFilter, notificationSearch]);
+
   const totalPages = Math.ceil(total / limit);
 
   function sortHeaderClass(columnKey) {
@@ -164,8 +247,8 @@ export default function FacultyView() {
   function normalizePayload(payload) {
     return {
       ...payload,
-      department_id: payload.department_id === '' ? null : Number(payload.department_id),
-      faculty_max_units: payload.faculty_max_units === '' ? null : Number(payload.faculty_max_units),
+      department_id: payload.department_id === '' || payload.department_id === undefined ? null : Number(payload.department_id),
+      faculty_max_units: payload.faculty_max_units === '' || payload.faculty_max_units === undefined ? null : Number(payload.faculty_max_units),
       faculty_email: payload.faculty_email || null,
       faculty_specialization: Array.isArray(payload.faculty_specialization)
         ? payload.faculty_specialization.join(', ') || null
@@ -226,6 +309,7 @@ export default function FacultyView() {
       });
       setNewSpecializationInput('');
       await loadFaculty();
+      await loadFacultyNotifications(); // ← Refresh notifications after add
     } catch (err) {
       setFacultyError(err.message || 'Failed to create faculty member');
     } finally {
@@ -257,11 +341,15 @@ export default function FacultyView() {
     try {
       setSavingEdit(true);
       setEditError(null);
-      await updateFaculty(editingFaculty.faculty_id, normalizePayload(editingData));
+      const normalized = normalizePayload(editingData);
+      console.log('Sending PATCH data:', normalized);
+      await updateFaculty(editingFaculty.faculty_id, normalized);
       setShowEditModal(false);
       setEditingFaculty(null);
       await loadFaculty();
+      await loadFacultyNotifications(); // ← Refresh notifications after edit
     } catch (err) {
+      console.error('Edit error details:', err);
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
         setEditingFaculty(null);
@@ -280,9 +368,11 @@ export default function FacultyView() {
       setUpdateError(null);
       await deleteFaculty(member.faculty_id);
       await loadFaculty();
+      await loadFacultyNotifications(); // ← Refresh notifications after delete
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadFaculty();
+        await loadFacultyNotifications(); // ← Refresh notifications after delete
         setUpdateError('That faculty member was already removed. The list has been refreshed.');
         return;
       }
@@ -298,9 +388,11 @@ export default function FacultyView() {
       setUpdateError(null);
       await updateFacultyStatus(memberId, newStatus);
       await loadFaculty();
+      await loadFacultyNotifications(); // ← Refresh notifications after status change
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadFaculty();
+        await loadFacultyNotifications(); // ← Refresh notifications after status change
         setUpdateError('That faculty member was removed. The list has been refreshed.');
         return;
       }
@@ -329,10 +421,27 @@ export default function FacultyView() {
             <h2 className="text-headline-xl font-headline-xl text-on-surface">Faculty Directory</h2>
             <p className="text-body-md text-on-surface-variant">Manage and track academic teaching staff.</p>
           </div>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2">
-            <PlusCircle size={18} />
-            <span>Add Faculty</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <NotificationButton
+              items={filteredNotifications}
+              title="Faculty Notifications"
+              buttonLabel="Notifications"
+              emptyLabel="No faculty issues"
+              panelSize="md"
+              onItemEdit={handleNotificationEdit}
+              onItemJump={handleNotificationJump}
+              onItemResolve={handleResolveNotification}
+              severityFilter={notificationSeverityFilter}
+              onSeverityFilterChange={setNotificationSeverityFilter}
+              notificationSearch={notificationSearch}
+              onNotificationSearchChange={setNotificationSearch}
+              notificationStats={notificationStats}
+            />
+            <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2">
+              <PlusCircle size={18} />
+              <span>Add Faculty</span>
+            </button>
+          </div>
         </div>
         <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
           <Users size={24} className="text-primary" />
@@ -484,19 +593,10 @@ export default function FacultyView() {
                 const hiddenSpecializationCount = Math.max(0, specializationItems.length - visibleSpecializations.length);
 
                 return (
-                  <tr key={member.faculty_id} className="group transition-colors hover:bg-white/45">
+                  <tr key={member.faculty_id} id={`faculty-row-${member.faculty_id}`} className="group transition-colors hover:bg-white/45">
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-primary/10 font-bold text-primary shadow-sm">
-                          {String(member.faculty_name || '')
-                            .split(' ')
-                            .filter(Boolean)
-                            .map((name) => name[0])
-                            .join('')
-                            .slice(0, 2) || 'F'}
-                        </div>
-                        <div>
-                          <p className="font-bold text-on-surface">{member.faculty_name}</p>
+                      <div>
+                        <p className="font-bold text-on-surface">{member.faculty_name}</p>
                           <div className="mt-1 flex items-center gap-1.5 text-xs text-on-surface-variant/70">
                             <Mail size={12} />
                             <span>
@@ -507,7 +607,6 @@ export default function FacultyView() {
                             </span>
                           </div>
                         </div>
-                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-on-surface-variant">
                       {member.departments?.department_name || 'Unassigned'}

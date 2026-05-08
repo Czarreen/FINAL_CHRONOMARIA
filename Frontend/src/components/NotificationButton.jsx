@@ -10,6 +10,7 @@ export default function NotificationButton({
   panelSize = 'md',
   onItemJump,
   onItemEdit,
+  onItemResolve,
   severityFilter = 'all',
   onSeverityFilterChange,
   notificationSearch = '',
@@ -300,6 +301,17 @@ export default function NotificationButton({
                             className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
                           >
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof onItemResolve === 'function') {
+                                onItemResolve(item);
+                              }
+                            }}
+                            className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-700 transition-colors hover:bg-slate-100"
+                          >
+                            Resolve
                           </button>
                         </div>
                       </div>
