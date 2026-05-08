@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 // POST - Create new course offering
 router.post('/', async (req, res) => {
   try {
-    const { code, course_no, descriptive_title, curr_id, department_id, section, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id } = req.body;
+    const { code, course_no, descriptive_title, curr_id, department_id, section, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id, merged } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Course code is required' });
@@ -48,19 +48,20 @@ router.post('/', async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
       .insert([{
-        code,
-        course_no,
-        descriptive_title,
-        curr_id,
-        department_id,
-        section,
-        units,
-        lec_hrs,
-        lab_hrs,
-        mth_schedule,
-        mth_room_id,
-        tfs_schedule,
-        tfs_room_id,
+        code: code || null,
+        course_no: course_no || null,
+        descriptive_title: descriptive_title || null,
+        curr_id: curr_id ? Number(curr_id) : null,
+        department_id: department_id ? Number(department_id) : null,
+        section: section || null,
+        units: units ? Number(units) : null,
+        lec_hrs: lec_hrs ? Number(lec_hrs) : null,
+        lab_hrs: lab_hrs ? Number(lab_hrs) : null,
+        mth_schedule: mth_schedule || null,
+        mth_room_id: mth_room_id || null,
+        tfs_schedule: tfs_schedule || null,
+        tfs_room_id: tfs_room_id || null,
+        merged: merged === true || merged === 'true' ? true : false,
       }])
       .select();
 
@@ -80,7 +81,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { code, course_no, descriptive_title, curr_id, department_id, section, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id } = req.body;
+    const { code, course_no, descriptive_title, curr_id, department_id, section, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id, merged } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Course code is required' });
@@ -89,19 +90,20 @@ router.put('/:id', async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
       .update({
-        code,
-        course_no,
-        descriptive_title,
-        curr_id,
-        department_id,
-        section,
-        units,
-        lec_hrs,
-        lab_hrs,
-        mth_schedule,
-        mth_room_id,
-        tfs_schedule,
-        tfs_room_id,
+        code: code || null,
+        course_no: course_no || null,
+        descriptive_title: descriptive_title || null,
+        curr_id: curr_id ? Number(curr_id) : null,
+        department_id: department_id ? Number(department_id) : null,
+        section: section || null,
+        units: units ? Number(units) : null,
+        lec_hrs: lec_hrs ? Number(lec_hrs) : null,
+        lab_hrs: lab_hrs ? Number(lab_hrs) : null,
+        mth_schedule: mth_schedule || null,
+        mth_room_id: mth_room_id || null,
+        tfs_schedule: tfs_schedule || null,
+        tfs_room_id: tfs_room_id || null,
+        merged: merged === true || merged === 'true' ? true : false,
       })
       .eq('id', id)
       .select();

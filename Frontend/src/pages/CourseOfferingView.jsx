@@ -166,24 +166,22 @@ export default function CourseOfferingView() {
     try {
       setSavingOffering(true);
       setOfferingError(null);
-      const mthIds = Array.isArray(editingData.mth_room_id)
-        ? editingData.mth_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
-        : editingData.mth_room_id
-        ? [Number(editingData.mth_room_id)]
-        : [];
-      const tfsIds = Array.isArray(editingData.tfs_room_id)
-        ? editingData.tfs_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
-        : editingData.tfs_room_id
-        ? [Number(editingData.tfs_room_id)]
-        : [];
+
+      // Convert room arrays to slash-separated strings
+      const mthRoomIds = Array.isArray(editingData.mth_room_id)
+        ? editingData.mth_room_id.filter(Boolean).join('/')
+        : (editingData.mth_room_id || null);
+
+      const tfsRoomIds = Array.isArray(editingData.tfs_room_id)
+        ? editingData.tfs_room_id.filter(Boolean).join('/')
+        : (editingData.tfs_room_id || null);
 
       const payload = {
         ...editingData,
-        mth_room_ids: mthIds,
-        tfs_room_ids: tfsIds,
-        mth_room_id: mthIds.length ? mthIds.join('/') : null,
-        tfs_room_id: tfsIds.length ? tfsIds.join('/') : null,
+        mth_room_id: mthRoomIds,
+        tfs_room_id: tfsRoomIds,
       };
+
       await createCourseOffering(payload);
       setShowAddModal(false);
       setEditingData({});
@@ -219,25 +217,22 @@ export default function CourseOfferingView() {
     try {
       setSavingOffering(true);
       setOfferingError(null);
-      const mthIds = Array.isArray(editingData.mth_room_id)
-        ? editingData.mth_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
-        : editingData.mth_room_id
-        ? [Number(editingData.mth_room_id)]
-        : [];
-      const tfsIds = Array.isArray(editingData.tfs_room_id)
-        ? editingData.tfs_room_id.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
-        : editingData.tfs_room_id
-        ? [Number(editingData.tfs_room_id)]
-        : [];
+
+      // Convert room arrays to slash-separated strings
+      const mthRoomIds = Array.isArray(editingData.mth_room_id)
+        ? editingData.mth_room_id.filter(Boolean).join('/')
+        : (editingData.mth_room_id || null);
+
+      const tfsRoomIds = Array.isArray(editingData.tfs_room_id)
+        ? editingData.tfs_room_id.filter(Boolean).join('/')
+        : (editingData.tfs_room_id || null);
 
       const payload = {
         ...editingData,
-        mth_room_ids: mthIds,
-        tfs_room_ids: tfsIds,
-        // keep legacy field as slash-joined string for compatibility
-        mth_room_id: mthIds.length ? mthIds.join('/') : null,
-        tfs_room_id: tfsIds.length ? tfsIds.join('/') : null,
+        mth_room_id: mthRoomIds,
+        tfs_room_id: tfsRoomIds,
       };
+
       await updateCourseOffering(editingId, payload);
       setEditingId(null);
       setEditingData({});
