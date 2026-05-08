@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BookMarked,
   Layers,
@@ -55,6 +56,9 @@ export default function CourseOfferingView() {
   const [filterText, setFilterText] = useState('');
   const [filterColumn, setFilterColumn] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'code', direction: 'asc' });
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
+  const colButtonRef = useRef(null);
 
   useEffect(() => {
     if (!offeringError) return;
@@ -73,6 +77,37 @@ export default function CourseOfferingView() {
     const timer = setTimeout(() => setSuccessMessage(null), 3000);
     return () => clearTimeout(timer);
   }, [successMessage]);
+
+  // Handle column menu positioning and click outside
+  useEffect(() => {
+    if (!colMenuOpen) return;
+
+    const updatePosition = () => {
+      if (!colButtonRef.current) return;
+      const rect = colButtonRef.current.getBoundingClientRect();
+      setColMenuPos({
+        top: rect.bottom + 8,
+        left: rect.right - 200,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    const handleClickOutside = (e) => {
+      if (colButtonRef.current && !colButtonRef.current.contains(e.target)) {
+        setColMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [colMenuOpen]);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -830,20 +865,30 @@ export default function CourseOfferingView() {
               <Download size={14} />
               <span>Export</span>
             </button>
-            <div className="relative group">
-              <button
-                className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-                type="button"
-                title="Column visibility"
+            <button
+              ref={colButtonRef}
+              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+              onClick={() => setColMenuOpen((prev) => !prev)}
+              type="button"
+              title="Column visibility"
+            >
+              <Settings size={14} />
+              <span>Cols</span>
+            </button>
+            {colMenuOpen && typeof document !== 'undefined' && createPortal(
+              <div
+                style={{
+                  position: 'fixed',
+                  top: `${colMenuPos.top}px`,
+                  left: `${colMenuPos.left}px`,
+                  zIndex: 9999,
+                }}
+                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
               >
-                <Settings size={14} />
-                <span>Cols</span>
-              </button>
-              <div className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max z-[9999]">
                 {columns.map((col) => (
                   <label
                     key={col.key}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
                   >
                     <input
                       type="checkbox"
@@ -854,8 +899,9 @@ export default function CourseOfferingView() {
                     {col.label}
                   </label>
                 ))}
-              </div>
-            </div>
+              </div>,
+              document.body
+            )}
             {selectedOfferings.size > 0 && (
               <button
                 className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2 py-1 font-semibold text-white text-xs transition-colors hover:bg-red-700"
