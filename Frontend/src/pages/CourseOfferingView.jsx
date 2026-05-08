@@ -124,7 +124,9 @@ export default function CourseOfferingView() {
     async function loadRooms() {
       try {
         const { rows } = await fetchRooms({ page: 1, limit: 100000 });
-        if (active) setRooms(rows);
+        if (active) {
+          setRooms(rows);
+        }
       } catch (err) {
         console.error('Failed to load rooms:', err);
       }
@@ -560,11 +562,20 @@ export default function CourseOfferingView() {
           )}
         </div>
         <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-          {rooms.length === 0 ? (
-            <p className="text-xs text-on-surface-variant">Loading rooms...</p>
+          {!rooms || rooms.length === 0 ? (
+            <p className="text-xs text-on-surface-variant">
+              {rooms === null ? 'Loading rooms...' : 'No rooms available'}
+            </p>
           ) : (
-            rooms.map((room) => {
-              const roomId = room.room_id ?? room.id ?? '';
+            rooms.map((room, idx) => {
+              // Safely get room_id - handle 0 as valid ID
+              const roomId = room?.room_id !== undefined ? room.room_id : (room?.id !== undefined ? room.id : null);
+
+              if (roomId === null || roomId === undefined) {
+                console.warn('Room at index', idx, 'has no valid ID:', room);
+                return null;
+              }
+
               const roomIdStr = String(roomId);
               const isChecked = selectedValues.includes(roomIdStr);
               const conflicts = getConflictingOfferings(roomIdStr, scheduleType);
@@ -579,17 +590,17 @@ export default function CourseOfferingView() {
                       onChange={() => toggleRoomSelection(field, roomIdStr)}
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
-                    <div className="flex-1">
-                      <span className="font-medium text-on-surface">
-                        {room.room_name || `Room ${roomId}`}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-on-surface break-words">
+                        {room?.room_name || `Room ${roomId}`}
                       </span>
-                      {room.room_type && (
+                      {room?.room_type && (
                         <span className="ml-2 text-xs text-on-surface-variant/70">
                           ({room.room_type})
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-on-surface-variant/70">#{roomId}</span>
+                    <span className="text-xs text-on-surface-variant/70 flex-shrink-0">#{roomId}</span>
                   </label>
                   {conflictCount > 0 && (
                     <p className="ml-7 text-xs text-amber-600">
