@@ -68,11 +68,21 @@ router.post('/', async (req, res) => {
   try {
     const subjectData = req.body;
 
+    if ('mth_room_id' in subjectData && !('mth_room' in subjectData)) {
+      subjectData.mth_room = subjectData.mth_room_id;
+    }
+
+    if ('tfs_room_id' in subjectData && !('tfs_room' in subjectData)) {
+      subjectData.tfs_room = subjectData.tfs_room_id;
+    }
+
     // Define required and allowed fields
     const allowedFields = [
       'subject_code',
       'subject_course_no',
       'subject_descriptive_title',
+      'department_id',
+      'subject_section',
       'subject_units',
       'subject_lec_hrs',
       'subject_lab_hrs',
@@ -152,8 +162,16 @@ router.patch('/:id', async (req, res) => {
     const updates = req.body;
 
     // Only allow certain fields to be updated
-    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status'];
+    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status'];
     const sanitizedUpdates = {};
+
+    if ('mth_room_id' in updates && !('mth_room' in updates)) {
+      updates.mth_room = updates.mth_room_id;
+    }
+
+    if ('tfs_room_id' in updates && !('tfs_room' in updates)) {
+      updates.tfs_room = updates.tfs_room_id;
+    }
 
     for (const field of allowedFields) {
       if (field in updates) {
