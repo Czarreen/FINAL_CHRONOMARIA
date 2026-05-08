@@ -59,6 +59,7 @@ export default function CourseOfferingView() {
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
+  const colMenuRef = useRef(null);
 
   useEffect(() => {
     if (!offeringError) return;
@@ -96,7 +97,10 @@ export default function CourseOfferingView() {
     window.addEventListener('resize', updatePosition);
 
     const handleClickOutside = (e) => {
-      if (colButtonRef.current && !colButtonRef.current.contains(e.target)) {
+      const isButtonClick = colButtonRef.current && colButtonRef.current.contains(e.target);
+      const isMenuClick = colMenuRef.current && colMenuRef.current.contains(e.target);
+
+      if (!isButtonClick && !isMenuClick) {
         setColMenuOpen(false);
       }
     };
@@ -877,6 +881,7 @@ export default function CourseOfferingView() {
             </button>
             {colMenuOpen && typeof document !== 'undefined' && createPortal(
               <div
+                ref={colMenuRef}
                 style={{
                   position: 'fixed',
                   top: `${colMenuPos.top}px`,
