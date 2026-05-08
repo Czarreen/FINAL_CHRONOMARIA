@@ -24,6 +24,7 @@ import { fetchCourseOfferingsPage, fetchCourseOfferings, createCourseOffering, u
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
+import { buildCourseOfferingNotifications } from '../utils/missingData';
 
 const PAGE_SIZE = 50;
 
@@ -441,17 +442,17 @@ export default function CourseOfferingView() {
     let active = true;
     async function loadNotifications() {
       try {
-        const { rows } = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+        const localNotifications = buildCourseOfferingNotifications(offerings);
         if (!active) return;
-        setNotifications(rows || []);
+        setNotifications(localNotifications);
       } catch (err) {
-        console.error('Failed to load notifications:', err);
+        console.error('Failed to build notifications:', err);
         setNotifications([]);
       }
     }
     loadNotifications();
     return () => { active = false; };
-  }, []);
+  }, [offerings]);
 
   const focusNotificationItem = (item) => {
     if (!item?.offeringId) return;

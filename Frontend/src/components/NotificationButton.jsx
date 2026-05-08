@@ -135,53 +135,99 @@ export default function NotificationButton({
                 {emptyLabel}
               </div>
             ) : (
-              items.map((item) => (
-                <div
-                  key={item.id}
-                  className="w-full rounded-xl border border-amber-200 bg-amber-50/80 p-3 transition-colors hover:border-amber-300 hover:bg-amber-100/70"
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5 rounded-full bg-amber-100 p-1.5 text-amber-700">
-                      <AlertCircle size={14} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-on-surface">{item.title}</p>
-                      <p className="text-xs text-on-surface-variant">{item.description}</p>
-                      {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-amber-800/80">
-                          Missing: {item.missingFields.join(', ')}
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof onItemJump === 'function') {
-                              onItemJump(item);
-                            }
-                            setOpen(false);
-                          }}
-                          className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:bg-slate-50"
-                        >
-                          Go to row
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof onItemEdit === 'function') {
-                              onItemEdit(item);
-                            }
-                            setOpen(false);
-                          }}
-                          className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
-                        >
-                          Edit
-                        </button>
+              items.map((item) => {
+                const severityConfig = {
+                  critical: {
+                    border: 'border-red-300',
+                    bg: 'bg-red-50/80',
+                    hover: 'hover:border-red-400 hover:bg-red-100/70',
+                    icon: 'bg-red-100 text-red-700',
+                    badge: 'bg-red-100 text-red-800',
+                  },
+                  medium: {
+                    border: 'border-amber-200',
+                    bg: 'bg-amber-50/80',
+                    hover: 'hover:border-amber-300 hover:bg-amber-100/70',
+                    icon: 'bg-amber-100 text-amber-700',
+                    badge: 'bg-amber-100 text-amber-800',
+                  },
+                  low: {
+                    border: 'border-blue-200',
+                    bg: 'bg-blue-50/80',
+                    hover: 'hover:border-blue-300 hover:bg-blue-100/70',
+                    icon: 'bg-blue-100 text-blue-700',
+                    badge: 'bg-blue-100 text-blue-800',
+                  },
+                };
+
+                const severity = item.severity || 'medium';
+                const config = severityConfig[severity] || severityConfig.medium;
+                const severityLabel = severity.charAt(0).toUpperCase() + severity.slice(1);
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`w-full rounded-xl border ${config.border} ${config.bg} p-3 transition-colors ${config.hover}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`mt-0.5 rounded-full p-1.5 ${config.icon}`}>
+                        <AlertCircle size={14} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-on-surface">{item.title}</p>
+                            <p className="text-xs text-on-surface-variant">{item.description}</p>
+                          </div>
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${config.badge} whitespace-nowrap`}>
+                            {severityLabel}
+                          </span>
+                        </div>
+                        {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
+                          <p className={`mt-1 text-[11px] uppercase tracking-[0.16em] ${config.badge.replace('bg-', 'text-').replace(' text-', '/80')} opacity-80`}>
+                            Issues: {item.missingFields.join(', ')}
+                          </p>
+                        )}
+                        {Array.isArray(item.issues) && item.issues.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {item.issues.map((issue, idx) => (
+                              <p key={idx} className="text-[10px] text-on-surface-variant leading-relaxed">
+                                • {issue.message}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof onItemJump === 'function') {
+                                onItemJump(item);
+                              }
+                              setOpen(false);
+                            }}
+                            className={`rounded-full border ${config.border} bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:bg-slate-50`}
+                          >
+                            Go to row
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof onItemEdit === 'function') {
+                                onItemEdit(item);
+                              }
+                              setOpen(false);
+                            }}
+                            className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-primary/90"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>,
