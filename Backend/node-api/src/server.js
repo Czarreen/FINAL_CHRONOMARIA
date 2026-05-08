@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
+import departmentsRouter from './routes/departments.js';
 import facultyRouter from './routes/faculty.js';
 import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
@@ -21,6 +22,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/faculty', facultyRouter);
+app.use('/api/departments', departmentsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
