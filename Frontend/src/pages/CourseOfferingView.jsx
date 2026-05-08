@@ -917,7 +917,7 @@ export default function CourseOfferingView() {
                     <input
                       type="checkbox"
                       checked={offerings.length > 0 && selectedOfferings.size === offerings.length}
-                      indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < offerings.length}
+                      indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < offerings.length ? true : undefined}
                       onChange={toggleSelectAll}
                       className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
