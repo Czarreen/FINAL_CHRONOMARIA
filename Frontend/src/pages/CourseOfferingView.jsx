@@ -16,6 +16,9 @@ import {
   AlertCircle,
   PlusCircle,
   Trash2,
+  Download,
+  Settings,
+  Check,
 } from 'lucide-react';
 import { fetchCourseOfferingsPage, fetchCourseOfferings, createCourseOffering, updateCourseOffering, deleteCourseOffering } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
@@ -39,6 +42,34 @@ export default function CourseOfferingView() {
   const [updateError, setUpdateError] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [selectedOfferings, setSelectedOfferings] = useState(new Set());
+  const [visibleColumns, setVisibleColumns] = useState(
+    new Set([
+      'code', 'course_no', 'descriptive_title', 'department_name', 'section',
+      'units', 'lec_hrs', 'lab_hrs', 'mth_schedule', 'mth_room_id', 'tfs_schedule', 'tfs_room_id'
+    ])
+  );
+  const [filterText, setFilterText] = useState('');
+  const [filterColumn, setFilterColumn] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key: 'code', direction: 'asc' });
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(''), 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!updateError) return;
+    const timer = setTimeout(() => setUpdateError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [updateError]);
+
+  useEffect(() => {
+    if (!offeringError) return;
+    const timer = setTimeout(() => setOfferingError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [offeringError]);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -46,6 +77,8 @@ export default function CourseOfferingView() {
   }, [totalRows]);
 
   useEffect(() => {
+    if (filterText) return; // skip pagination load when searching
+
     let active = true;
 
     async function loadOfferings() {
@@ -81,7 +114,7 @@ export default function CourseOfferingView() {
     return () => {
       active = false;
     };
-  }, [page]);
+  }, [page, filterText]);
 
   // Load rooms data
   useEffect(() => {
@@ -116,11 +149,6 @@ export default function CourseOfferingView() {
     }
     setExpandedRows(newExpanded);
   };
-
-  // Search / filter / sort state
-  const [filterText, setFilterText] = useState('');
-  const [filterColumn, setFilterColumn] = useState('all');
-  const [sortConfig, setSortConfig] = useState({ key: 'code', direction: 'asc' });
 
   const handleSort = (key) => {
     setSortConfig((currentSort) => ({
@@ -329,13 +357,15 @@ export default function CourseOfferingView() {
     },
   ];
   useEffect(() => {
-    if (!filterText) return; // only run when there's a search term
+    if (!filterText) {
+      setPage(1);
+      return;
+    }
     let active = true;
     const tid = setTimeout(async () => {
       setLoading(true);
       setError('');
       try {
-        // request a large limit or let backend honor `search` param if supported
         const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: filterText });
         if (!active) return;
         setOfferings(
@@ -349,6 +379,7 @@ export default function CourseOfferingView() {
           }))
         );
         setTotalRows(rows.length);
+        setPage(1);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Failed to run global search.');
@@ -511,6 +542,7 @@ export default function CourseOfferingView() {
   const renderRoomPicker = (field) => {
     const selectedValues = Array.isArray(editingData[field]) ? editingData[field].map(String) : [];
     const selectedRoomNames = selectedValues.map((roomId) => getRoomName(roomId));
+    const scheduleType = field === 'mth_room_id' ? 'mth' : 'tfs';
 
     return (
       <div className="space-y-2 rounded-lg border border-white/60 bg-white/70 p-3">
@@ -538,23 +570,31 @@ export default function CourseOfferingView() {
             rooms.map((room) => {
               const roomId = String(room.id ?? room.room_id ?? '');
               const isChecked = selectedValues.includes(roomId);
+              const conflicts = getConflictingOfferings(roomId, scheduleType);
+              const conflictCount = conflicts.filter((o) => o.id !== editingId).length;
 
               return (
-                <label
-                  key={roomId}
-                  className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggleRoomSelection(field, roomId)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
-                  />
-                  <span className="font-medium text-on-surface">
-                    {room.room_name || room.name || room.label || `Room ${roomId}`}
-                  </span>
-                  <span className="text-xs text-on-surface-variant/70">#{roomId}</span>
-                </label>
+                <div key={roomId}>
+                  <label
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleRoomSelection(field, roomId)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                    <span className="font-medium text-on-surface">
+                      {room.room_name || room.name || room.label || `Room ${roomId}`}
+                    </span>
+                    <span className="text-xs text-on-surface-variant/70">#{roomId}</span>
+                  </label>
+                  {conflictCount > 0 && (
+                    <p className="ml-7 text-xs text-amber-600">
+                      ⚠️ Already assigned to {conflictCount} other offering(s)
+                    </p>
+                  )}
+                </div>
               );
             })
           )}
@@ -582,6 +622,107 @@ export default function CourseOfferingView() {
 
     if (room) return room.room_name || room.name || room.label || `Room ${roomId}`;
     return `Room ${roomId}`;
+  };
+
+  const toggleColumnVisibility = (columnKey) => {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(columnKey)) {
+        next.delete(columnKey);
+      } else {
+        next.add(columnKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectOffering = (offeringId) => {
+    setSelectedOfferings((prev) => {
+      const next = new Set(prev);
+      if (next.has(offeringId)) {
+        next.delete(offeringId);
+      } else {
+        next.add(offeringId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOfferings.size === offerings.length && offerings.length > 0) {
+      setSelectedOfferings(new Set());
+    } else {
+      setSelectedOfferings(new Set(offerings.map((o) => o.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedOfferings.size === 0) return;
+    setConfirmDialog({
+      title: `Delete ${selectedOfferings.size} offering(s)?`,
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete All',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setUpdateError(null);
+          const deletePromises = Array.from(selectedOfferings).map((id) =>
+            deleteCourseOffering(id)
+          );
+          await Promise.all(deletePromises);
+          setSelectedOfferings(new Set());
+          await loadInitialPage();
+        } catch (err) {
+          setUpdateError(err.message || 'Failed to delete offerings');
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
+  };
+
+  const getConflictingOfferings = (roomId, scheduleType) => {
+    return offerings.filter((offering) => {
+      if (!roomId) return false;
+      const offeringRoomIds = resolveRoomIds(offering, scheduleType);
+      return offeringRoomIds.includes(Number(roomId));
+    });
+  };
+
+  const exportToCSV = () => {
+    if (offerings.length === 0) {
+      setUpdateError('No offerings to export');
+      return;
+    }
+
+    const headers = Array.from(visibleColumns).map((key) => {
+      const col = columns.find((c) => c.key === key);
+      return col ? col.label : key;
+    });
+
+    const rows = offerings.map((offering) =>
+      Array.from(visibleColumns).map((key) => {
+        let value = offering[key];
+        if (key === 'mth_room_id' || key === 'tfs_room_id') {
+          const logical = key === 'mth_room_id' ? 'mth' : 'tfs';
+          const ids = resolveRoomIds(offering, logical);
+          value = ids.map((id) => getRoomName(id)).join(' / ');
+        }
+        if (value === null || value === undefined) return '';
+        return String(value);
+      })
+    );
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const link = document.createElement('a');
+    link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+    link.download = `course-offerings-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
   return (
@@ -615,6 +756,11 @@ export default function CourseOfferingView() {
               <BookMarked size={14} className="text-primary" />
               {totalRows} total
             </span>
+            {selectedOfferings.size > 0 && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/60 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary backdrop-blur">
+                {selectedOfferings.size} selected
+              </span>
+            )}
             <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur">
               Page {page}
             </span>
@@ -626,6 +772,51 @@ export default function CourseOfferingView() {
               <RefreshCw size={18} />
               <span>Reload</span>
             </button>
+            <button
+              className="btn-primary flex items-center gap-2"
+              onClick={exportToCSV}
+              type="button"
+              title="Export visible offerings to CSV"
+            >
+              <Download size={18} />
+              <span>Export</span>
+            </button>
+            <div className="relative group">
+              <button
+                className="btn-primary flex items-center gap-2"
+                type="button"
+                title="Toggle column visibility"
+              >
+                <Settings size={18} />
+                <span>Columns</span>
+              </button>
+              <div className="absolute right-0 mt-2 hidden group-hover:flex flex-col bg-white border border-white/60 rounded-lg shadow-lg p-2 min-w-fit z-50">
+                {columns.map((col) => (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-on-surface hover:bg-slate-50 rounded-md cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => toggleColumnVisibility(col.key)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {selectedOfferings.size > 0 && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-red-700"
+                onClick={handleBulkDelete}
+                type="button"
+              >
+                <Trash2 size={18} />
+                <span>Delete Selected</span>
+              </button>
+            )}
             <button
               className="btn-primary flex items-center gap-2"
               onClick={() => {
@@ -701,16 +892,28 @@ export default function CourseOfferingView() {
           <table className="min-w-[1100px] w-full text-left">
             <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
-                  {columns.map((col) => (
-                    <th key={col.key} className="px-6 py-4 text-left">
-                      <button type="button" onClick={() => handleSort(col.key)} className={`flex w-full items-center justify-start gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
-                        sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
-                      }`}>
-                        <span>{col.label}</span>
-                        <ArrowUpDown size={12} />
-                      </button>
-                    </th>
-                  ))}
+                  <th className="px-4 py-4 text-center w-12">
+                    <input
+                      type="checkbox"
+                      checked={offerings.length > 0 && selectedOfferings.size === offerings.length}
+                      indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < offerings.length}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                  </th>
+                  {columns.map((col) => {
+                    if (!visibleColumns.has(col.key)) return null;
+                    return (
+                      <th key={col.key} className="px-6 py-4 text-left">
+                        <button type="button" onClick={() => handleSort(col.key)} className={`flex w-full items-center justify-start gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
+                          sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
+                        }`}>
+                          <span>{col.label}</span>
+                          <ArrowUpDown size={12} />
+                        </button>
+                      </th>
+                    );
+                  })}
                   <th className="sticky right-0 z-30 bg-white/95 px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Actions</th>
                 </tr>
             </thead>
@@ -719,7 +922,7 @@ export default function CourseOfferingView() {
                 <tr>
                   <td
                     className="px-6 py-12 text-center text-sm text-on-surface-variant"
-                    colSpan={columns.length + 1}
+                    colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     Loading course offerings...
                   </td>
@@ -730,7 +933,7 @@ export default function CourseOfferingView() {
                 <tr>
                   <td
                     className="px-6 py-12 text-center text-sm text-error"
-                    colSpan={columns.length + 1}
+                    colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     {error}
                   </td>
@@ -741,7 +944,7 @@ export default function CourseOfferingView() {
                 <tr>
                   <td
                     className="px-6 py-12 text-center text-sm text-on-surface-variant"
-                    colSpan={columns.length + 1}
+                    colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     No course offerings found.
                   </td>
@@ -750,37 +953,48 @@ export default function CourseOfferingView() {
 
               {!loading && !error && displayedOfferings.map((offering) => (
                 <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40">
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-6 py-4">
-                      {col.key === 'code' ? (
-                        <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                          {renderCellValue(offering[col.key])}
-                        </span>
-                      ) : col.key === 'course_no' ? (
-                        <span className="text-sm font-medium text-on-surface">
-                          {renderCellValue(offering[col.key])}
-                        </span>
-                      ) : col.key === 'descriptive_title' ? (
-                        <div className="max-w-xs">
-                          <p className="text-xs text-on-surface-variant">{renderCellValue(offering[col.key])}</p>
-                        </div>
-                      ) : col.key === 'units' ? (
-                        <span className="text-sm font-medium text-on-surface">
-                          {renderCellValue(offering[col.key])}
-                        </span>
-                      ) : col.key === 'lec_hrs' || col.key === 'lab_hrs' ? (
-                        <span className="text-sm font-medium text-on-surface-variant">
-                          {renderCellValue(offering[col.key])}h
-                        </span>
-                      ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                        renderRoomCell(offering, col.key)
-                      ) : (
-                        <span className="text-sm text-on-surface-variant">
-                          {renderCellValue(offering[col.key])}
-                        </span>
-                      )}
-                    </td>
-                  ))}
+                  <td className="px-4 py-4 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedOfferings.has(offering.id)}
+                      onChange={() => toggleSelectOffering(offering.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                  </td>
+                  {columns.map((col) => {
+                    if (!visibleColumns.has(col.key)) return null;
+                    return (
+                      <td key={col.key} className="px-6 py-4">
+                        {col.key === 'code' ? (
+                          <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                            {renderCellValue(offering[col.key])}
+                          </span>
+                        ) : col.key === 'course_no' ? (
+                          <span className="text-sm font-medium text-on-surface">
+                            {renderCellValue(offering[col.key])}
+                          </span>
+                        ) : col.key === 'descriptive_title' ? (
+                          <div className="max-w-xs">
+                            <p className="text-xs text-on-surface-variant">{renderCellValue(offering[col.key])}</p>
+                          </div>
+                        ) : col.key === 'units' ? (
+                          <span className="text-sm font-medium text-on-surface">
+                            {renderCellValue(offering[col.key])}
+                          </span>
+                        ) : col.key === 'lec_hrs' || col.key === 'lab_hrs' ? (
+                          <span className="text-sm font-medium text-on-surface-variant">
+                            {renderCellValue(offering[col.key])}h
+                          </span>
+                        ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
+                          renderRoomCell(offering, col.key)
+                        ) : (
+                          <span className="text-sm text-on-surface-variant">
+                            {renderCellValue(offering[col.key])}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
                   <td className="sticky right-0 z-10 bg-white/90 px-6 py-4 backdrop-blur">
                     <div className="flex justify-center gap-2">
                       <button
