@@ -476,7 +476,7 @@ export default function FacultyView() {
             <NotificationButton
               items={filteredNotifications}
               title="Faculty Notifications"
-              buttonLabel="Notifications"
+              buttonLabel="Issues"
               emptyLabel="No faculty issues"
               panelSize="md"
               onItemEdit={handleNotificationEdit}

@@ -108,6 +108,22 @@ export default function NotificationButton({
 
   const resolvedPanelSize = panelSizes[panelSize] || panelSizes.md;
 
+  function formatIssueDetails(details) {
+    if (details == null) {
+      return '';
+    }
+
+    if (typeof details === 'string') {
+      return details;
+    }
+
+    try {
+      return JSON.stringify(details, null, 2);
+    } catch {
+      return String(details);
+    }
+  }
+
   const updatePosition = () => {
     if (isExpanded) return;
     if (!buttonRef.current) return;
@@ -164,9 +180,9 @@ export default function NotificationButton({
       >
         <Bell size={18} />
         <span>{buttonLabel}</span>
-        {items.length > 0 && (
+        {(notificationStats.total || items.length) > 0 && (
           <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-primary">
-            {items.length}
+            {notificationStats.total || items.length}
           </span>
         )}
       </button>
@@ -321,7 +337,7 @@ export default function NotificationButton({
                   },
                 };
 
-                const severity = item.severity || 'medium';
+                const severity = item.severity === 'high' ? 'critical' : (item.severity || 'medium');
                 const config = severityConfig[severity] || severityConfig.medium;
                 const severityLabel = severity.charAt(0).toUpperCase() + severity.slice(1);
 
@@ -358,9 +374,9 @@ export default function NotificationButton({
                             {item.issues.map((issue, idx) => (
                               <div key={idx} className="rounded-lg bg-white/50 p-2.5 border border-white/60">
                                 <p className="text-xs font-semibold text-on-surface">{issue.message}</p>
-                                {issue.details && (
+                                {issue.details != null && (
                                   <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
-                                    {issue.details}
+                                    {formatIssueDetails(issue.details)}
                                   </p>
                                 )}
                               </div>

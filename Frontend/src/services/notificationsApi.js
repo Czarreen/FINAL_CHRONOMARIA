@@ -29,6 +29,44 @@ export async function fetchFacultyNotifications({ page = 1, limit = 500 } = {}) 
   return res.json();
 }
 
+export async function fetchSubjectNotifications({ page = 1, limit = 500 } = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+
+  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects?${params.toString()}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to fetch subject notifications: ${res.status}`);
+  }
+
+  const data = await res.json();
+
+  return data;
+}
+
+export async function fetchPersistedSubjectNotifications({ page = 1, limit = 200, unresolvedOnly = true } = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  if (unresolvedOnly) params.set('is_resolved', 'false');
+
+  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/persisted?${params.toString()}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to fetch persisted subject notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function resolveSubjectNotification(id) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/${id}/resolve`, { method: 'PATCH' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to resolve subject notification: ${res.status}`);
+  }
+  return res.json();
+}
 export async function fetchPersistedFacultyNotifications({ page = 1, limit = 200, unresolvedOnly = true } = {}) {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -52,7 +90,11 @@ export async function fetchPersistedFacultyNotifications({ page = 1, limit = 200
       description: row.description,
       severity: row.severity,
       missingFields: row.missing_fields ? JSON.parse(row.missing_fields) : [],
-      issues: row.issues ? JSON.parse(row.issues) : [],
+      issues: (row.issues ? JSON.parse(row.issues) : []).map((issue) => ({
+        message: issue.message || issue.msg || '',
+        details: issue.details ?? issue.meta ?? null,
+        field: issue.field || (row.field_name ?? null) || (row.missing_fields ? (JSON.parse(row.missing_fields)[0] || null) : null),
+      })),
       is_resolved: row.is_resolved,
       metadata: row.metadata,
       created_at: row.created_at,

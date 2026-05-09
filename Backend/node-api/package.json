@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "run-subject-migration": "node tools/run_subject_migration.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
