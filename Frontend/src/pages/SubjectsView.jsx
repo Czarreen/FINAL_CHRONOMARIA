@@ -4,6 +4,7 @@ import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, up
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification } from '../services/notificationsApi';
+import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 export default function SubjectsView() {
   const [subjects, setSubjects] = useState([]);
@@ -95,6 +96,8 @@ export default function SubjectsView() {
 
     return stats;
   }, [visibleSubjectNotifications]);
+
+  const { setHighlight } = useRowHighlight();
 
   // Load subjects data
   useEffect(() => {
@@ -222,9 +225,7 @@ export default function SubjectsView() {
   function scrollToSubjectRowById(subjectId) {
     const rowElement = document.getElementById(`subject-row-${subjectId}`);
     if (rowElement) {
-      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      rowElement.classList.add('animate-pulse');
-      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+      setHighlight(subjectId, 'SubjectsView');
       return;
     }
 
@@ -251,12 +252,7 @@ export default function SubjectsView() {
             }
 
             window.setTimeout(() => {
-              const target = document.getElementById(`subject-row-${subjectId}`);
-              if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                target.classList.add('animate-pulse');
-                setTimeout(() => target.classList.remove('animate-pulse'), 2000);
-              }
+              setHighlight(subjectId, 'SubjectsView');
             }, 150);
 
             break;

@@ -36,6 +36,7 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
 import { buildCourseOfferingNotifications } from '../utils/missingData';
+import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 const PAGE_SIZE = 50;
 
@@ -80,6 +81,8 @@ export default function CourseOfferingView() {
   const [notificationSearch, setNotificationSearch] = useState('');
   const [pendingScrollToOfferingId, setPendingScrollToOfferingId] = useState(null);
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
+
+  const { setHighlight, clearHighlight } = useRowHighlight();
 
   useEffect(() => {
     if (!offeringError) return;
@@ -207,15 +210,10 @@ export default function CourseOfferingView() {
   // Handle scrolling to offering when it appears (after page navigation)
   useEffect(() => {
     if (pendingScrollToOfferingId) {
-      const rowElement = document.getElementById(`offering-row-${pendingScrollToOfferingId}`);
-      if (rowElement) {
-        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        rowElement.classList.add('ring-2', 'ring-primary/40');
-        setTimeout(() => rowElement.classList.remove('ring-2', 'ring-primary/40'), 1200);
-        setPendingScrollToOfferingId(null);
-      }
+      setHighlight(pendingScrollToOfferingId, 'CourseOfferingView');
+      setPendingScrollToOfferingId(null);
     }
-  }, [pendingScrollToOfferingId, offerings]);
+  }, [pendingScrollToOfferingId, offerings, setHighlight]);
 
   async function findOfferingPageNumber(offeringId) {
     try {
@@ -625,11 +623,7 @@ export default function CourseOfferingView() {
     if (!item?.offeringId) return;
     const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
     if (targetRow) {
-      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      targetRow.classList.add('ring-2', 'ring-primary/40');
-      window.setTimeout(() => {
-        targetRow.classList.remove('ring-2', 'ring-primary/40');
-      }, 1200);
+      setHighlight(item.offeringId, 'CourseOfferingView');
     } else {
       // Offering not on current page, find which page it's on
       setFindingNotificationRow(true);
@@ -657,14 +651,7 @@ export default function CourseOfferingView() {
 
     if (offering) {
       handleEditOffering(offering);
-      const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
-      if (targetRow) {
-        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        targetRow.classList.add('ring-2', 'ring-primary/40');
-        window.setTimeout(() => {
-          targetRow.classList.remove('ring-2', 'ring-primary/40');
-        }, 1200);
-      }
+      setHighlight(item.offeringId, 'CourseOfferingView');
     } else {
       // Offering not on current page, fetch it by ID
       setFindingNotificationRow(true);

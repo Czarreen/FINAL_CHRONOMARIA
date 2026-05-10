@@ -25,6 +25,7 @@ import {
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification } from '../services/notificationsApi.js';
+import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 export default function FacultyView() {
   const [faculty, setFaculty] = useState([]);
@@ -66,6 +67,8 @@ export default function FacultyView() {
   const [pendingScrollToId, setPendingScrollToId] = useState(null);
   const [findingRow, setFindingRow] = useState(false);
 
+  const { setHighlight } = useRowHighlight();
+
   useEffect(() => {
     loadFaculty();
   }, [page, limit, search, statusFilter]);
@@ -81,15 +84,10 @@ export default function FacultyView() {
   // Handle scrolling to row when it appears (after page navigation)
   useEffect(() => {
     if (pendingScrollToId) {
-      const rowElement = document.getElementById(`faculty-row-${pendingScrollToId}`);
-      if (rowElement) {
-        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        rowElement.classList.add('animate-pulse');
-        setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
-        setPendingScrollToId(null);
-      }
+      setHighlight(pendingScrollToId, 'FacultyView');
+      setPendingScrollToId(null);
     }
-  }, [pendingScrollToId, faculty]);
+  }, [pendingScrollToId, faculty, setHighlight]);
 
   async function findFacultyPageNumber(facultyId) {
     try {
@@ -154,9 +152,7 @@ export default function FacultyView() {
   function handleNotificationJump(item) {
     const rowElement = document.getElementById(`faculty-row-${item.faculty_id}`);
     if (rowElement) {
-      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      rowElement.classList.add('animate-pulse');
-      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+      setHighlight(item.faculty_id, 'FacultyView');
     } else {
       // Faculty member not on current page, find which page they're on
       setFindingRow(true);
