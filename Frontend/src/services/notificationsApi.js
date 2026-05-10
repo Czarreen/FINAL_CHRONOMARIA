@@ -23,6 +23,15 @@ export async function resolveCourseOfferingNotification(id) {
   return res.json();
 }
 
+export async function rescanAllCourseOfferingNotifications() {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, { method: 'POST' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to rescan notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function syncCourseOfferingNotifications(offeringId) {
   const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/sync`, {
     method: 'POST',

@@ -35,7 +35,7 @@ import {
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications } from '../services/notificationsApi';
+import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 const PAGE_SIZE = 50;
@@ -629,7 +629,18 @@ export default function CourseOfferingView() {
       try {
         const payload = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
         if (!active) return;
-        setNotifications(transformDbNotifications(payload.rows || []));
+
+        const rowCount = payload.total ?? payload.rows?.length ?? 0;
+        if (rowCount === 0) {
+          // DB is empty — auto-rescan all offerings to populate the table
+          await rescanAllCourseOfferingNotifications();
+          if (!active) return;
+          const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+          if (!active) return;
+          setNotifications(transformDbNotifications(refetched.rows || []));
+        } else {
+          setNotifications(transformDbNotifications(payload.rows || []));
+        }
       } catch (err) {
         console.error('Failed to load course offering notifications:', err);
         if (active) setNotifications([]);
