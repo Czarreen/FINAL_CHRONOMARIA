@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search } from 'lucide-react';
+import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom } from '../services/roomsApi.js';
 import { resolveRoomNotification } from '../services/notificationsApi.js';
@@ -18,6 +18,7 @@ export default function RoomsView() {
   const [resolveMessage, setResolveMessage] = useState(null);
   const [resolveMessageType, setResolveMessageType] = useState(null); // 'success' or 'error'
   const [notificationSearch, setNotificationSearch] = useState('');
+  const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
   const [notificationStats, setNotificationStats] = useState({ total: 0, critical: 0, medium: 0, low: 0 });
 
   // Modal states
@@ -179,6 +180,23 @@ export default function RoomsView() {
     };
   }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE]);
 
+  const filteredNotifications = useMemo(() => {
+    let filtered = [...notifications];
+    if (notificationSeverityFilter !== 'all') {
+      filtered = filtered.filter((notif) => notif.severity === notificationSeverityFilter);
+    }
+    if (notificationSearch) {
+      const searchLower = notificationSearch.toLowerCase();
+      filtered = filtered.filter(
+        (notif) =>
+          (notif.title || '').toLowerCase().includes(searchLower) ||
+          (notif.description || '').toLowerCase().includes(searchLower) ||
+          (notif.room_id || '').toString().includes(searchLower)
+      );
+    }
+    return filtered;
+  }, [notifications, notificationSeverityFilter, notificationSearch]);
+
   const handlePrevPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1));
   };
@@ -300,6 +318,7 @@ export default function RoomsView() {
       setRooms([...rooms, newRoom]);
       setShowAddModal(false);
       resetForm();
+      await loadRoomNotifications();
     } catch (err) {
       console.error('Failed to create room:', err);
       setFormError(err.message);
@@ -330,6 +349,7 @@ export default function RoomsView() {
       setShowEditModal(false);
       setEditingRoom(null);
       resetForm();
+      await loadRoomNotifications();
     } catch (err) {
       console.error('Failed to update room:', err);
       setFormError(err.message);
@@ -347,6 +367,7 @@ export default function RoomsView() {
       setRooms(rooms.filter((r) => r.room_id !== deleteTargetRoom.room_id));
       setShowDeleteModal(false);
       setDeleteTargetRoom(null);
+      await loadRoomNotifications();
     } catch (err) {
       console.error('Failed to delete room:', err);
       setFormError(err.message);
@@ -356,7 +377,7 @@ export default function RoomsView() {
   };
 
   return (
-    <div className="space-y-gutter animate-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-gutter animate-in slide-in-from-right-4 duration-500">
       {resolveMessage && (
         <div className={`rounded-lg px-4 py-3 ${
           resolveMessageType === 'success'
@@ -366,136 +387,120 @@ export default function RoomsView() {
           {resolveMessage}
         </div>
       )}
-      <div className="flex gap-3">
-        <div className="glass-panel flex items-center p-8" style={{flex: '0 0 63.41%'}}>
+      {/* Header with stats */}
+      <div className="grid grid-cols-1 gap-gutter lg:grid-cols-12">
+        <div className="glass-panel col-span-1 flex items-center justify-between p-8 lg:col-span-8">
           <div className="space-y-1">
             <h2 className="text-headline-xl font-headline-xl text-on-surface">Available Rooms</h2>
             <p className="text-body-md text-on-surface-variant">Manage campus facilities and their capacities.</p>
           </div>
-          <div className="flex-1"></div>
-          <div className="flex items-center gap-3">
+          <div className="flex gap-2">
             <NotificationButton
-              items={notifications}
+              items={filteredNotifications}
               title="Room Issues"
-              buttonLabel="Notifications"
               emptyLabel="No room data quality issues detected"
-              panelSize="md"
-              onItemJump={handleNotificationJump}
+              buttonLabel="Issues"
               onItemEdit={handleNotificationEdit}
+              onItemJump={handleNotificationJump}
               onItemResolve={handleResolveNotification}
-              searchPlaceholder="Search by name, type or status"
+              severityFilter={notificationSeverityFilter}
+              onSeverityFilterChange={setNotificationSeverityFilter}
               notificationSearch={notificationSearch}
               onNotificationSearchChange={setNotificationSearch}
               notificationStats={notificationStats}
             />
-            <button
+            <button 
               onClick={handleAddClick}
-              className="btn-primary flex flex-row items-center justify-center gap-2 py-2 px-4 whitespace-nowrap"
+              className="btn-primary flex items-center gap-2"
             >
               <Plus size={18} />
-              <span>Add New Room</span>
+              <span>Add Room</span>
             </button>
           </div>
         </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
           <DoorOpen size={24} className="text-primary" />
           <span className="mt-3 text-3xl font-bold text-on-surface">{stats.totalRooms}</span>
           <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Total Rooms</span>
         </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
           <Maximize2 size={24} className="text-green-500" />
           <span className="mt-3 text-3xl font-bold text-on-surface">{stats.availableRooms}</span>
           <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Available</span>
         </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
           <Monitor size={24} className="text-blue-500" />
           <span className="mt-3 text-3xl font-bold text-on-surface">{stats.roomTypeCount}</span>
           <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Room Types</span>
         </div>
       </div>
 
+      {/* Search and Filter Bar */}
       <div className="glass-panel space-y-4 p-4">
-        <div className="border-b border-white/50 px-2 py-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="relative flex-1 md:max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" size={16} />
-              <input
-                type="text"
-                placeholder="Search by name, type or status..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Search Input */}
+          <div className="relative flex-1 md:max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+            <input
+              type="text"
+              placeholder="Search by name, type or status..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex gap-2">
+            {['', 'available', 'unavailable'].map((status) => (
+              <button
+                key={status}
+                onClick={() => {
+                  setStatusFilter(status);
                   setCurrentPage(1);
                 }}
-                className="w-full rounded-lg border border-white/30 bg-white/60 pl-9 pr-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              {['', 'available', 'unavailable'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => {
-                    setStatusFilter(status);
-                    setCurrentPage(1);
-                  }}
-                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-                    statusFilter === status
-                      ? 'bg-primary text-white shadow-md shadow-primary/20'
-                      : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
-                  }`}
-                >
-                  {status === '' ? 'All' : status === 'available' ? 'Available' : status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
+                className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                  statusFilter === status
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
+                }`}
+              >
+                {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-white/50 bg-white/50">
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Room Name</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Room Type</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Status</th>
-                <th className="px-6 py-4 text-right text-[11px] font-bold uppercase tracking-[0.22em] text-on-surface-variant/70">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/50">
-              {loading ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
-                    Loading rooms data...
-                  </td>
+      {/* Rooms Table */}
+      {!loading && !error && rooms.length > 0 && (
+        <div className="glass-panel overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/20 bg-white/30">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Room Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Room Type</th>
+                  <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Status</th>
+                  <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Actions</th>
                 </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-red-500">
-                    Error: {error}
-                  </td>
-                </tr>
-              ) : rooms.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
-                    No rooms found.
-                  </td>
-                </tr>
-              ) : currentRooms.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-on-surface-variant">
-                    No rooms in this type.
-                  </td>
-                </tr>
-              ) : (
-                currentRooms.map((room) => (
-                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className="group transition-colors hover:bg-white/45">
+              </thead>
+              <tbody className="divide-y divide-white/20">
+                {currentRooms.map((room, index) => (
+                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-6 py-4">
-                      <p className="font-bold text-on-surface">{room.room_name}</p>
+                      <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                        {room.room_name || 'N/A'}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">{room.room_type || 'N/A'}</td>
-                    <td className="px-6 py-4">
-                      {room.room_status ? (
+                    <td className="px-6 py-4 text-sm font-medium text-on-surface">
+                      {room.room_type || '—'}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex justify-center">
                         <span
                           className={`badge ${
                             room.room_status === 'available'
@@ -505,126 +510,176 @@ export default function RoomsView() {
                               : 'badge-error'
                           }`}
                         >
-                          {room.room_status}
+                          {room.room_status || 'N/A'}
                         </span>
-                      ) : null}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-70 transition-opacity group-hover:opacity-100">
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex justify-center gap-2">
                         <button
                           onClick={() => handleEditClick(room)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-white hover:text-primary"
+                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleDeleteClick(room)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
+                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {searchQuery.trim() === '' && (
-          <div className="flex items-center justify-between border-t border-white/50 bg-white/35 px-6 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">
-              {totalPages > 0 ? `Page ${currentPage} of ${totalPages}` : 'No rooms'}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className="h-8 w-8 rounded-md border border-white/60 bg-white text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`h-8 w-8 rounded-md text-xs font-bold transition-colors ${
-                      pageNum === currentPage
-                        ? 'bg-primary text-white shadow-sm'
-                        : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
                 ))}
-              </div>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className="h-8 w-8 rounded-md border border-white/60 bg-white text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-6 py-4">
+              <div className="text-sm text-on-surface-variant">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`rounded-lg px-3 py-2 text-sm font-bold transition-all ${
+                          pageNum === currentPage
+                            ? 'bg-primary text-white'
+                            : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && !error && rooms.length === 0 && (
+        <div className="glass-panel flex flex-col items-center justify-center py-16 text-center">
+          <DoorOpen size={48} className="text-on-surface-variant/30" />
+          <p className="mt-4 text-lg font-bold text-on-surface">No rooms found</p>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            {searchQuery || statusFilter ? 'Try adjusting your filters' : 'Create your first room to get started'}
+          </p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="glass-panel flex flex-col items-center justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary"></div>
+          <p className="mt-4 text-on-surface-variant">Loading rooms...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-700">
+          <AlertCircle size={20} />
+          <div>
+            <p className="font-bold">Error loading rooms</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Add Room Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="relative">
-            <div className="glass-panel w-full max-w-lg animate-in fade-in duration-300 rounded-lg shadow-xl">
-              <div
-                className="flex items-center justify-between border-b border-white/20 p-6"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Add New Room</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
               >
-                <div>
-                  <h3 className="text-lg font-bold text-on-surface">Add New Room</h3>
-                  <p className="mt-1 text-sm text-on-surface-variant">Fill in the room details to create a new room.</p>
-                </div>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="rounded p-1 text-slate-400 hover:bg-white/20 hover:text-on-surface"
-                >
-                  <X size={20} />
-                </button>
+                <X size={20} />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle size={16} />
+                {formError}
               </div>
+            )}
 
-            <form onSubmit={handleAddRoom} className="space-y-4 p-6">
-              {formError && <p className="rounded bg-red-100 p-3 text-sm text-red-700">{formError}</p>}
-
+            <form onSubmit={handleAddRoom} className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Room Name *</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Room Name *
+                </label>
                 <input
                   type="text"
                   value={formData.room_name}
                   onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface placeholder-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   placeholder="e.g., Room 101"
                   disabled={isSubmitting}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Room Type</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Room Type
+                </label>
                 <input
                   type="text"
                   value={formData.room_type}
                   onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface placeholder-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   placeholder="e.g., Lecture Hall"
                   disabled={isSubmitting}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Status</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Status
+                </label>
                 <select
                   value={formData.room_status}
                   onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   disabled={isSubmitting}
                 >
                   <option value="available">Available</option>
@@ -633,157 +688,158 @@ export default function RoomsView() {
                 </select>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-2 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
                   disabled={isSubmitting}
-                  className="flex-1 rounded-md border border-white/30 bg-white/60 px-4 py-2 font-medium text-on-surface transition-colors hover:bg-white/80 disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 rounded-md bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-medium text-white transition-all hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Room'}
+                  {isSubmitting ? 'Creating...' : 'Create'}
                 </button>
               </div>
             </form>
-            </div>
           </div>
         </div>
       )}
 
       {/* Edit Room Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="relative">
-            <div className="glass-panel w-full max-w-lg animate-in fade-in duration-300 rounded-lg shadow-xl">
-              <div
-                className="flex items-center justify-between border-b border-white/20 p-6"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Edit Room</h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
               >
-                <div>
-                  <h3 className="text-lg font-bold text-on-surface">Edit Room</h3>
-                  <p className="mt-1 text-sm text-on-surface-variant">Update room details. Make your changes and save them.</p>
-                </div>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="rounded p-1 text-slate-400 hover:bg-white/20 hover:text-on-surface"
-                >
-                  <X size={20} />
-                </button>
+                <X size={20} />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle size={16} />
+                {formError}
               </div>
+            )}
 
-            <form onSubmit={handleUpdateRoom} className="space-y-4 p-6">
-              {formError && <p className="rounded bg-red-100 p-3 text-sm text-red-700">{formError}</p>}
-
+            <form onSubmit={handleUpdateRoom} className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Room Name *</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Room Name *
+                </label>
                 <input
                   type="text"
                   value={formData.room_name}
                   onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface placeholder-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   placeholder="e.g., Room 101"
                   disabled={isSubmitting}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Room Type</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Room Type
+                </label>
                 <input
                   type="text"
                   value={formData.room_type}
                   onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface placeholder-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   placeholder="e.g., Lecture Hall"
                   disabled={isSubmitting}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-on-surface">Status</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Status
+                </label>
                 <select
                   value={formData.room_status}
                   onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
-                  className="w-full rounded-md border border-white/30 bg-white/60 px-3 py-2 text-on-surface focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                   disabled={isSubmitting}
                 >
                   <option value="available">Available</option>
                   <option value="unavailable">Unavailable</option>
+                  <option value="occupied">Occupied</option>
                 </select>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-2 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
                   disabled={isSubmitting}
-                  className="flex-1 rounded-md border border-white/30 bg-white/60 px-4 py-2 font-medium text-on-surface transition-colors hover:bg-white/80 disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 rounded-md bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-medium text-white transition-all hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Updating...' : 'Update Room'}
+                  {isSubmitting ? 'Updating...' : 'Save Changes'}
                 </button>
               </div>
             </form>
-            </div>
           </div>
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && deleteTargetRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="relative">
-            <div className="glass-panel w-full max-w-sm animate-in fade-in duration-300 rounded-lg shadow-xl">
-              <div
-                className="flex items-center justify-between border-b border-white/20 p-6"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Delete Room</h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
               >
-                <div>
-                  <h3 className="text-lg font-bold text-on-surface">Delete Room</h3>
-                  <p className="mt-1 text-sm text-on-surface-variant">Once you delete this room you cannot bring it back.</p>
-                </div>
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="rounded p-1 text-slate-400 hover:bg-white/20 hover:text-on-surface"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+                <X size={20} />
+              </button>
+            </div>
 
-              <div className="space-y-4 p-6">
-                {formError && <p className="rounded bg-red-100 p-3 text-sm text-red-700">{formError}</p>}
-                <p className="text-on-surface">
-                  Are you sure you want to delete <span className="font-bold">{deleteTargetRoom.room_name}</span>? This action cannot be undone.
-                </p>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteModal(false)}
-                    disabled={isSubmitting}
-                    className="flex-1 rounded-md border border-white/30 bg-white/60 px-4 py-2 font-medium text-on-surface transition-colors hover:bg-white/80 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmDelete}
-                    disabled={isSubmitting}
-                    className="flex-1 rounded-md bg-red-500 px-4 py-2 font-medium text-white transition-colors hover:bg-red-600 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
+            {formError && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle size={16} />
+                {formError}
               </div>
+            )}
+
+            <p className="mb-6 text-on-surface">
+              Are you sure you want to delete <span className="font-bold">{deleteTargetRoom.room_name}</span>? This action cannot be undone.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isSubmitting}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isSubmitting}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-all hover:bg-red-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>

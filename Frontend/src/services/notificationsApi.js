@@ -114,6 +114,40 @@ export async function resolveFacultyNotification(id) {
   return res.json();
 }
 
+export async function fetchRoomNotifications({ page = 1, limit = 200, unresolvedOnly = true } = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  if (unresolvedOnly) params.set('is_resolved', 'false');
+
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms?${params.toString()}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to fetch room notifications: ${res.status}`);
+  }
+
+  const data = await res.json();
+
+  // Transform snake_case from DB to camelCase for component, and parse JSON fields
+  const transformed = {
+    ...data,
+    rows: (data.rows || []).map((row) => ({
+      id: row.id,
+      room_id: row.room_id,
+      title: row.title || `Room #${row.room_id}`,
+      description: row.description || '',
+      severity: row.severity || 'medium',
+      missingFields: row.missing_fields ? JSON.parse(row.missing_fields) : [],
+      issues: row.issues ? JSON.parse(row.issues) : [],
+      is_resolved: row.is_resolved,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    })),
+  };
+
+  return transformed;
+}
+
 export async function resolveRoomNotification(id) {
   const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/${id}/resolve`, { method: 'PATCH' });
   if (!res.ok) {
