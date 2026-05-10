@@ -22,6 +22,7 @@ import {
   Download,
   Settings,
   Check,
+  Lock,
 } from 'lucide-react';
 import {
   fetchCourseOfferingsPage,
@@ -34,8 +35,7 @@ import {
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
-import { buildCourseOfferingNotifications } from '../utils/missingData';
+import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 const PAGE_SIZE = 50;
@@ -79,11 +79,13 @@ export default function CourseOfferingView() {
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
-  const [allOfferingsForNotifications, setAllOfferingsForNotifications] = useState([]);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
   const [pendingScrollToOfferingId, setPendingScrollToOfferingId] = useState(null);
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
+  const [editingFromNotification, setEditingFromNotification] = useState(false);
+  const [notificationMissingFields, setNotificationMissingFields] = useState(new Set());
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const { setHighlight, clearHighlight } = useRowHighlight();
 
@@ -296,7 +298,7 @@ export default function CourseOfferingView() {
     }
   }
 
-  async function handleEditOffering(offering) {
+  async function handleEditOffering(offering, notifItem = null) {
     setEditingId(offering.id);
     setEditingData({
       code: offering.code || '',
@@ -313,6 +315,12 @@ export default function CourseOfferingView() {
       tfs_schedule: offering.tfs_schedule || '',
       tfs_room_id: resolveRoomIds(offering, 'tfs').map(String),
     });
+    setEditingFromNotification(!!notifItem);
+    setNotificationMissingFields(
+      notifItem
+        ? new Set((notifItem.issues || []).map((i) => i.field))
+        : new Set()
+    );
     setOfferingError(null);
   }
 
@@ -336,15 +344,22 @@ export default function CourseOfferingView() {
         tfs_room_id: tfsRoomIds,
       };
 
-      await updateCourseOffering(editingId, payload);
+      const savedId = editingId;
+      await updateCourseOffering(savedId, payload);
       setSuccessMessage(`Updated "${editingData.code}"`);
       setEditingId(null);
       setEditingData({});
+      setEditingFromNotification(false);
+      setNotificationMissingFields(new Set());
+      // Re-sync notifications for this offering in the background then refresh list
+      syncCourseOfferingNotifications(savedId).catch(() => {});
       await loadInitialPage();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setEditingId(null);
         setEditingData({});
+        setEditingFromNotification(false);
+        setNotificationMissingFields(new Set());
         await loadInitialPage();
         setUpdateError('That offering was removed. The list has been refreshed.');
         return;
@@ -495,6 +510,51 @@ export default function CourseOfferingView() {
       ],
     },
   ];
+
+  // Maps issue.field strings (from buildCourseOfferingNotifications) → editingData keys
+  const NOTIFICATION_FIELD_TO_KEY = {
+    'Course Code': 'code',
+    'Course Number': 'course_no',
+    'Course Title': 'descriptive_title',
+    'Department': 'department_id',
+    'Curriculum': 'curr_id',
+    'Credit Units': 'units',
+    'Lecture Hours': 'lec_hrs',
+    'Schedule': ['mth_schedule', 'tfs_schedule'],
+    'Room Assignment': ['mth_room_id', 'tfs_room_id'],
+    'MTH Room': 'mth_room_id',
+    'TFS Room': 'tfs_room_id',
+    'MTH Schedule': 'mth_schedule',
+    'TFS Schedule': 'tfs_schedule',
+  };
+
+  // Maps backend snake_case field names to display names
+  const BACKEND_FIELD_TO_DISPLAY_NAME = {
+    'code': 'Course Code',
+    'course_no': 'Course Number',
+    'descriptive_title': 'Course Title',
+    'department_id': 'Department',
+    'curr_id': 'Curriculum',
+    'units': 'Credit Units',
+    'lec_hrs': 'Lecture Hours',
+    'mth_schedule': 'MTH Schedule',
+    'tfs_schedule': 'TFS Schedule',
+    'mth_room_id': 'MTH Room',
+    'tfs_room_id': 'TFS Room',
+  };
+
+  // Set of column keys that are editable in notification-edit mode (null = all editable)
+  const editableKeys = useMemo(() => {
+    if (!editingFromNotification) return null;
+    const keys = new Set();
+    notificationMissingFields.forEach((field) => {
+      const mapped = NOTIFICATION_FIELD_TO_KEY[field];
+      if (Array.isArray(mapped)) mapped.forEach((k) => keys.add(k));
+      else if (mapped) keys.add(mapped);
+    });
+    return keys;
+  }, [editingFromNotification, notificationMissingFields]);
+
   useEffect(() => {
     if (!filterText) {
       setPage(1);
@@ -555,50 +615,72 @@ export default function CourseOfferingView() {
 
   const [notifications, setNotifications] = useState([]);
 
-  // Fetch all offerings for notification scanning (not paginated)
-  useEffect(() => {
-    let active = true;
-
-    async function loadAllOfferingsForNotifications() {
-      try {
-        const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: '' });
-        if (!active) return;
-        setAllOfferingsForNotifications(
-          (rows || []).map((row) => ({
-            ...row,
-            department_name:
-              row.departments?.department_name ??
-              (row.department_id !== null && row.department_id !== undefined
-                ? `Department #${row.department_id}`
-                : null),
-          }))
-        );
-      } catch (err) {
-        console.error('Failed to load all offerings for notifications:', err);
-        setAllOfferingsForNotifications([]);
+  // Transform flat DB rows (one row per issue) into grouped notification objects
+  function transformDbNotifications(rows) {
+    const byOffering = {};
+    (rows || []).forEach((row) => {
+      const key = row.entity_id;
+      if (!byOffering[key]) {
+        byOffering[key] = {
+          id: row.entity_id,
+          offeringId: row.entity_id,
+          entity_id: row.entity_id,
+          title: row.details?.code ? `${row.details.code}` : `Offering #${row.entity_id}`,
+          description: row.message,
+          severity: row.severity === 'high' ? 'critical' : (row.severity || 'medium'),
+          issues: [],
+          missingFields: [],
+          dbIds: [],
+        };
       }
-    }
+      const displayFieldName = BACKEND_FIELD_TO_DISPLAY_NAME[row.field_name] || row.field_name;
+      byOffering[key].issues.push({
+        field: displayFieldName,
+        message: row.message,
+        details: row.details,
+      });
+      byOffering[key].missingFields.push(displayFieldName);
+      byOffering[key].dbIds.push(row.id);
+      // Escalate severity if any issue is high/critical
+      if (row.severity === 'high' || row.severity === 'critical') {
+        byOffering[key].severity = 'critical';
+      }
+    });
+    return Object.values(byOffering);
+  }
 
-    loadAllOfferingsForNotifications();
-    return () => { active = false; };
-  }, [refreshTrigger]);
-
-  // Build notifications from all offerings (not just current page)
+  // Fetch persisted notifications from backend
   useEffect(() => {
     let active = true;
+
     async function loadNotifications() {
+      setNotificationsLoading(true);
       try {
-        const localNotifications = buildCourseOfferingNotifications(allOfferingsForNotifications);
+        const payload = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
         if (!active) return;
-        setNotifications(localNotifications);
+
+        const rowCount = payload.total ?? payload.rows?.length ?? 0;
+        if (rowCount === 0) {
+          // DB is empty — auto-rescan all offerings to populate the table
+          await rescanAllCourseOfferingNotifications();
+          if (!active) return;
+          const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+          if (!active) return;
+          setNotifications(transformDbNotifications(refetched.rows || []));
+        } else {
+          setNotifications(transformDbNotifications(payload.rows || []));
+        }
       } catch (err) {
-        console.error('Failed to build notifications:', err);
-        setNotifications([]);
+        console.error('Failed to load course offering notifications:', err);
+        if (active) setNotifications([]);
+      } finally {
+        if (active) setNotificationsLoading(false);
       }
     }
+
     loadNotifications();
     return () => { active = false; };
-  }, [allOfferingsForNotifications]);
+  }, [refreshTrigger]);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
@@ -636,7 +718,7 @@ export default function CourseOfferingView() {
     if (!item?.offeringId) return;
     const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
     if (targetRow) {
-      setHighlight(item.offeringId, 'CourseOfferingView');
+      setHighlight(item.offeringId, 'CourseOfferingView', item.severity);
     } else {
       // Offering not on current page, find which page it's on
       setFindingNotificationRow(true);
@@ -663,15 +745,15 @@ export default function CourseOfferingView() {
     let offering = offerings.find((row) => row.id === item.offeringId);
 
     if (offering) {
-      handleEditOffering(offering);
-      setHighlight(item.offeringId, 'CourseOfferingView');
+      handleEditOffering(offering, item);
+      setHighlight(item.offeringId, 'CourseOfferingView', item.severity);
     } else {
       // Offering not on current page, fetch it by ID
       setFindingNotificationRow(true);
       fetchCourseOfferingById(item.offeringId)
         .then((offering) => {
           if (offering) {
-            handleEditOffering(offering);
+            handleEditOffering(offering, item);
             // Navigate to the page this offering is on
             return findOfferingPageNumber(item.offeringId);
           }
@@ -695,6 +777,35 @@ export default function CourseOfferingView() {
     }
   };
 
+  const resolveNotificationItem = async (item) => {
+    // Optimistically remove from local list
+    setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    try {
+      await Promise.all(
+        (item.dbIds || []).map((dbId) => resolveCourseOfferingNotification(dbId))
+      );
+    } catch (err) {
+      console.error('Failed to resolve notification:', err);
+      setRefreshTrigger((t) => t + 1);
+    }
+  };
+
+  const handleInlineSave = async ({ offeringId, field, value }) => {
+    const keyMap = {
+      'Course Code': 'code', 'Course Number': 'course_no', 'Course Title': 'descriptive_title',
+      'Curriculum': 'curr_id', 'Credit Units': 'units', 'Lecture Hours': 'lec_hrs',
+      'code': 'code', 'course_no': 'course_no', 'descriptive_title': 'descriptive_title',
+      'curr_id': 'curr_id', 'units': 'units', 'lec_hrs': 'lec_hrs',
+    };
+    const dbField = keyMap[field] || field;
+    try {
+      await updateCourseOffering(offeringId, { [dbField]: value });
+      syncCourseOfferingNotifications(offeringId).catch(() => {});
+      setRefreshTrigger((t) => t + 1);
+    } catch (err) {
+      console.error('Inline save failed:', err);
+    }
+  };
 
   const renderCellValue = (value) => {
     if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
@@ -1012,11 +1123,15 @@ export default function CourseOfferingView() {
               items={filteredNotifications}
               onItemJump={focusNotificationItem}
               onItemEdit={editNotificationItem}
+              onItemResolve={resolveNotificationItem}
+              onItemInlineSave={handleInlineSave}
               severityFilter={notificationFilter}
               onSeverityFilterChange={setNotificationFilter}
               notificationSearch={notificationSearch}
               onNotificationSearchChange={setNotificationSearch}
               notificationStats={notificationStats}
+              isRescanning={notificationsLoading}
+              totalEntityCount={totalRows}
             />
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
               <BookMarked size={12} className="text-primary" />
@@ -1712,9 +1827,18 @@ export default function CourseOfferingView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-8">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+              <div>
+                <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+                {editingFromNotification && (
+                  <p className="mt-0.5 text-xs text-amber-600 font-semibold">From notification</p>
+                )}
+              </div>
               <button
-                onClick={() => setEditingId(null)}
+                onClick={() => {
+                  setEditingId(null);
+                  setEditingFromNotification(false);
+                  setNotificationMissingFields(new Set());
+                }}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/60 hover:text-on-surface"
               >
                 <X size={20} />
@@ -1728,6 +1852,16 @@ export default function CourseOfferingView() {
               </div>
             )}
 
+            {editingFromNotification && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-amber-500" />
+                <div>
+                  <p className="font-semibold">Fixing missing data</p>
+                  <p className="text-xs mt-0.5 text-amber-700">Filled fields are locked. Only highlighted fields need your attention.</p>
+                </div>
+              </div>
+            )}
+
             {editingId && (
               <div className="space-y-6">
                 {columnGroups.map((group) => (
@@ -1736,29 +1870,50 @@ export default function CourseOfferingView() {
                       {group.title}
                     </h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {group.columns.map((col) => (
-                        <div key={col.key}>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70">
-                            {col.label}
-                          </label>
-                          {col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                            renderRoomPicker(col.key)
-                          ) : (
-                            <input
-                              type={numericCols.has(col.key) ? 'number' : 'text'}
-                              value={editingData[col.key] ?? ''}
-                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                              className="w-full rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            />
-                          )}
-                        </div>
-                      ))}
+                      {group.columns.map((col) => {
+                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
+                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
+                        return (
+                          <div key={col.key}>
+                            <label className={`mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
+                              {col.label}
+                              {isLocked && <Lock size={10} className="text-slate-300" />}
+                              {isMissing && <span className="text-[10px] text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
+                            </label>
+                            {isLocked ? (
+                              <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed select-none">
+                                <Lock size={11} className="flex-shrink-0 text-slate-300" />
+                                <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
+                              </div>
+                            ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
+                              <div className={isMissing ? 'ring-2 ring-amber-400/40 rounded-lg' : ''}>
+                                {renderRoomPicker(col.key)}
+                              </div>
+                            ) : (
+                              <input
+                                type={numericCols.has(col.key) ? 'number' : 'text'}
+                                value={editingData[col.key] ?? ''}
+                                onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
+                                className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all ${
+                                  isMissing
+                                    ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
+                                    : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
+                                }`}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
                 <div className="flex gap-3 pt-6">
                   <button
-                    onClick={() => setEditingId(null)}
+                    onClick={() => {
+                      setEditingId(null);
+                      setEditingFromNotification(false);
+                      setNotificationMissingFields(new Set());
+                    }}
                     className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                   >
                     Cancel
