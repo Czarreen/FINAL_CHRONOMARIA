@@ -357,32 +357,74 @@ async function fetchRoomLookup() {
   return { byId, byName };
 }
 
-function resolveRoomIds(roomValue, roomLookup) {
-  const normalized = normalizeCell(roomValue);
-  if (normalized === null) return { roomIds: null, errors: [] };
+// Short all-letters words that ARE valid room names despite having no digits.
+// Everything else with no digit is treated as a department/label, not a room.
+// SEAIT, AR, CE, IT, etc. are department codes — they are NOT in this list.
+const KNOWN_DIGIT_FREE_ROOMS = new Set([
+  'GYM', 'AVR', 'LAB', 'CHAPEL', 'LIBRARY', 'CANTEEN', 'CLINIC',
+  'AUDITORIUM', 'THEATER', 'THEATRE', 'COURT', 'POOL', 'FIELD',
+  'LOBBY', 'HALLWAY', 'ATRIUM',
+]);
 
-  const tokens = normalized
+// A valid room identifier must pass ALL of the following:
+//   1. Non-empty, at most 30 characters
+//   2. Contains at least one alphanumeric character
+//   3. Does NOT contain a colon  (e.g. "Submitted by:")
+//   4. No more than 3 space-separated words  (blocks "OIC-Office of the Dean", full names)
+//   5. Does NOT look like a dotted name abbreviation (e.g. "ENGR. S. MALLILLIN")
+//   6. Contains at least one digit  OR  is in KNOWN_DIGIT_FREE_ROOMS
+//      → blocks pure-letter acronyms like SEAIT, AR, CE, IT that are departments, not rooms
+//
+// Examples that pass:  D101, E-103, S110, AP101, AVR, Gym, Lab, Room 2B
+// Examples that fail:  SEAIT, AR, ENGR. CARINA S. MALLILLIN, OIC-Office of the Dean, Submitted by:
+function isValidRoomName(token) {
+  if (!token || token.length > 30) return false;
+  if (!/[A-Za-z0-9]/.test(token)) return false;
+  if (token.includes(':')) return false;
+
+  const words = token.trim().split(/\s+/);
+  if (words.length > 3) return false;
+
+  // Reject dotted name abbreviation patterns: >2 dot-segments where any segment is ≤2 chars
+  const dotSegments = token.split('.');
+  if (dotSegments.length > 2 && dotSegments.some((s) => s.trim().length <= 2)) return false;
+
+  // Must contain a digit OR be a known digit-free room word
+  if (!/\d/.test(token) && !KNOWN_DIGIT_FREE_ROOMS.has(token.trim().toUpperCase())) return false;
+
+  return true;
+}
+
+// Extract individual room name tokens from a raw cell value.
+// Splits on / and , — so "A101/A102" → ["A101", "A102"]
+// Filters out tokens that do not look like real room identifiers.
+function extractRoomTokens(rawValue) {
+  const normalized = normalizeCell(rawValue);
+  if (!normalized) return [];
+  return normalized
     .split(/\s*[,/]\s*/)
-    .map((token) => token.trim())
-    .filter(Boolean);
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && isValidRoomName(t));
+}
+
+// Resolve a raw room cell to a slash-joined string of room IDs using the prebuilt lookup.
+// All rooms are guaranteed to exist in roomLookup by the time this is called.
+function resolveRoomIds(roomValue, roomLookup) {
+  const tokens = extractRoomTokens(roomValue);
+  if (tokens.length === 0) return { roomIds: null, errors: [] };
 
   const roomIds = [];
   const errors = [];
 
   for (const token of tokens) {
-    const numeric = Number(token);
-    if (Number.isFinite(numeric) && roomLookup.byId.has(numeric)) {
-      roomIds.push(numeric);
-      continue;
+    const lookupKey = normalizeLookupKey(token);
+    const id = roomLookup.byName.get(lookupKey);
+    if (id) {
+      roomIds.push(id);
+    } else {
+      // Should never happen after preloadRooms — log as warning, not hard error
+      errors.push(`Room not found in lookup: "${token}"`);
     }
-
-    const roomId = roomLookup.byName.get(normalizeLookupKey(token));
-    if (!roomId) {
-      errors.push(`Unknown room: "${token}"`);
-      continue;
-    }
-
-    roomIds.push(roomId);
   }
 
   const uniqueRoomIds = [...new Set(roomIds)];
@@ -390,6 +432,80 @@ function resolveRoomIds(roomValue, roomLookup) {
     roomIds: uniqueRoomIds.length > 0 ? uniqueRoomIds.join('/') : null,
     errors,
   };
+}
+
+// Scan every data row for room values, deduplicate room names, then bulk-upsert into
+// the rooms table. Returns a fully populated roomLookup { byId, byName }.
+// This runs BEFORE the main import loop so every room exists by the time we process rows.
+async function preloadRooms(dataRows, mapping) {
+  // Find the column indices that carry room values
+  const roomColumnIndices = mapping
+    .filter((entry) => entry.targetField === 'mth_room_id' || entry.targetField === 'tfs_room_id')
+    .map((entry) => entry.index);
+
+  // Collect every unique room name from all data rows
+  const uniqueRoomNames = new Set();
+  for (const rowCells of dataRows) {
+    for (const colIndex of roomColumnIndices) {
+      for (const token of extractRoomTokens(rowCells[colIndex])) {
+        // Skip bare numeric values — they are already IDs and handled by the ID path
+        if (!/^\d+$/.test(token)) {
+          uniqueRoomNames.add(token);
+        }
+      }
+    }
+  }
+
+  if (uniqueRoomNames.size === 0) {
+    // No room names in CSV — load existing rooms and return
+    return fetchRoomLookup();
+  }
+
+  // Load all rooms currently in the database
+  const { data: existingRooms, error: fetchError } = await supabaseAdmin
+    .from('rooms')
+    .select('room_id,room_name');
+
+  if (fetchError) {
+    throw new Error(`Failed to load rooms before import: ${fetchError.message}`);
+  }
+
+  const byId = new Map();
+  const byName = new Map();
+
+  for (const row of existingRooms ?? []) {
+    const id = Number(row.room_id);
+    const name = normalizeCell(row.room_name);
+    if (!Number.isFinite(id) || !name) continue;
+    byId.set(id, id);
+    byName.set(normalizeLookupKey(name), id);
+  }
+
+  // Determine which room names are new (not yet in DB)
+  const toInsert = [...uniqueRoomNames].filter(
+    (name) => !byName.has(normalizeLookupKey(name))
+  );
+
+  if (toInsert.length > 0) {
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from('rooms')
+      .insert(toInsert.map((name) => ({ room_name: name, room_status: 'available' })))
+      .select('room_id,room_name');
+
+    if (insertError) {
+      throw new Error(`Failed to pre-populate rooms: ${insertError.message}`);
+    }
+
+    for (const row of inserted ?? []) {
+      const id = Number(row.room_id);
+      const name = normalizeCell(row.room_name);
+      if (!Number.isFinite(id) || !name) continue;
+      byId.set(id, id);
+      byName.set(normalizeLookupKey(name), id);
+    }
+  }
+
+  return { byId, byName };
 }
 
 async function syncSubjectFromCourseOffering(courseOffering) {
@@ -455,6 +571,61 @@ async function syncSubjectFromCourseOffering(courseOffering) {
   }
 
   return { action: 'inserted', subject_id: insertedSubject?.subject_id ?? null };
+}
+
+async function syncRoomsFromCourseOffering(courseOffering) {
+  const roomValues = [
+    normalizeCell(courseOffering?.mth_room_id),
+    normalizeCell(courseOffering?.tfs_room_id),
+  ].filter(Boolean);
+
+  if (roomValues.length === 0) {
+    return { action: 'skipped', reason: 'No room values.' };
+  }
+
+  // Each value may be a slash-separated list of room IDs already resolved to numbers
+  const roomNames = roomValues
+    .flatMap((val) => val.split('/').map((t) => t.trim()))
+    .filter(Boolean);
+
+  const results = [];
+
+  for (const roomName of roomNames) {
+    // If it looks like a numeric ID, skip — it was already resolved by resolveRoomIds
+    if (/^\d+$/.test(roomName)) {
+      results.push({ action: 'skipped', reason: 'Already a numeric ID.' });
+      continue;
+    }
+
+    const { data: existingRows, error: lookupError } = await supabaseAdmin
+      .from('rooms')
+      .select('room_id')
+      .eq('room_name', roomName)
+      .limit(1);
+
+    if (lookupError) {
+      throw new Error(`Room lookup failed for "${roomName}": ${lookupError.message}`);
+    }
+
+    if (existingRows && existingRows.length > 0) {
+      results.push({ action: 'exists', room_id: existingRows[0].room_id });
+      continue;
+    }
+
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from('rooms')
+      .insert({ room_name: roomName, room_status: 'available' })
+      .select('room_id')
+      .single();
+
+    if (insertError) {
+      throw new Error(`Room sync insert failed for "${roomName}": ${insertError.message}`);
+    }
+
+    results.push({ action: 'inserted', room_id: inserted?.room_id ?? null });
+  }
+
+  return { action: 'synced', results };
 }
 
 function toRowObject(rowCells, mapping) {
@@ -639,6 +810,7 @@ router.post('/import-csv', async (req, res) => {
   try {
     const csvText = typeof req.body?.csvText === 'string' ? req.body.csvText : '';
     const fileName = typeof req.body?.fileName === 'string' ? req.body.fileName : 'upload.csv';
+    const replaceMode = req.body?.replaceMode === true;
 
     if (!csvText.trim()) {
       return res.status(400).json({
@@ -700,10 +872,10 @@ router.post('/import-csv', async (req, res) => {
     }
 
     const departmentLookup = await fetchDepartmentLookup({ autoCreateCodes });
-    const roomLookup = await fetchRoomLookup();
 
     const summary = {
       fileName,
+      replaceMode,
       totalRows: dataRows.length,
       processedRows: 0,
       insertedRows: 0,
@@ -715,6 +887,43 @@ router.post('/import-csv', async (req, res) => {
       errors: [],
       warnings: [],
     };
+
+    // In replace mode: wipe subjects → rooms → course_offerings before inserting fresh data.
+    // roomLookup is built AFTER the deletes so it starts empty and rooms are recreated from CSV.
+    if (replaceMode) {
+      const { error: delSubjectsError } = await supabaseAdmin
+        .from('subjects')
+        .delete()
+        .neq('subject_id', 0);
+
+      if (delSubjectsError) {
+        return res.status(500).json({ error: `Replace mode: failed to clear subjects: ${delSubjectsError.message}` });
+      }
+
+      const { error: delRoomsError } = await supabaseAdmin
+        .from('rooms')
+        .delete()
+        .neq('room_id', 0);
+
+      if (delRoomsError) {
+        return res.status(500).json({ error: `Replace mode: failed to clear rooms: ${delRoomsError.message}` });
+      }
+
+      const { error: delOfferingsError } = await supabaseAdmin
+        .from('course_offerings')
+        .delete()
+        .neq('id', 0);
+
+      if (delOfferingsError) {
+        return res.status(500).json({ error: `Replace mode: failed to clear course offerings: ${delOfferingsError.message}` });
+      }
+    }
+
+    // Pre-populate rooms table from CSV BEFORE processing course offering rows.
+    // This scans all room columns, deduplicates names (A101/A102 split into A101 and A102),
+    // bulk-inserts any new rooms, then returns a complete name→id lookup.
+    // In replace mode the rooms table was just cleared so all CSV rooms are treated as new.
+    const roomLookup = await preloadRooms(dataRows, mapping);
 
     for (let index = 0; index < dataRows.length; index += 1) {
       const rowCells = dataRows[index];

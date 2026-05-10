@@ -61,6 +61,9 @@ export default function CourseOfferingView() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
   const [importError, setImportError] = useState('');
+  const [replaceMode, setReplaceMode] = useState(false);
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+  const [importResultModal, setImportResultModal] = useState(null); // holds summary after import finishes
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
@@ -400,31 +403,41 @@ export default function CourseOfferingView() {
     setRefreshToken((current) => current + 1);
   }
 
-  async function handleImportCsv() {
+  function handleClickImport() {
     if (!selectedCsvFile) {
       setImportError('Choose a CSV file first.');
       return;
     }
+    setImportError('');
+    setImportSummary(null);
+    setShowBackupPrompt(true);
+  }
+
+  async function runImport() {
+    setShowBackupPrompt(false);
+    setImportingCsv(true);
+    setImportError('');
+    setImportSummary(null);
+    setImportResultModal(null);
 
     try {
-      setImportingCsv(true);
-      setImportError('');
-      setImportSummary(null);
-
       const csvText = await selectedCsvFile.text();
       const response = await importCourseOfferingsCsv({
         csvText,
         fileName: selectedCsvFile.name,
+        replaceMode,
       });
 
-      setImportSummary(response?.summary ?? null);
+      const summary = response?.summary ?? null;
+      setImportSummary(summary);
+      setImportResultModal(summary);
+      setRefreshTrigger((prev) => prev + 1);
       await loadInitialPage();
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Failed to import CSV.');
     } finally {
       setImportingCsv(false);
     }
-    setRefreshTrigger((prev) => prev + 1);
   }
 
   const numericCols = new Set(['units', 'lec_hrs', 'lab_hrs', 'curr_id', 'mth_room_id', 'tfs_room_id']);
@@ -1092,30 +1105,103 @@ export default function CourseOfferingView() {
               <PlusCircle size={14} />
               <span>Add</span>
             </button>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/60 bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur hover:bg-white">
-              <FileUp size={16} className="text-primary" />
-              <span>{selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}</span>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setSelectedCsvFile(file);
-                  setImportError('');
-                  setImportSummary(null);
-                }}
-              />
-            </label>
-            <button
-              className="btn-primary flex items-center gap-2"
-              onClick={handleImportCsv}
-              type="button"
-              disabled={importingCsv}
-            >
-              <Upload size={18} />
-              <span>{importingCsv ? 'Importing...' : 'Import CSV'}</span>
-            </button>
+            {/* CSV Import group */}
+            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/80 p-1 backdrop-blur shadow-sm">
+              {/* File picker */}
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors select-none ${
+                  selectedCsvFile
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+                title="Choose a CSV file to import"
+              >
+                <FileUp size={14} className={selectedCsvFile ? 'text-primary' : 'text-on-surface-variant'} />
+                <span className="max-w-[120px] truncate">
+                  {selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}
+                </span>
+                {selectedCsvFile && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="ml-0.5 rounded p-0.5 hover:bg-primary/20"
+                    title="Clear file"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setSelectedCsvFile(null);
+                      setImportError('');
+                      setImportSummary(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedCsvFile(null);
+                        setImportError('');
+                        setImportSummary(null);
+                      }
+                    }}
+                  >
+                    <X size={11} />
+                  </span>
+                )}
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setSelectedCsvFile(file);
+                    setImportError('');
+                    setImportSummary(null);
+                  }}
+                />
+              </label>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Replace mode toggle */}
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium select-none transition-colors ${
+                  replaceMode
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+                title="Replace Mode: clears ALL Course Offerings, Subjects, and Rooms before importing the new file"
+              >
+                <input
+                  type="checkbox"
+                  checked={replaceMode}
+                  onChange={(e) => setReplaceMode(e.target.checked)}
+                  className="h-3 w-3 rounded border-slate-300 accent-orange-500"
+                />
+                <span>Replace All</span>
+                {replaceMode && (
+                  <span className="rounded bg-orange-200 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-800">
+                    New Sem
+                  </span>
+                )}
+              </label>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Import button */}
+              <button
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
+                  replaceMode
+                    ? 'bg-orange-500 hover:bg-orange-600'
+                    : 'bg-primary hover:bg-primary/90'
+                }`}
+                onClick={handleClickImport}
+                type="button"
+                disabled={importingCsv}
+                title={replaceMode ? 'Import and replace all existing data' : 'Import CSV — update or add rows'}
+              >
+                <Upload size={13} />
+                <span>{importingCsv ? 'Importing…' : 'Import'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1374,6 +1460,206 @@ export default function CourseOfferingView() {
           </button>
         </div>
       </div>
+
+      {/* Full-screen Import Loading Overlay — freezes all interaction while import is running */}
+      {importingCsv && (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/20 bg-white/10 p-8 text-white shadow-2xl">
+            {/* Spinner */}
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+              <div className="absolute inset-2 animate-spin rounded-full border-4 border-white/10 border-t-white/60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
+            </div>
+
+            <div className="space-y-1.5 text-center">
+              <p className="text-lg font-bold tracking-tight">
+                {replaceMode ? 'Replacing Data…' : 'Importing CSV…'}
+              </p>
+              <p className="text-sm text-white/70">
+                {replaceMode
+                  ? 'Clearing existing data and importing fresh records. Please wait.'
+                  : 'Processing your CSV file. Please wait.'}
+              </p>
+              <p className="text-xs text-white/50">Do not close or refresh this page.</p>
+            </div>
+
+            {replaceMode && (
+              <div className="w-full rounded-lg border border-orange-300/30 bg-orange-500/20 px-4 py-2.5 text-center text-xs text-orange-200">
+                Replace mode: deleting all Course Offerings, Subjects &amp; Rooms, then rebuilding from CSV.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Result Modal — shown after import completes */}
+      {importResultModal && !importingCsv && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
+
+            {/* Header */}
+            <div className={`px-6 py-4 ${importResultModal.failedRows > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  {importResultModal.failedRows > 0 ? <AlertCircle size={18} /> : <Check size={18} />}
+                  <span className="font-bold text-base">
+                    {importResultModal.failedRows > 0 ? 'Import Completed with Errors' : 'Import Successful'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImportResultModal(null)}
+                  className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Mode badge */}
+              {importResultModal.replaceMode && (
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                  <span>Replace Mode — all old data was cleared first</span>
+                </div>
+              )}
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Total Rows', value: importResultModal.totalRows, color: 'bg-slate-50 text-slate-700' },
+                  { label: 'Inserted', value: importResultModal.insertedRows, color: 'bg-emerald-50 text-emerald-700' },
+                  { label: 'Updated', value: importResultModal.updatedRows, color: 'bg-blue-50 text-blue-700' },
+                  { label: 'Skipped', value: importResultModal.skippedRows, color: 'bg-slate-50 text-slate-500' },
+                  { label: 'Failed', value: importResultModal.failedRows, color: importResultModal.failedRows > 0 ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-400' },
+                  { label: 'Subjects Synced', value: importResultModal.syncedSubjectRows, color: 'bg-purple-50 text-purple-700' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className={`rounded-xl ${color} flex flex-col items-center justify-center p-3`}>
+                    <span className="text-2xl font-bold">{value ?? 0}</span>
+                    <span className="text-[10px] font-medium text-center leading-tight mt-0.5">{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Row errors */}
+              {Array.isArray(importResultModal.errors) && importResultModal.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                    Row Errors ({importResultModal.errors.length})
+                  </p>
+                  <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl border border-red-100 bg-red-50 p-2">
+                    {importResultModal.errors.slice(0, 30).map((issue) => (
+                      <p
+                        key={`result-error-${issue.row}-${(issue.messages || []).join('|')}`}
+                        className="text-xs text-red-700"
+                      >
+                        <span className="font-bold">Row {issue.row}:</span>{' '}
+                        {Array.isArray(issue.messages) ? issue.messages.join('; ') : 'Unknown error'}
+                      </p>
+                    ))}
+                    {importResultModal.errors.length > 30 && (
+                      <p className="text-xs text-red-500 font-medium">
+                        ...and {importResultModal.errors.length - 30} more errors.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setImportResultModal(null)}
+                className="w-full rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+              >
+                Done
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Backup Prompt Modal */}
+      {showBackupPrompt && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
+
+            {/* Header stripe — orange for replace, blue for update */}
+            <div className={`px-6 py-4 ${replaceMode ? 'bg-orange-500' : 'bg-primary'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <Download size={18} />
+                  <span className="font-bold text-base">Save a Backup First?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupPrompt(false)}
+                  className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* File being imported */}
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-600">
+                <FileUp size={13} className="shrink-0 text-slate-400" />
+                <span className="truncate font-medium">{selectedCsvFile?.name}</span>
+              </div>
+
+              {/* Warning message */}
+              {replaceMode ? (
+                <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-xs text-orange-800 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertCircle size={13} />
+                    Replace Mode is ON
+                  </p>
+                  <p>This will permanently delete <strong>all</strong> existing Course Offerings, Subjects, and Rooms — then import the new file from scratch.</p>
+                  <p className="font-semibold">We strongly recommend downloading a backup before continuing.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-on-surface-variant">
+                  Would you like to download a backup of your current course offerings before the import runs?
+                </p>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBackupPrompt(false);
+                    exportToCSV().then(() => runImport());
+                  }}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors ${
+                    replaceMode ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary/90'
+                  }`}
+                >
+                  <Download size={15} />
+                  Download Backup, then Import
+                </button>
+                <button
+                  type="button"
+                  onClick={runImport}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  <Upload size={15} />
+                  Skip Backup &amp; Import Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupPrompt(false)}
+                  className="w-full rounded-xl px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {confirmDialog && (

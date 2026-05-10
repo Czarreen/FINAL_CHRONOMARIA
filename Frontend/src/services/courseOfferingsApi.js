@@ -67,12 +67,27 @@ export async function deleteCourseOffering(id) {
   return response.json();
 }
 
-export async function importCourseOfferingsCsv({ csvText, fileName }) {
-  const response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ csvText, fileName }),
-  });
+export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode = false }) {
+  // 10 minute timeout — large CSV + replace mode can take a long time
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvText, fileName, replaceMode }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Import timed out after 10 minutes. Try a smaller file or check your connection.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const body = await response.text();

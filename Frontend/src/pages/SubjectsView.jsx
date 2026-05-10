@@ -305,8 +305,12 @@ export default function SubjectsView() {
     }
   }
 
-  async function handleEditSubject(subject) {
-    setEditingSubject(subject);
+  async function handleEditSubject(subject, { fromNotification = false, missingFields = [] } = {}) {
+    setEditingSubject({
+      ...subject,
+      _fromNotification: fromNotification,
+      _missingFields: missingFields,
+    });
     setEditingData({
       subject_code: subject.subject_code || '',
       subject_course_no: subject.subject_course_no || '',
@@ -540,7 +544,8 @@ export default function SubjectsView() {
               buttonLabel="Issues"
               onItemEdit={(item) => {
                 const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
-                if (subj) handleEditSubject(subj);
+                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
               }}
               onItemJump={(item) => {
                 const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
@@ -930,15 +935,18 @@ export default function SubjectsView() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Room(s)
+                    MTH Room
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newSubject.mth_room}
                     onChange={(e) => setNewSubject({ ...newSubject, mth_room: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                    placeholder="e.g., 101/102"
-                  />
+                  >
+                    <option value="">— No Room —</option>
+                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
@@ -954,15 +962,18 @@ export default function SubjectsView() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Room(s)
+                    TFS Room
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newSubject.tfs_room}
                     onChange={(e) => setNewSubject({ ...newSubject, tfs_room: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                    placeholder="e.g., 201"
-                  />
+                  >
+                    <option value="">— No Room —</option>
+                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1045,7 +1056,14 @@ export default function SubjectsView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Edit Subject</h3>
+              <div>
+                <h3 className="text-xl font-bold text-on-surface">
+                  {editingSubject._fromNotification ? 'Fix Missing Fields' : 'Edit Subject'}
+                </h3>
+                {editingSubject._fromNotification && (
+                  <p className="text-xs text-amber-600 mt-0.5">Only fields with missing data are editable. Filled fields are locked.</p>
+                )}
+              </div>
               <button
                 onClick={() => setShowEditModal(false)}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
@@ -1070,8 +1088,9 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_code}
                   onChange={(e) => setEditingData({ ...editingData, subject_code: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., CMSC 11"
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_code')}
                 />
               </div>
 
@@ -1083,8 +1102,9 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_course_no}
                   onChange={(e) => setEditingData({ ...editingData, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
                 />
               </div>
 
@@ -1096,8 +1116,9 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_descriptive_title}
                   onChange={(e) => setEditingData({ ...editingData, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., Introduction to Computer Science"
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_descriptive_title')}
                 />
               </div>
 
@@ -1110,21 +1131,26 @@ export default function SubjectsView() {
                     type="text"
                     value={editingData.mth_schedule}
                     onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     placeholder="e.g., M 7:00-10:00"
+                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_schedule')}
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Room(s)
+                    MTH Room
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editingData.mth_room}
                     onChange={(e) => setEditingData({ ...editingData, mth_room: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                    placeholder="e.g., 101/102"
-                  />
+                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_room')}
+                  >
+                    <option value="">— No Room —</option>
+                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
@@ -1136,19 +1162,24 @@ export default function SubjectsView() {
                     onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                     placeholder="e.g., T 1:00-4:00"
+                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_schedule')}
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Room(s)
+                    TFS Room
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editingData.tfs_room}
                     onChange={(e) => setEditingData({ ...editingData, tfs_room: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                    placeholder="e.g., 201"
-                  />
+                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_room')}
+                  >
+                    <option value="">— No Room —</option>
+                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
