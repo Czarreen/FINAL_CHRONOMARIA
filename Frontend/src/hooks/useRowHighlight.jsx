@@ -11,12 +11,15 @@ export function RowHighlightProvider({ children }) {
 
   const clearHighlight = useCallback(() => {
     if (highlighted.element) {
-      highlighted.element.classList.remove('row-highlighted', 'row-highlighted-entrance');
+      highlighted.element.classList.remove(
+        'row-highlighted', 'row-highlighted-critical', 'row-highlighted-medium',
+        'row-highlighted-low', 'row-highlighted-entrance'
+      );
     }
     setHighlightedState({ rowId: null, viewName: null, element: null });
   }, [highlighted]);
 
-  const setHighlight = useCallback((rowId, viewName) => {
+  const setHighlight = useCallback((rowId, viewName, severity = null) => {
     const selector = `[id$="-row-${rowId}"]`;
     const element = document.querySelector(selector);
 
@@ -24,7 +27,12 @@ export function RowHighlightProvider({ children }) {
 
     clearHighlight();
 
-    element.classList.add('row-highlighted', 'row-highlighted-entrance');
+    const severityClass = severity === 'critical' ? 'row-highlighted-critical'
+      : severity === 'medium' ? 'row-highlighted-medium'
+      : severity === 'low' ? 'row-highlighted-low'
+      : 'row-highlighted';
+
+    element.classList.add(severityClass, 'row-highlighted-entrance');
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     setHighlightedState({ rowId, viewName, element });

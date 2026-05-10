@@ -14,6 +14,37 @@ export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, 
   return res.json();
 }
 
+export async function resolveCourseOfferingNotification(id) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/${id}/resolve`, { method: 'PATCH' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to resolve notification: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function rescanAllCourseOfferingNotifications() {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, { method: 'POST' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to rescan notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function syncCourseOfferingNotifications(offeringId) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offering_id: offeringId }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to sync notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
 export default { fetchCourseOfferingNotifications };
 
 export async function fetchFacultyNotifications({ page = 1, limit = 500 } = {}) {
