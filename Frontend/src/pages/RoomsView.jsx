@@ -3,6 +3,7 @@ import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft,
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom } from '../services/roomsApi.js';
 import { resolveRoomNotification } from '../services/notificationsApi.js';
+import { createAuditLog, buildChangeSummary } from '../services/auditLogsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 
 export default function RoomsView() {
@@ -300,6 +301,7 @@ export default function RoomsView() {
       setRooms([...rooms, newRoom]);
       setShowAddModal(false);
       resetForm();
+      createAuditLog({ action: 'Created room', module: 'Rooms', description: `Added room "${newRoom.room_name}"`, changesAfter: newRoom });
     } catch (err) {
       console.error('Failed to create room:', err);
       setFormError(err.message);
@@ -330,6 +332,7 @@ export default function RoomsView() {
       setShowEditModal(false);
       setEditingRoom(null);
       resetForm();
+      createAuditLog({ action: 'Updated room', module: 'Rooms', description: `Updated room "${updatedRoom.room_name}": ${buildChangeSummary(editingRoom, updatedRoom, { room_name: 'Name', room_type: 'Type', room_status: 'Status' })}` });
     } catch (err) {
       console.error('Failed to update room:', err);
       setFormError(err.message);
@@ -346,6 +349,7 @@ export default function RoomsView() {
       await deleteRoom(deleteTargetRoom.room_id);
       setRooms(rooms.filter((r) => r.room_id !== deleteTargetRoom.room_id));
       setShowDeleteModal(false);
+      createAuditLog({ action: 'Deleted room', module: 'Rooms', description: `Deleted room "${deleteTargetRoom.room_name}"`, changesBefore: deleteTargetRoom });
       setDeleteTargetRoom(null);
     } catch (err) {
       console.error('Failed to delete room:', err);

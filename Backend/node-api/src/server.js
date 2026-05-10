@@ -7,6 +7,9 @@ import facultyRouter from './routes/faculty.js';
 import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
 import notificationsRouter from './routes/notifications.js';
+import usersRouter from './routes/users.js';
+import auditLogsRouter from './routes/auditLogs.js';
+import authRouter from './routes/auth.js';
 
 const app = express();
 
@@ -22,12 +25,15 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'node-api' });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/faculty', facultyRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/audit-logs', auditLogsRouter);
 
 app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);

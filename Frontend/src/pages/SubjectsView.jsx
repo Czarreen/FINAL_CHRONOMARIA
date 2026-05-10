@@ -5,6 +5,7 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { createAuditLog, buildChangeSummary } from '../services/auditLogsApi.js';
 
 export default function SubjectsView() {
   const [subjects, setSubjects] = useState([]);
@@ -286,6 +287,7 @@ export default function SubjectsView() {
       setUpdatingStatus(subjectId);
       setUpdateError(null);
       await updateSubjectStatus(subjectId, newStatus);
+      createAuditLog({ action: `Set subject status to ${newStatus}`, module: 'Subjects', description: `Changed subject #${subjectId} status to ${newStatus}` });
       // Update local state
       setSubjects(subjects.map(s => 
         s.subject_id === subjectId 
@@ -342,6 +344,7 @@ export default function SubjectsView() {
       setShowEditModal(false);
       setEditingSubject(null);
       await loadSubjectNotifications();
+      createAuditLog({ action: 'Updated subject', module: 'Subjects', description: `Updated subject "${updated.subject_code}": ${buildChangeSummary(editingSubject, updated, { subject_code: 'Code', subject_descriptive_title: 'Title', subject_units: 'Units', subject_lec_hrs: 'Lec Hrs', subject_lab_hrs: 'Lab Hrs', subject_status: 'Status' })}` });
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
@@ -365,6 +368,7 @@ export default function SubjectsView() {
       }
       await loadSubjects();
       await loadSubjectNotifications();
+      createAuditLog({ action: 'Deleted subject', module: 'Subjects', description: `Deleted subject "${subject.subject_code}"`, changesBefore: subject });
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadSubjects();
@@ -447,6 +451,7 @@ export default function SubjectsView() {
       setSavingSubject(true);
       setSubjectError(null);
       const createdSubject = await createSubject(newSubject);
+      createAuditLog({ action: 'Created subject', module: 'Subjects', description: `Added subject "${createdSubject?.subject_code || newSubject.subject_code}"`, changesAfter: createdSubject });
       // Reset form and close modal
       setShowAddModal(false);
       setNewSubject({
