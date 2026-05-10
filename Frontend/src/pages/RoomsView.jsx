@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom } from '../services/roomsApi.js';
+import { resolveRoomNotification } from '../services/notificationsApi.js';
+import NotificationButton from '../components/NotificationButton.jsx';
 
 export default function RoomsView() {
   const [rooms, setRooms] = useState([]);
@@ -9,6 +11,14 @@ export default function RoomsView() {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 50;
+
+  // Notification states
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [resolveMessage, setResolveMessage] = useState(null);
+  const [resolveMessageType, setResolveMessageType] = useState(null); // 'success' or 'error'
+  const [notificationSearch, setNotificationSearch] = useState('');
+  const [notificationStats, setNotificationStats] = useState({ total: 0, critical: 0, medium: 0, low: 0 });
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -44,9 +54,95 @@ export default function RoomsView() {
     }
   };
 
+  const loadRoomNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const url = `${baseUrl}/api/notifications/rooms?is_resolved=false&limit=200`;
+      console.log('Fetching room notifications from:', url);
+      const response = await fetch(url);
+      console.log('Response status:', response.status);
+      if (!response.ok) throw new Error(`Failed to fetch room notifications: ${response.status}`);
+      const data = await response.json();
+      console.log('Full API response:', data);
+      console.log('Rows array:', data.rows);
+      console.log('Rows count:', data.rows ? data.rows.length : 0);
+      console.log('Total from API:', data.total);
+      
+      // Transform API response into NotificationButton format
+      // Group multiple issues from the same room into one notification
+      const notificationMap = {};
+      
+      (data.rows || []).forEach((notification) => {
+        const room = rooms.find((r) => r.room_id === notification.entity_id);
+        const roomName = room ? room.room_name : `Room #${notification.entity_id}`;
+        
+        // Use the first issue's id as the notification id (we'll use the room_id as the key)
+        const key = `room-${notification.entity_id}`;
+        
+        // Map severity from 'high' to 'critical' for UI display
+        const mappedSeverity = notification.severity === 'high' ? 'critical' : (notification.severity || 'medium');
+        
+        if (!notificationMap[key]) {
+          notificationMap[key] = {
+            id: notification.id, // Store first issue's id
+            title: roomName,
+            severity: mappedSeverity,
+            issues: [],
+            room_id: notification.entity_id,
+          };
+        }
+        
+        // Map field names to more descriptive text
+        let fieldLabel = notification.field_name || 'unknown';
+        if (fieldLabel.toLowerCase().includes('name')) {
+          fieldLabel = 'missing name';
+        } else if (fieldLabel.toLowerCase().includes('type')) {
+          fieldLabel = 'missing type';
+        } else if (fieldLabel.toLowerCase().includes('status')) {
+          fieldLabel = 'missing status';
+        }
+        
+        // Add this issue to the issues array
+        notificationMap[key].issues.push({
+          field: fieldLabel,
+          message: notification.message,
+          type: notification.issue_type,
+        });
+      });
+      
+      // Convert map to array
+      const transformedNotifications = Object.values(notificationMap);
+      
+      // Calculate stats by severity
+      const stats = { total: transformedNotifications.length, critical: 0, medium: 0, low: 0 };
+      transformedNotifications.forEach((notif) => {
+        if (notif.severity === 'critical') stats.critical += 1;
+        else if (notif.severity === 'medium') stats.medium += 1;
+        else if (notif.severity === 'low') stats.low += 1;
+      });
+      
+      console.log('Transformed notifications:', transformedNotifications);
+      setNotifications(transformedNotifications);
+      setNotificationStats(stats);
+    } catch (err) {
+      console.error('Failed to fetch room notifications:', err);
+      setNotifications([]);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadRooms();
   }, []);
+
+  // Reload notifications after rooms are loaded (needed to map room names)
+  useEffect(() => {
+    if (rooms.length > 0) {
+      loadRoomNotifications();
+    }
+  }, [rooms.length]);
 
   const { stats, totalPages, currentRooms } = useMemo(() => {
     // Filter rooms by search query and status
@@ -90,6 +186,70 @@ export default function RoomsView() {
   const handleNextPage = () => {
     setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
+
+  // Notification handlers
+  function handleNotificationJump(item) {
+    const rowElement = document.getElementById(`room-row-${item.room_id}`);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      rowElement.classList.add('animate-pulse');
+      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+    }
+  }
+
+  function handleNotificationEdit(item) {
+    // Find the room by ID and open edit modal
+    const room = rooms.find((r) => r.room_id === item.room_id);
+    if (room) {
+      handleEditClick(room);
+      // Scroll to the room row
+      const rowElement = document.getElementById(`room-row-${item.room_id}`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
+
+  async function handleResolveNotification(item) {
+    try {
+      // Find the actual room data
+      const room = rooms.find((r) => r.room_id === item.room_id);
+      
+      if (!room) {
+        setResolveMessage('Room not found');
+        setResolveMessageType('error');
+        setTimeout(() => setResolveMessage(null), 3000);
+        return;
+      }
+
+      // Check if all required fields are filled
+      const hasName = room.room_name && room.room_name.trim() !== '';
+      const hasType = room.room_type && room.room_type.trim() !== '';
+      const hasStatus = room.room_status && room.room_status.trim() !== '';
+
+      if (!hasName || !hasType || !hasStatus) {
+        setResolveMessage('Issue is not yet Resolved');
+        setResolveMessageType('error');
+        setTimeout(() => setResolveMessage(null), 3000);
+        return;
+      }
+
+      // All requirements met, resolve the notification
+      await resolveRoomNotification(item.id);
+      setResolveMessage('Issue resolved successfully!');
+      setResolveMessageType('success');
+      // Reload notifications after resolving
+      await loadRoomNotifications();
+      // Clear message after 3 seconds
+      setTimeout(() => setResolveMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to resolve notification:', err);
+      setResolveMessage('Issue is not yet Resolved');
+      setResolveMessageType('error');
+      // Clear message after 3 seconds
+      setTimeout(() => setResolveMessage(null), 3000);
+    }
+  }
 
   // Form handlers
   const resetForm = () => {
@@ -197,52 +357,71 @@ export default function RoomsView() {
 
   return (
     <div className="space-y-gutter animate-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <h2 className="text-headline-xl font-headline-xl text-on-surface">Available Rooms</h2>
-          <p className="mt-1 text-body-md text-on-surface-variant">Manage campus facilities and their capacities.</p>
+      {resolveMessage && (
+        <div className={`rounded-lg px-4 py-3 ${
+          resolveMessageType === 'success'
+            ? 'bg-green-50 text-green-800 border border-green-200'
+            : 'bg-red-50 text-red-800 border border-red-200'
+        }`}>
+          {resolveMessage}
         </div>
-        <div className="relative">
-          <button
-            onClick={handleAddClick}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={18} />
-            <span>Add New Room</span>
-          </button>
+      )}
+      <div className="flex gap-3">
+        <div className="glass-panel flex items-center p-8" style={{flex: '0 0 63.41%'}}>
+          <div className="space-y-1">
+            <h2 className="text-headline-xl font-headline-xl text-on-surface">Available Rooms</h2>
+            <p className="text-body-md text-on-surface-variant">Manage campus facilities and their capacities.</p>
+          </div>
+          <div className="flex-1"></div>
+          <div className="flex items-center gap-3">
+            <NotificationButton
+              items={notifications}
+              title="Room Issues"
+              buttonLabel="Notifications"
+              emptyLabel="No room data quality issues detected"
+              panelSize="md"
+              onItemJump={handleNotificationJump}
+              onItemEdit={handleNotificationEdit}
+              onItemResolve={handleResolveNotification}
+              searchPlaceholder="Search by name, type or status"
+              notificationSearch={notificationSearch}
+              onNotificationSearchChange={setNotificationSearch}
+              notificationStats={notificationStats}
+            />
+            <button
+              onClick={handleAddClick}
+              className="btn-primary flex flex-row items-center justify-center gap-2 py-2 px-4 whitespace-nowrap"
+            >
+              <Plus size={18} />
+              <span>Add New Room</span>
+            </button>
+          </div>
+        </div>
+        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+          <DoorOpen size={24} className="text-primary" />
+          <span className="mt-3 text-3xl font-bold text-on-surface">{stats.totalRooms}</span>
+          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Total Rooms</span>
+        </div>
+        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+          <Maximize2 size={24} className="text-green-500" />
+          <span className="mt-3 text-3xl font-bold text-on-surface">{stats.availableRooms}</span>
+          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Available</span>
+        </div>
+        <div className="glass-panel flex flex-col items-center justify-center p-4 text-center" style={{flex: '0 0 12.20%'}}>
+          <Monitor size={24} className="text-blue-500" />
+          <span className="mt-3 text-3xl font-bold text-on-surface">{stats.roomTypeCount}</span>
+          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Room Types</span>
         </div>
       </div>
 
-      <div className="glass-panel overflow-hidden">
-        <div className="border-b border-white/50 px-6 py-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Total Rooms', val: String(stats.totalRooms), icon: DoorOpen },
-              { label: 'Available', val: String(stats.availableRooms), icon: Maximize2 },
-              { label: 'Room Types', val: String(stats.roomTypeCount), icon: Monitor },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-xl bg-white/60 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">{stat.label}</p>
-                    <p className="mt-2 text-2xl font-bold text-on-surface">{stat.val}</p>
-                  </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <stat.icon size={18} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="border-b border-white/50 px-6 py-4">
+      <div className="glass-panel space-y-4 p-4">
+        <div className="border-b border-white/50 px-2 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="relative flex-1 md:max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" size={16} />
               <input
                 type="text"
-                placeholder="Search by name, type, or status..."
+                placeholder="Search by name, type or status..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -253,7 +432,7 @@ export default function RoomsView() {
             </div>
 
             <div className="flex gap-2">
-              {['', 'available', 'maintenance', 'occupied'].map((status) => (
+              {['', 'available', 'unavailable'].map((status) => (
                 <button
                   key={status}
                   onClick={() => {
@@ -266,7 +445,7 @@ export default function RoomsView() {
                       : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
                   }`}
                 >
-                  {status === '' ? 'All' : status === 'available' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status === '' ? 'All' : status === 'available' ? 'Available' : status.charAt(0).toUpperCase() + status.slice(1)}
                 </button>
               ))}
             </div>
@@ -310,23 +489,25 @@ export default function RoomsView() {
                 </tr>
               ) : (
                 currentRooms.map((room) => (
-                  <tr key={room.room_id} className="group transition-colors hover:bg-white/45">
+                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className="group transition-colors hover:bg-white/45">
                     <td className="px-6 py-4">
                       <p className="font-bold text-on-surface">{room.room_name}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-on-surface-variant">{room.room_type || 'N/A'}</td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`badge ${
-                          room.room_status === 'available'
-                            ? 'badge-success'
-                            : room.room_status === 'maintenance'
-                            ? 'badge-warning'
-                            : 'badge-error'
-                        }`}
-                      >
-                        {room.room_status}
-                      </span>
+                      {room.room_status ? (
+                        <span
+                          className={`badge ${
+                            room.room_status === 'available'
+                              ? 'badge-success'
+                              : room.room_status === 'unavailable'
+                              ? 'badge-warning'
+                              : 'badge-error'
+                          }`}
+                        >
+                          {room.room_status}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-70 transition-opacity group-hover:opacity-100">
@@ -447,7 +628,7 @@ export default function RoomsView() {
                   disabled={isSubmitting}
                 >
                   <option value="available">Available</option>
-                  <option value="maintenance">Maintenance</option>
+                  <option value="unavailable">Unavailable</option>
                   <option value="occupied">Occupied</option>
                 </select>
               </div>
@@ -531,8 +712,7 @@ export default function RoomsView() {
                   disabled={isSubmitting}
                 >
                   <option value="available">Available</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="occupied">Occupied</option>
+                  <option value="unavailable">Unavailable</option>
                 </select>
               </div>
 

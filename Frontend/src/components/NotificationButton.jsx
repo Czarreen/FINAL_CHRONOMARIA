@@ -16,6 +16,7 @@ export default function NotificationButton({
   notificationSearch = '',
   onNotificationSearchChange,
   notificationStats = { total: 0, critical: 0, medium: 0, low: 0 },
+  searchPlaceholder = 'Search by code or title...',
 }) {
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -33,7 +34,12 @@ export default function NotificationButton({
         let category = 'Other';
 
         const f = field.toLowerCase();
-        if (f.includes('room')) category = 'Missing Room';
+        // Room-specific categories
+        if (f.includes('name')) category = 'Missing Name';
+        else if (f.includes('type')) category = 'Missing Type';
+        else if (f.includes('status')) category = 'Missing Status';
+        // Shared/Faculty/Subject categories
+        else if (f.includes('room')) category = 'Missing Room';
         else if (f.includes('schedule')) category = 'Missing Schedule';
         else if (f.includes('code')) category = 'Missing Code';
         else if (f.includes('title') || f.includes('role') || f.includes('name')) category = 'Missing Title';
@@ -53,8 +59,14 @@ export default function NotificationButton({
       return (notif.issues || []).some((issue) => {
         const field = issue.field || 'Other';
         let category = 'Other';
+
         const f2 = field.toLowerCase();
-        if (f2.includes('room')) category = 'Missing Room';
+        // Room-specific categories
+        if (f2.includes('name')) category = 'Missing Name';
+        else if (f2.includes('type')) category = 'Missing Type';
+        else if (f2.includes('status')) category = 'Missing Status';
+        // Shared/Faculty/Subject categories
+        else if (f2.includes('room')) category = 'Missing Room';
         else if (f2.includes('schedule')) category = 'Missing Schedule';
         else if (f2.includes('code')) category = 'Missing Code';
         else if (f2.includes('title') || f2.includes('role') || f2.includes('name')) category = 'Missing Title';
@@ -261,17 +273,7 @@ export default function NotificationButton({
             {/* Category Filters */}
             {Object.keys(categoryCounts).length > 0 && (
               <div className="flex flex-wrap gap-1 text-xs">
-                <button
-                  onClick={() => setCategoryFilter('all')}
-                  className={`rounded px-2 py-1 font-semibold transition-colors ${
-                    categoryFilter === 'all'
-                      ? 'bg-slate-300 text-on-surface'
-                      : 'text-on-surface-variant hover:bg-slate-100'
-                  }`}
-                >
-                  All ({notificationStats.total})
-                </button>
-                {['Missing Room', 'Missing Schedule', 'Missing Code', 'Missing Title', 'Missing Department', 'Other'].map((category) => {
+                {['Missing Name', 'Missing Type', 'Missing Status', 'Missing Room', 'Missing Schedule', 'Missing Code', 'Missing Title', 'Missing Department', 'Other'].map((category) => {
                   const count = categoryCounts[category];
                   if (!count) return null;
                   return (
@@ -294,7 +296,7 @@ export default function NotificationButton({
             {/* Search Input */}
             <input
               type="text"
-              placeholder="Search by code or title..."
+              placeholder={searchPlaceholder}
               value={notificationSearch}
               onChange={(e) => onNotificationSearchChange?.(e.target.value)}
               className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"

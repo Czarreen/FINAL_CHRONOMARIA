@@ -114,6 +114,15 @@ export async function resolveFacultyNotification(id) {
   return res.json();
 }
 
+export async function resolveRoomNotification(id) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/${id}/resolve`, { method: 'PATCH' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to resolve notification: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function clearAllNotifications() {
   const res = await fetch(`${API_BASE_URL}/api/notifications/clear-all`, { method: 'DELETE' });
   if (!res.ok) {
