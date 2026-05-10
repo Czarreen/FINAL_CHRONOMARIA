@@ -515,6 +515,21 @@ export default function CourseOfferingView() {
     'TFS Schedule': 'tfs_schedule',
   };
 
+  // Maps backend snake_case field names to display names
+  const BACKEND_FIELD_TO_DISPLAY_NAME = {
+    'code': 'Course Code',
+    'course_no': 'Course Number',
+    'descriptive_title': 'Course Title',
+    'department_id': 'Department',
+    'curr_id': 'Curriculum',
+    'units': 'Credit Units',
+    'lec_hrs': 'Lecture Hours',
+    'mth_schedule': 'MTH Schedule',
+    'tfs_schedule': 'TFS Schedule',
+    'mth_room_id': 'MTH Room',
+    'tfs_room_id': 'TFS Room',
+  };
+
   // Set of column keys that are editable in notification-edit mode (null = all editable)
   const editableKeys = useMemo(() => {
     if (!editingFromNotification) return null;
@@ -605,12 +620,13 @@ export default function CourseOfferingView() {
           dbIds: [],
         };
       }
+      const displayFieldName = BACKEND_FIELD_TO_DISPLAY_NAME[row.field_name] || row.field_name;
       byOffering[key].issues.push({
-        field: row.field_name,
+        field: displayFieldName,
         message: row.message,
         details: row.details,
       });
-      byOffering[key].missingFields.push(row.field_name);
+      byOffering[key].missingFields.push(displayFieldName);
       byOffering[key].dbIds.push(row.id);
       // Escalate severity if any issue is high/critical
       if (row.severity === 'high' || row.severity === 'critical') {
