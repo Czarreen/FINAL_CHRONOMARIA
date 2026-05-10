@@ -183,6 +183,11 @@ export function buildCourseOfferingNotifications(offerings) {
     }
 
     if (issues.length > 0) {
+      // Escalate: 4+ issues on a single offering means it's essentially unusable → critical
+      if (severity !== 'critical' && issues.length >= 4) {
+        severity = 'critical';
+      }
+
       const titleValue = offering.code || `Row ${index + 1}`;
       const subtitleValue = offering.descriptive_title || '';
 
