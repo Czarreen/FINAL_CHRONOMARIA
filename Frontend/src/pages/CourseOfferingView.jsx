@@ -22,6 +22,7 @@ import {
   Download,
   Settings,
   Check,
+  Lock,
 } from 'lucide-react';
 import {
   fetchCourseOfferingsPage,
@@ -34,8 +35,7 @@ import {
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchCourseOfferingNotifications } from '../services/notificationsApi';
-import { buildCourseOfferingNotifications } from '../utils/missingData';
+import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { createAuditLog, buildChangeSummary } from '../services/auditLogsApi.js';
 
@@ -62,6 +62,9 @@ export default function CourseOfferingView() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
   const [importError, setImportError] = useState('');
+  const [replaceMode, setReplaceMode] = useState(false);
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+  const [importResultModal, setImportResultModal] = useState(null); // holds summary after import finishes
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
@@ -77,11 +80,13 @@ export default function CourseOfferingView() {
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
-  const [allOfferingsForNotifications, setAllOfferingsForNotifications] = useState([]);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
   const [pendingScrollToOfferingId, setPendingScrollToOfferingId] = useState(null);
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
+  const [editingFromNotification, setEditingFromNotification] = useState(false);
+  const [notificationMissingFields, setNotificationMissingFields] = useState(new Set());
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const { setHighlight, clearHighlight } = useRowHighlight();
 
@@ -295,7 +300,7 @@ export default function CourseOfferingView() {
     }
   }
 
-  async function handleEditOffering(offering) {
+  async function handleEditOffering(offering, notifItem = null) {
     setEditingId(offering.id);
     setEditingData({
       code: offering.code || '',
@@ -312,6 +317,12 @@ export default function CourseOfferingView() {
       tfs_schedule: offering.tfs_schedule || '',
       tfs_room_id: resolveRoomIds(offering, 'tfs').map(String),
     });
+    setEditingFromNotification(!!notifItem);
+    setNotificationMissingFields(
+      notifItem
+        ? new Set((notifItem.issues || []).map((i) => i.field))
+        : new Set()
+    );
     setOfferingError(null);
   }
 
@@ -338,6 +349,8 @@ export default function CourseOfferingView() {
       const originalOffering = offerings.find((o) => o.id === editingId);
       await updateCourseOffering(editingId, payload);
       createAuditLog({ action: 'Updated course offering', module: 'Course Offerings', description: `Updated offering "${editingData.code}": ${buildChangeSummary(originalOffering, payload, { code: 'Code', descriptive_title: 'Title', section: 'Section', units: 'Units', lec_hrs: 'Lec Hrs', lab_hrs: 'Lab Hrs', mth_schedule: 'MTH Schedule', tfs_schedule: 'TFS Schedule' })}` });
+      const savedId = editingId;
+      await updateCourseOffering(savedId, payload);
       setSuccessMessage(`Updated "${editingData.code}"`);
       setEditingId(null);
       setEditingData({});
@@ -345,11 +358,14 @@ export default function CourseOfferingView() {
       setNotificationMissingFields(new Set());
       // Re-sync notifications for this offering in the background then refresh list
       syncCourseOfferingNotifications(editingId).catch(() => {});
+      syncCourseOfferingNotifications(savedId).catch(() => {});
       await loadInitialPage();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setEditingId(null);
         setEditingData({});
+        setEditingFromNotification(false);
+        setNotificationMissingFields(new Set());
         await loadInitialPage();
         setUpdateError('That offering was removed. The list has been refreshed.');
         return;
@@ -409,31 +425,41 @@ export default function CourseOfferingView() {
     setRefreshToken((current) => current + 1);
   }
 
-  async function handleImportCsv() {
+  function handleClickImport() {
     if (!selectedCsvFile) {
       setImportError('Choose a CSV file first.');
       return;
     }
+    setImportError('');
+    setImportSummary(null);
+    setShowBackupPrompt(true);
+  }
+
+  async function runImport() {
+    setShowBackupPrompt(false);
+    setImportingCsv(true);
+    setImportError('');
+    setImportSummary(null);
+    setImportResultModal(null);
 
     try {
-      setImportingCsv(true);
-      setImportError('');
-      setImportSummary(null);
-
       const csvText = await selectedCsvFile.text();
       const response = await importCourseOfferingsCsv({
         csvText,
         fileName: selectedCsvFile.name,
+        replaceMode,
       });
 
-      setImportSummary(response?.summary ?? null);
+      const summary = response?.summary ?? null;
+      setImportSummary(summary);
+      setImportResultModal(summary);
+      setRefreshTrigger((prev) => prev + 1);
       await loadInitialPage();
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Failed to import CSV.');
     } finally {
       setImportingCsv(false);
     }
-    setRefreshTrigger((prev) => prev + 1);
   }
 
   const numericCols = new Set(['units', 'lec_hrs', 'lab_hrs', 'curr_id', 'mth_room_id', 'tfs_room_id']);
@@ -491,6 +517,51 @@ export default function CourseOfferingView() {
       ],
     },
   ];
+
+  // Maps issue.field strings (from buildCourseOfferingNotifications) → editingData keys
+  const NOTIFICATION_FIELD_TO_KEY = {
+    'Course Code': 'code',
+    'Course Number': 'course_no',
+    'Course Title': 'descriptive_title',
+    'Department': 'department_id',
+    'Curriculum': 'curr_id',
+    'Credit Units': 'units',
+    'Lecture Hours': 'lec_hrs',
+    'Schedule': ['mth_schedule', 'tfs_schedule'],
+    'Room Assignment': ['mth_room_id', 'tfs_room_id'],
+    'MTH Room': 'mth_room_id',
+    'TFS Room': 'tfs_room_id',
+    'MTH Schedule': 'mth_schedule',
+    'TFS Schedule': 'tfs_schedule',
+  };
+
+  // Maps backend snake_case field names to display names
+  const BACKEND_FIELD_TO_DISPLAY_NAME = {
+    'code': 'Course Code',
+    'course_no': 'Course Number',
+    'descriptive_title': 'Course Title',
+    'department_id': 'Department',
+    'curr_id': 'Curriculum',
+    'units': 'Credit Units',
+    'lec_hrs': 'Lecture Hours',
+    'mth_schedule': 'MTH Schedule',
+    'tfs_schedule': 'TFS Schedule',
+    'mth_room_id': 'MTH Room',
+    'tfs_room_id': 'TFS Room',
+  };
+
+  // Set of column keys that are editable in notification-edit mode (null = all editable)
+  const editableKeys = useMemo(() => {
+    if (!editingFromNotification) return null;
+    const keys = new Set();
+    notificationMissingFields.forEach((field) => {
+      const mapped = NOTIFICATION_FIELD_TO_KEY[field];
+      if (Array.isArray(mapped)) mapped.forEach((k) => keys.add(k));
+      else if (mapped) keys.add(mapped);
+    });
+    return keys;
+  }, [editingFromNotification, notificationMissingFields]);
+
   useEffect(() => {
     if (!filterText) {
       setPage(1);
@@ -551,50 +622,72 @@ export default function CourseOfferingView() {
 
   const [notifications, setNotifications] = useState([]);
 
-  // Fetch all offerings for notification scanning (not paginated)
-  useEffect(() => {
-    let active = true;
-
-    async function loadAllOfferingsForNotifications() {
-      try {
-        const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: '' });
-        if (!active) return;
-        setAllOfferingsForNotifications(
-          (rows || []).map((row) => ({
-            ...row,
-            department_name:
-              row.departments?.department_name ??
-              (row.department_id !== null && row.department_id !== undefined
-                ? `Department #${row.department_id}`
-                : null),
-          }))
-        );
-      } catch (err) {
-        console.error('Failed to load all offerings for notifications:', err);
-        setAllOfferingsForNotifications([]);
+  // Transform flat DB rows (one row per issue) into grouped notification objects
+  function transformDbNotifications(rows) {
+    const byOffering = {};
+    (rows || []).forEach((row) => {
+      const key = row.entity_id;
+      if (!byOffering[key]) {
+        byOffering[key] = {
+          id: row.entity_id,
+          offeringId: row.entity_id,
+          entity_id: row.entity_id,
+          title: row.details?.code ? `${row.details.code}` : `Offering #${row.entity_id}`,
+          description: row.message,
+          severity: row.severity === 'high' ? 'critical' : (row.severity || 'medium'),
+          issues: [],
+          missingFields: [],
+          dbIds: [],
+        };
       }
-    }
+      const displayFieldName = BACKEND_FIELD_TO_DISPLAY_NAME[row.field_name] || row.field_name;
+      byOffering[key].issues.push({
+        field: displayFieldName,
+        message: row.message,
+        details: row.details,
+      });
+      byOffering[key].missingFields.push(displayFieldName);
+      byOffering[key].dbIds.push(row.id);
+      // Escalate severity if any issue is high/critical
+      if (row.severity === 'high' || row.severity === 'critical') {
+        byOffering[key].severity = 'critical';
+      }
+    });
+    return Object.values(byOffering);
+  }
 
-    loadAllOfferingsForNotifications();
-    return () => { active = false; };
-  }, [refreshTrigger]);
-
-  // Build notifications from all offerings (not just current page)
+  // Fetch persisted notifications from backend
   useEffect(() => {
     let active = true;
+
     async function loadNotifications() {
+      setNotificationsLoading(true);
       try {
-        const localNotifications = buildCourseOfferingNotifications(allOfferingsForNotifications);
+        const payload = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
         if (!active) return;
-        setNotifications(localNotifications);
+
+        const rowCount = payload.total ?? payload.rows?.length ?? 0;
+        if (rowCount === 0) {
+          // DB is empty — auto-rescan all offerings to populate the table
+          await rescanAllCourseOfferingNotifications();
+          if (!active) return;
+          const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+          if (!active) return;
+          setNotifications(transformDbNotifications(refetched.rows || []));
+        } else {
+          setNotifications(transformDbNotifications(payload.rows || []));
+        }
       } catch (err) {
-        console.error('Failed to build notifications:', err);
-        setNotifications([]);
+        console.error('Failed to load course offering notifications:', err);
+        if (active) setNotifications([]);
+      } finally {
+        if (active) setNotificationsLoading(false);
       }
     }
+
     loadNotifications();
     return () => { active = false; };
-  }, [allOfferingsForNotifications]);
+  }, [refreshTrigger]);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
@@ -632,7 +725,7 @@ export default function CourseOfferingView() {
     if (!item?.offeringId) return;
     const targetRow = document.getElementById(`offering-row-${item.offeringId}`);
     if (targetRow) {
-      setHighlight(item.offeringId, 'CourseOfferingView');
+      setHighlight(item.offeringId, 'CourseOfferingView', item.severity);
     } else {
       // Offering not on current page, find which page it's on
       setFindingNotificationRow(true);
@@ -659,15 +752,15 @@ export default function CourseOfferingView() {
     let offering = offerings.find((row) => row.id === item.offeringId);
 
     if (offering) {
-      handleEditOffering(offering);
-      setHighlight(item.offeringId, 'CourseOfferingView');
+      handleEditOffering(offering, item);
+      setHighlight(item.offeringId, 'CourseOfferingView', item.severity);
     } else {
       // Offering not on current page, fetch it by ID
       setFindingNotificationRow(true);
       fetchCourseOfferingById(item.offeringId)
         .then((offering) => {
           if (offering) {
-            handleEditOffering(offering);
+            handleEditOffering(offering, item);
             // Navigate to the page this offering is on
             return findOfferingPageNumber(item.offeringId);
           }
@@ -691,6 +784,35 @@ export default function CourseOfferingView() {
     }
   };
 
+  const resolveNotificationItem = async (item) => {
+    // Optimistically remove from local list
+    setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    try {
+      await Promise.all(
+        (item.dbIds || []).map((dbId) => resolveCourseOfferingNotification(dbId))
+      );
+    } catch (err) {
+      console.error('Failed to resolve notification:', err);
+      setRefreshTrigger((t) => t + 1);
+    }
+  };
+
+  const handleInlineSave = async ({ offeringId, field, value }) => {
+    const keyMap = {
+      'Course Code': 'code', 'Course Number': 'course_no', 'Course Title': 'descriptive_title',
+      'Curriculum': 'curr_id', 'Credit Units': 'units', 'Lecture Hours': 'lec_hrs',
+      'code': 'code', 'course_no': 'course_no', 'descriptive_title': 'descriptive_title',
+      'curr_id': 'curr_id', 'units': 'units', 'lec_hrs': 'lec_hrs',
+    };
+    const dbField = keyMap[field] || field;
+    try {
+      await updateCourseOffering(offeringId, { [dbField]: value });
+      syncCourseOfferingNotifications(offeringId).catch(() => {});
+      setRefreshTrigger((t) => t + 1);
+    } catch (err) {
+      console.error('Inline save failed:', err);
+    }
+  };
 
   const renderCellValue = (value) => {
     if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
@@ -1008,11 +1130,15 @@ export default function CourseOfferingView() {
               items={filteredNotifications}
               onItemJump={focusNotificationItem}
               onItemEdit={editNotificationItem}
+              onItemResolve={resolveNotificationItem}
+              onItemInlineSave={handleInlineSave}
               severityFilter={notificationFilter}
               onSeverityFilterChange={setNotificationFilter}
               notificationSearch={notificationSearch}
               onNotificationSearchChange={setNotificationSearch}
               notificationStats={notificationStats}
+              isRescanning={notificationsLoading}
+              totalEntityCount={totalRows}
             />
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
               <BookMarked size={12} className="text-primary" />
@@ -1101,30 +1227,103 @@ export default function CourseOfferingView() {
               <PlusCircle size={14} />
               <span>Add</span>
             </button>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/60 bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface-variant backdrop-blur hover:bg-white">
-              <FileUp size={16} className="text-primary" />
-              <span>{selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}</span>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setSelectedCsvFile(file);
-                  setImportError('');
-                  setImportSummary(null);
-                }}
-              />
-            </label>
-            <button
-              className="btn-primary flex items-center gap-2"
-              onClick={handleImportCsv}
-              type="button"
-              disabled={importingCsv}
-            >
-              <Upload size={18} />
-              <span>{importingCsv ? 'Importing...' : 'Import CSV'}</span>
-            </button>
+            {/* CSV Import group */}
+            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/80 p-1 backdrop-blur shadow-sm">
+              {/* File picker */}
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors select-none ${
+                  selectedCsvFile
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+                title="Choose a CSV file to import"
+              >
+                <FileUp size={14} className={selectedCsvFile ? 'text-primary' : 'text-on-surface-variant'} />
+                <span className="max-w-[120px] truncate">
+                  {selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}
+                </span>
+                {selectedCsvFile && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="ml-0.5 rounded p-0.5 hover:bg-primary/20"
+                    title="Clear file"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setSelectedCsvFile(null);
+                      setImportError('');
+                      setImportSummary(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedCsvFile(null);
+                        setImportError('');
+                        setImportSummary(null);
+                      }
+                    }}
+                  >
+                    <X size={11} />
+                  </span>
+                )}
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setSelectedCsvFile(file);
+                    setImportError('');
+                    setImportSummary(null);
+                  }}
+                />
+              </label>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Replace mode toggle */}
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium select-none transition-colors ${
+                  replaceMode
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'text-on-surface-variant hover:bg-slate-100'
+                }`}
+                title="Replace Mode: clears ALL Course Offerings, Subjects, and Rooms before importing the new file"
+              >
+                <input
+                  type="checkbox"
+                  checked={replaceMode}
+                  onChange={(e) => setReplaceMode(e.target.checked)}
+                  className="h-3 w-3 rounded border-slate-300 accent-orange-500"
+                />
+                <span>Replace All</span>
+                {replaceMode && (
+                  <span className="rounded bg-orange-200 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-800">
+                    New Sem
+                  </span>
+                )}
+              </label>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Import button */}
+              <button
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
+                  replaceMode
+                    ? 'bg-orange-500 hover:bg-orange-600'
+                    : 'bg-primary hover:bg-primary/90'
+                }`}
+                onClick={handleClickImport}
+                type="button"
+                disabled={importingCsv}
+                title={replaceMode ? 'Import and replace all existing data' : 'Import CSV — update or add rows'}
+              >
+                <Upload size={13} />
+                <span>{importingCsv ? 'Importing…' : 'Import'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1384,6 +1583,206 @@ export default function CourseOfferingView() {
         </div>
       </div>
 
+      {/* Full-screen Import Loading Overlay — freezes all interaction while import is running */}
+      {importingCsv && (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/20 bg-white/10 p-8 text-white shadow-2xl">
+            {/* Spinner */}
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+              <div className="absolute inset-2 animate-spin rounded-full border-4 border-white/10 border-t-white/60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
+            </div>
+
+            <div className="space-y-1.5 text-center">
+              <p className="text-lg font-bold tracking-tight">
+                {replaceMode ? 'Replacing Data…' : 'Importing CSV…'}
+              </p>
+              <p className="text-sm text-white/70">
+                {replaceMode
+                  ? 'Clearing existing data and importing fresh records. Please wait.'
+                  : 'Processing your CSV file. Please wait.'}
+              </p>
+              <p className="text-xs text-white/50">Do not close or refresh this page.</p>
+            </div>
+
+            {replaceMode && (
+              <div className="w-full rounded-lg border border-orange-300/30 bg-orange-500/20 px-4 py-2.5 text-center text-xs text-orange-200">
+                Replace mode: deleting all Course Offerings, Subjects &amp; Rooms, then rebuilding from CSV.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Result Modal — shown after import completes */}
+      {importResultModal && !importingCsv && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
+
+            {/* Header */}
+            <div className={`px-6 py-4 ${importResultModal.failedRows > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  {importResultModal.failedRows > 0 ? <AlertCircle size={18} /> : <Check size={18} />}
+                  <span className="font-bold text-base">
+                    {importResultModal.failedRows > 0 ? 'Import Completed with Errors' : 'Import Successful'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImportResultModal(null)}
+                  className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Mode badge */}
+              {importResultModal.replaceMode && (
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                  <span>Replace Mode — all old data was cleared first</span>
+                </div>
+              )}
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Total Rows', value: importResultModal.totalRows, color: 'bg-slate-50 text-slate-700' },
+                  { label: 'Inserted', value: importResultModal.insertedRows, color: 'bg-emerald-50 text-emerald-700' },
+                  { label: 'Updated', value: importResultModal.updatedRows, color: 'bg-blue-50 text-blue-700' },
+                  { label: 'Skipped', value: importResultModal.skippedRows, color: 'bg-slate-50 text-slate-500' },
+                  { label: 'Failed', value: importResultModal.failedRows, color: importResultModal.failedRows > 0 ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-400' },
+                  { label: 'Subjects Synced', value: importResultModal.syncedSubjectRows, color: 'bg-purple-50 text-purple-700' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className={`rounded-xl ${color} flex flex-col items-center justify-center p-3`}>
+                    <span className="text-2xl font-bold">{value ?? 0}</span>
+                    <span className="text-[10px] font-medium text-center leading-tight mt-0.5">{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Row errors */}
+              {Array.isArray(importResultModal.errors) && importResultModal.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                    Row Errors ({importResultModal.errors.length})
+                  </p>
+                  <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl border border-red-100 bg-red-50 p-2">
+                    {importResultModal.errors.slice(0, 30).map((issue) => (
+                      <p
+                        key={`result-error-${issue.row}-${(issue.messages || []).join('|')}`}
+                        className="text-xs text-red-700"
+                      >
+                        <span className="font-bold">Row {issue.row}:</span>{' '}
+                        {Array.isArray(issue.messages) ? issue.messages.join('; ') : 'Unknown error'}
+                      </p>
+                    ))}
+                    {importResultModal.errors.length > 30 && (
+                      <p className="text-xs text-red-500 font-medium">
+                        ...and {importResultModal.errors.length - 30} more errors.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setImportResultModal(null)}
+                className="w-full rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+              >
+                Done
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Backup Prompt Modal */}
+      {showBackupPrompt && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
+
+            {/* Header stripe — orange for replace, blue for update */}
+            <div className={`px-6 py-4 ${replaceMode ? 'bg-orange-500' : 'bg-primary'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <Download size={18} />
+                  <span className="font-bold text-base">Save a Backup First?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupPrompt(false)}
+                  className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* File being imported */}
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-600">
+                <FileUp size={13} className="shrink-0 text-slate-400" />
+                <span className="truncate font-medium">{selectedCsvFile?.name}</span>
+              </div>
+
+              {/* Warning message */}
+              {replaceMode ? (
+                <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-xs text-orange-800 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertCircle size={13} />
+                    Replace Mode is ON
+                  </p>
+                  <p>This will permanently delete <strong>all</strong> existing Course Offerings, Subjects, and Rooms — then import the new file from scratch.</p>
+                  <p className="font-semibold">We strongly recommend downloading a backup before continuing.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-on-surface-variant">
+                  Would you like to download a backup of your current course offerings before the import runs?
+                </p>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBackupPrompt(false);
+                    exportToCSV().then(() => runImport());
+                  }}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors ${
+                    replaceMode ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary/90'
+                  }`}
+                >
+                  <Download size={15} />
+                  Download Backup, then Import
+                </button>
+                <button
+                  type="button"
+                  onClick={runImport}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  <Upload size={15} />
+                  Skip Backup &amp; Import Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupPrompt(false)}
+                  className="w-full rounded-xl px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Modal */}
       {confirmDialog && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
@@ -1435,9 +1834,18 @@ export default function CourseOfferingView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-8">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+              <div>
+                <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+                {editingFromNotification && (
+                  <p className="mt-0.5 text-xs text-amber-600 font-semibold">From notification</p>
+                )}
+              </div>
               <button
-                onClick={() => setEditingId(null)}
+                onClick={() => {
+                  setEditingId(null);
+                  setEditingFromNotification(false);
+                  setNotificationMissingFields(new Set());
+                }}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/60 hover:text-on-surface"
               >
                 <X size={20} />
@@ -1451,6 +1859,16 @@ export default function CourseOfferingView() {
               </div>
             )}
 
+            {editingFromNotification && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-amber-500" />
+                <div>
+                  <p className="font-semibold">Fixing missing data</p>
+                  <p className="text-xs mt-0.5 text-amber-700">Filled fields are locked. Only highlighted fields need your attention.</p>
+                </div>
+              </div>
+            )}
+
             {editingId && (
               <div className="space-y-6">
                 {columnGroups.map((group) => (
@@ -1459,29 +1877,50 @@ export default function CourseOfferingView() {
                       {group.title}
                     </h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {group.columns.map((col) => (
-                        <div key={col.key}>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/70">
-                            {col.label}
-                          </label>
-                          {col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                            renderRoomPicker(col.key)
-                          ) : (
-                            <input
-                              type={numericCols.has(col.key) ? 'number' : 'text'}
-                              value={editingData[col.key] ?? ''}
-                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                              className="w-full rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            />
-                          )}
-                        </div>
-                      ))}
+                      {group.columns.map((col) => {
+                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
+                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
+                        return (
+                          <div key={col.key}>
+                            <label className={`mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
+                              {col.label}
+                              {isLocked && <Lock size={10} className="text-slate-300" />}
+                              {isMissing && <span className="text-[10px] text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
+                            </label>
+                            {isLocked ? (
+                              <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed select-none">
+                                <Lock size={11} className="flex-shrink-0 text-slate-300" />
+                                <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
+                              </div>
+                            ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
+                              <div className={isMissing ? 'ring-2 ring-amber-400/40 rounded-lg' : ''}>
+                                {renderRoomPicker(col.key)}
+                              </div>
+                            ) : (
+                              <input
+                                type={numericCols.has(col.key) ? 'number' : 'text'}
+                                value={editingData[col.key] ?? ''}
+                                onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
+                                className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all ${
+                                  isMissing
+                                    ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
+                                    : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
+                                }`}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
                 <div className="flex gap-3 pt-6">
                   <button
-                    onClick={() => setEditingId(null)}
+                    onClick={() => {
+                      setEditingId(null);
+                      setEditingFromNotification(false);
+                      setNotificationMissingFields(new Set());
+                    }}
                     className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                   >
                     Cancel
