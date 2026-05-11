@@ -438,6 +438,8 @@ export default function SubjectsView() {
       tfs_schedule: subject.tfs_schedule || '',
       mth_room: subject.mth_room || subject.mth_room_id || '',
       tfs_room: subject.tfs_room || subject.tfs_room_id || '',
+      subject_section: subject.subject_section || '',
+      department_id: subject.department_id ?? '',
       subject_status: subject.subject_status || 'active',
     });
     setShowEditModal(true);
@@ -1098,7 +1100,8 @@ export default function SubjectsView() {
                     min="0"
                     max="10"
                     value={newSubject.subject_units}
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -1110,7 +1113,8 @@ export default function SubjectsView() {
                     type="number"
                     min="0"
                     value={newSubject.subject_lec_hrs}
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -1122,7 +1126,8 @@ export default function SubjectsView() {
                     type="number"
                     min="0"
                     value={newSubject.subject_lab_hrs}
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -1304,7 +1309,8 @@ export default function SubjectsView() {
                     min="0"
                     max="10"
                     value={editingData.subject_units}
-                    onChange={(e) => setEditingData({ ...editingData, subject_units: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setEditingData({ ...editingData, subject_units: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -1316,7 +1322,8 @@ export default function SubjectsView() {
                     type="number"
                     min="0"
                     value={editingData.subject_lec_hrs}
-                    onChange={(e) => setEditingData({ ...editingData, subject_lec_hrs: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setEditingData({ ...editingData, subject_lec_hrs: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -1328,7 +1335,8 @@ export default function SubjectsView() {
                     type="number"
                     min="0"
                     value={editingData.subject_lab_hrs}
-                    onChange={(e) => setEditingData({ ...editingData, subject_lab_hrs: parseInt(e.target.value) || 0 })}
+                    step="0.5"
+                    onChange={(e) => setEditingData({ ...editingData, subject_lab_hrs: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>

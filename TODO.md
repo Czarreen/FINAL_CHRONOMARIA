@@ -29,3 +29,11 @@
 - [ ] Add latest run snapshot + quality/issues panel + generated list table view
 - [ ] Keep design consistent with current app style classes/tokens
 - [ ] Rebuild frontend and verify no errors
+
+## Course Offering CRUD sync with Subjects and Rooms
+
+- [x] Review `Backend/node-api/src/routes/courseOfferings.js` CRUD flow and current sync helpers
+- [x] Update create/update handlers to sync both subjects and rooms consistently
+- [x] Update delete handler to propagate delete effects to related subjects/rooms safely
+- [x] Add safe orphan-room pruning (only if not referenced elsewhere)
+- [ ] Run backend syntax/quick verification

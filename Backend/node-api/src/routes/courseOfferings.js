@@ -508,38 +508,186 @@ async function preloadRooms(dataRows, mapping) {
   return { byId, byName };
 }
 
+function normalizeRoomFieldValue(value) {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => normalizeCell(item))
+      .filter(Boolean);
+    if (normalized.length === 0) return null;
+    return normalized.join('/');
+  }
+
+  const normalized = normalizeCell(value);
+  return normalized ?? null;
+}
+
+function parseNullableNumber(value) {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseNullableInteger(value) {
+  const parsed = parseNullableNumber(value);
+  if (parsed === null) return null;
+  return Math.trunc(parsed);
+}
+
+const SUBJECT_SYNC_FIELD_MAP = [
+  ['code', 'subject_code'],
+  ['course_no', 'subject_course_no'],
+  ['descriptive_title', 'subject_descriptive_title'],
+  ['section', 'subject_section'],
+  ['units', 'subject_units'],
+  ['lec_hrs', 'subject_lec_hrs'],
+  ['lab_hrs', 'subject_lab_hrs'],
+  ['mth_schedule', 'mth_schedule'],
+  ['tfs_schedule', 'tfs_schedule'],
+  ['mth_room_id', 'mth_room'],
+  ['tfs_room_id', 'tfs_room'],
+];
+
+function buildCourseOfferingPayload(input = {}, existing = null) {
+  const mergedFlag =
+    input.merged !== undefined
+      ? input.merged === true || input.merged === 'true'
+      : existing?.merged === true || existing?.merged === 'true';
+
+  return {
+    code: normalizeCell(input.code ?? existing?.code),
+    course_no: normalizeCell(input.course_no ?? existing?.course_no),
+    descriptive_title: normalizeCell(input.descriptive_title ?? existing?.descriptive_title),
+    curr_id: parseNullableNumber(input.curr_id ?? existing?.curr_id),
+    department_id: parseNullableNumber(input.department_id ?? existing?.department_id),
+    section: normalizeCell(input.section ?? existing?.section),
+    units: parseNullableNumber(input.units ?? existing?.units),
+    lec_hrs: parseNullableNumber(input.lec_hrs ?? existing?.lec_hrs),
+    lab_hrs: parseNullableNumber(input.lab_hrs ?? existing?.lab_hrs),
+    mth_schedule: normalizeCell(input.mth_schedule ?? existing?.mth_schedule),
+    mth_room_id: normalizeRoomFieldValue(input.mth_room_id ?? existing?.mth_room_id),
+    tfs_schedule: normalizeCell(input.tfs_schedule ?? existing?.tfs_schedule),
+    tfs_room_id: normalizeRoomFieldValue(input.tfs_room_id ?? existing?.tfs_room_id),
+    merged: mergedFlag,
+  };
+}
+
+function buildSubjectPayloadFromCourseOffering(courseOffering) {
+  return {
+    subject_code: normalizeCell(courseOffering?.code),
+    subject_course_no: normalizeCell(courseOffering?.course_no),
+    subject_descriptive_title: normalizeCell(courseOffering?.descriptive_title),
+    department_id: courseOffering?.department_id ?? null,
+    subject_section: normalizeCell(courseOffering?.section),
+    subject_units: parseNullableNumber(courseOffering?.units),
+    subject_lec_hrs: parseNullableNumber(courseOffering?.lec_hrs),
+    subject_lab_hrs: parseNullableNumber(courseOffering?.lab_hrs),
+    mth_schedule: normalizeCell(courseOffering?.mth_schedule),
+    tfs_schedule: normalizeCell(courseOffering?.tfs_schedule),
+    mth_room: normalizeCell(courseOffering?.mth_room_id),
+    tfs_room: normalizeCell(courseOffering?.tfs_room_id),
+  };
+}
+
+function buildSubjectSyncChecks(courseOffering, subjectPayload) {
+  return SUBJECT_SYNC_FIELD_MAP.map(([courseField, subjectField]) => {
+    const rawCourse = courseOffering?.[courseField];
+    const normalizedCourse =
+      courseField === 'units' || courseField === 'lec_hrs' || courseField === 'lab_hrs'
+        ? parseNullableNumber(rawCourse)
+        : normalizeCell(rawCourse);
+
+    const normalizedSubject = subjectPayload?.[subjectField] ?? null;
+
+    return {
+      courseField,
+      subjectField,
+      courseValue: normalizedCourse,
+      subjectValue: normalizedSubject,
+      matches: normalizedCourse === normalizedSubject,
+    };
+  });
+}
+
 async function syncSubjectFromCourseOffering(courseOffering) {
   const subjectCode = normalizeCell(courseOffering?.code);
   if (!subjectCode) {
     return { action: 'skipped', reason: 'Missing course code.' };
   }
 
-  const subjectPayload = {
-    subject_code: subjectCode,
-    subject_course_no: normalizeCell(courseOffering.course_no),
-    subject_descriptive_title: normalizeCell(courseOffering.descriptive_title),
-    department_id: courseOffering.department_id ?? null,
-    subject_section: normalizeCell(courseOffering.section),
-    subject_units: courseOffering.units ?? null,
-    subject_lec_hrs: courseOffering.lec_hrs ?? null,
-    subject_lab_hrs: courseOffering.lab_hrs ?? null,
-    mth_schedule: normalizeCell(courseOffering.mth_schedule),
-    tfs_schedule: normalizeCell(courseOffering.tfs_schedule),
-    mth_room: normalizeCell(courseOffering.mth_room_id),
-    tfs_room: normalizeCell(courseOffering.tfs_room_id),
-  };
+  const subjectSection = normalizeCell(courseOffering?.section);
+  const departmentId = courseOffering?.department_id ?? null;
 
-  const { data: existingRows, error: lookupError } = await supabaseAdmin
-    .from('subjects')
-    .select('subject_id,subject_status')
-    .eq('subject_code', subjectCode)
-    .limit(1);
+  const subjectPayload = buildSubjectPayloadFromCourseOffering(courseOffering);
+  const syncChecks = buildSubjectSyncChecks(courseOffering, subjectPayload);
 
-  if (lookupError) {
-    throw new Error(`Subject lookup failed for ${subjectCode}: ${lookupError.message}`);
+  let existingSubject = null;
+  const lookupErrors = [];
+
+  if (subjectSection && departmentId !== null && departmentId !== undefined) {
+    const { data: exactRows, error: exactError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id,subject_status,subject_code,subject_section,department_id')
+      .eq('subject_code', subjectCode)
+      .eq('subject_section', subjectSection)
+      .eq('department_id', departmentId)
+      .limit(1);
+
+    if (!exactError && Array.isArray(exactRows) && exactRows.length > 0) {
+      existingSubject = exactRows[0];
+    } else if (exactError) {
+      lookupErrors.push(`Exact lookup error: ${exactError.message}`);
+    }
   }
 
-  const existingSubject = Array.isArray(existingRows) ? existingRows[0] : null;
+  if (!existingSubject && subjectSection) {
+    const { data: codeSectionRows, error: codeSectionError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id,subject_status,subject_code,subject_section,department_id')
+      .eq('subject_code', subjectCode)
+      .eq('subject_section', subjectSection)
+      .limit(1);
+
+    if (!codeSectionError && Array.isArray(codeSectionRows) && codeSectionRows.length > 0) {
+      existingSubject = codeSectionRows[0];
+    } else if (codeSectionError) {
+      lookupErrors.push(`Code+section lookup error: ${codeSectionError.message}`);
+    }
+  }
+
+  if (!existingSubject && departmentId !== null && departmentId !== undefined) {
+    const { data: codeDeptRows, error: codeDeptError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id,subject_status,subject_code,subject_section,department_id')
+      .eq('subject_code', subjectCode)
+      .eq('department_id', departmentId)
+      .limit(1);
+
+    if (!codeDeptError && Array.isArray(codeDeptRows) && codeDeptRows.length > 0) {
+      existingSubject = codeDeptRows[0];
+    } else if (codeDeptError) {
+      lookupErrors.push(`Code+department lookup error: ${codeDeptError.message}`);
+    }
+  }
+
+  if (!existingSubject) {
+    const { data: codeOnlyRows, error: codeOnlyError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id,subject_status,subject_code,subject_section,department_id')
+      .eq('subject_code', subjectCode)
+      .limit(1);
+
+    if (!codeOnlyError && Array.isArray(codeOnlyRows) && codeOnlyRows.length > 0) {
+      existingSubject = codeOnlyRows[0];
+    } else if (codeOnlyError) {
+      lookupErrors.push(`Code-only lookup error: ${codeOnlyError.message}`);
+    }
+  }
+
+  if (lookupErrors.length > 0 && !existingSubject) {
+    throw new Error(`Subject lookup failed for ${subjectCode}: ${lookupErrors.join(' | ')}`);
+  }
 
   if (existingSubject) {
     const { error: updateError } = await supabaseAdmin
@@ -554,7 +702,7 @@ async function syncSubjectFromCourseOffering(courseOffering) {
       throw new Error(`Subject sync update failed for ${subjectCode}: ${updateError.message}`);
     }
 
-    return { action: 'updated', subject_id: existingSubject.subject_id };
+    return { action: 'updated', subject_id: existingSubject.subject_id, syncChecks };
   }
 
   const { data: insertedSubject, error: insertError } = await supabaseAdmin
@@ -570,7 +718,7 @@ async function syncSubjectFromCourseOffering(courseOffering) {
     throw new Error(`Subject sync insert failed for ${subjectCode}: ${insertError.message}`);
   }
 
-  return { action: 'inserted', subject_id: insertedSubject?.subject_id ?? null };
+  return { action: 'inserted', subject_id: insertedSubject?.subject_id ?? null, syncChecks };
 }
 
 async function syncRoomsFromCourseOffering(courseOffering) {
@@ -583,19 +731,35 @@ async function syncRoomsFromCourseOffering(courseOffering) {
     return { action: 'skipped', reason: 'No room values.' };
   }
 
-  // Each value may be a slash-separated list of room IDs already resolved to numbers
-  const roomNames = roomValues
+  const roomTokens = roomValues
     .flatMap((val) => val.split('/').map((t) => t.trim()))
     .filter(Boolean);
 
   const results = [];
 
-  for (const roomName of roomNames) {
-    // If it looks like a numeric ID, skip — it was already resolved by resolveRoomIds
-    if (/^\d+$/.test(roomName)) {
-      results.push({ action: 'skipped', reason: 'Already a numeric ID.' });
+  for (const token of roomTokens) {
+    if (/^\d+$/.test(token)) {
+      const roomId = Number(token);
+      const { data: roomById, error: idLookupError } = await supabaseAdmin
+        .from('rooms')
+        .select('room_id,room_name')
+        .eq('room_id', roomId)
+        .limit(1);
+
+      if (idLookupError) {
+        throw new Error(`Room lookup by ID failed for "${token}": ${idLookupError.message}`);
+      }
+
+      if (roomById && roomById.length > 0) {
+        results.push({ action: 'exists', room_id: roomId, room_name: roomById[0].room_name ?? null });
+      } else {
+        results.push({ action: 'skipped', reason: `Room ID ${roomId} not found.` });
+      }
       continue;
     }
+
+    const roomName = normalizeCell(token);
+    if (!roomName) continue;
 
     const { data: existingRows, error: lookupError } = await supabaseAdmin
       .from('rooms')
@@ -608,7 +772,7 @@ async function syncRoomsFromCourseOffering(courseOffering) {
     }
 
     if (existingRows && existingRows.length > 0) {
-      results.push({ action: 'exists', room_id: existingRows[0].room_id });
+      results.push({ action: 'exists', room_id: existingRows[0].room_id, room_name: roomName });
       continue;
     }
 
@@ -622,10 +786,85 @@ async function syncRoomsFromCourseOffering(courseOffering) {
       throw new Error(`Room sync insert failed for "${roomName}": ${insertError.message}`);
     }
 
-    results.push({ action: 'inserted', room_id: inserted?.room_id ?? null });
+    results.push({ action: 'inserted', room_id: inserted?.room_id ?? null, room_name: roomName });
   }
 
   return { action: 'synced', results };
+}
+
+async function pruneOrphanRoomsFromCourseOffering(courseOffering) {
+  const roomValues = [
+    normalizeCell(courseOffering?.mth_room_id),
+    normalizeCell(courseOffering?.tfs_room_id),
+  ].filter(Boolean);
+
+  if (roomValues.length === 0) {
+    return { action: 'skipped', reason: 'No room values to prune.' };
+  }
+
+  const candidateRoomIds = [
+    ...new Set(
+      roomValues
+        .flatMap((val) => val.split('/').map((t) => t.trim()))
+        .filter((token) => /^\d+$/.test(token))
+        .map((token) => Number(token))
+        .filter((id) => Number.isFinite(id))
+    ),
+  ];
+
+  if (candidateRoomIds.length === 0) {
+    return { action: 'skipped', reason: 'No numeric room IDs to prune.' };
+  }
+
+  const pruned = [];
+  const retained = [];
+
+  for (const roomId of candidateRoomIds) {
+    const idToken = String(roomId);
+
+    const { data: offeringRefRows, error: offeringRefError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('id')
+      .or(`mth_room_id.ilike.%${idToken}%,tfs_room_id.ilike.%${idToken}%`)
+      .limit(1);
+
+    if (offeringRefError) {
+      throw new Error(`Failed checking course_offerings room references for room ${roomId}: ${offeringRefError.message}`);
+    }
+
+    if (offeringRefRows && offeringRefRows.length > 0) {
+      retained.push({ room_id: roomId, reason: 'Still referenced in course_offerings.' });
+      continue;
+    }
+
+    const { data: subjectRefRows, error: subjectRefError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id')
+      .or(`mth_room.ilike.%${idToken}%,tfs_room.ilike.%${idToken}%`)
+      .limit(1);
+
+    if (subjectRefError) {
+      throw new Error(`Failed checking subjects room references for room ${roomId}: ${subjectRefError.message}`);
+    }
+
+    if (subjectRefRows && subjectRefRows.length > 0) {
+      retained.push({ room_id: roomId, reason: 'Still referenced in subjects.' });
+      continue;
+    }
+
+    const { error: deleteRoomError } = await supabaseAdmin
+      .from('rooms')
+      .delete()
+      .eq('room_id', roomId);
+
+    if (deleteRoomError) {
+      throw new Error(`Failed deleting orphan room ${roomId}: ${deleteRoomError.message}`);
+    }
+
+    pruned.push({ room_id: roomId });
+  }
+
+  return { action: 'completed', pruned, retained };
 }
 
 function toRowObject(rowCells, mapping) {
@@ -1067,24 +1306,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Course code is required' });
     }
 
+    const payload = buildCourseOfferingPayload({
+      code,
+      course_no,
+      descriptive_title,
+      curr_id,
+      department_id,
+      section,
+      units,
+      lec_hrs,
+      lab_hrs,
+      mth_schedule,
+      mth_room_id,
+      tfs_schedule,
+      tfs_room_id,
+      merged,
+    });
+
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
-      .insert([{
-        code: code || null,
-        course_no: course_no || null,
-        descriptive_title: descriptive_title || null,
-        curr_id: curr_id ? Number(curr_id) : null,
-        department_id: department_id ? Number(department_id) : null,
-        section: section || null,
-        units: units ? Number(units) : null,
-        lec_hrs: lec_hrs ? Number(lec_hrs) : null,
-        lab_hrs: lab_hrs ? Number(lab_hrs) : null,
-        mth_schedule: mth_schedule || null,
-        mth_room_id: mth_room_id || null,
-        tfs_schedule: tfs_schedule || null,
-        tfs_room_id: tfs_room_id || null,
-        merged: merged === true || merged === 'true' ? true : false,
-      }])
+      .insert([payload])
       .select();
 
     if (error) {
@@ -1093,22 +1334,34 @@ router.post('/', async (req, res) => {
 
     const inserted = data?.[0] ?? {};
 
+    let subjectSync = { action: 'skipped' };
+    let roomSync = { action: 'skipped' };
+
     try {
-      const subjectSync = await syncSubjectFromCourseOffering(inserted);
-      return res.status(201).json({
-        ...inserted,
-        subjectSync,
-      });
+      subjectSync = await syncSubjectFromCourseOffering(inserted);
     } catch (syncError) {
       console.error('Subject sync error:', syncError);
-      return res.status(201).json({
-        ...inserted,
-        subjectSync: {
-          action: 'failed',
-          error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
-        },
-      });
+      subjectSync = {
+        action: 'failed',
+        error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
+      };
     }
+
+    try {
+      roomSync = await syncRoomsFromCourseOffering(inserted);
+    } catch (syncError) {
+      console.error('Room sync error:', syncError);
+      roomSync = {
+        action: 'failed',
+        error: syncError instanceof Error ? syncError.message : 'Unknown room sync error',
+      };
+    }
+
+    return res.status(201).json({
+      ...inserted,
+      subjectSync,
+      roomSync,
+    });
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
@@ -1126,24 +1379,42 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Course code is required' });
     }
 
+    const { data: existingOfferingRows, error: existingOfferingError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (existingOfferingError) {
+      return res.status(500).json({ error: existingOfferingError.message });
+    }
+
+    if (!existingOfferingRows || existingOfferingRows.length === 0) {
+      return res.status(404).json({ error: 'Course offering not found' });
+    }
+
+    const existingOffering = existingOfferingRows[0];
+
+    const payload = buildCourseOfferingPayload({
+      code,
+      course_no,
+      descriptive_title,
+      curr_id,
+      department_id,
+      section,
+      units,
+      lec_hrs,
+      lab_hrs,
+      mth_schedule,
+      mth_room_id,
+      tfs_schedule,
+      tfs_room_id,
+      merged,
+    }, existingOffering);
+
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
-      .update({
-        code: code || null,
-        course_no: course_no || null,
-        descriptive_title: descriptive_title || null,
-        curr_id: curr_id ? Number(curr_id) : null,
-        department_id: department_id ? Number(department_id) : null,
-        section: section || null,
-        units: units ? Number(units) : null,
-        lec_hrs: lec_hrs ? Number(lec_hrs) : null,
-        lab_hrs: lab_hrs ? Number(lab_hrs) : null,
-        mth_schedule: mth_schedule || null,
-        mth_room_id: mth_room_id || null,
-        tfs_schedule: tfs_schedule || null,
-        tfs_room_id: tfs_room_id || null,
-        merged: merged === true || merged === 'true' ? true : false,
-      })
+      .update(payload)
       .eq('id', id)
       .select();
 
@@ -1157,22 +1428,34 @@ router.put('/:id', async (req, res) => {
 
     const updated = data[0];
 
+    let subjectSync = { action: 'skipped' };
+    let roomSync = { action: 'skipped' };
+
     try {
-      const subjectSync = await syncSubjectFromCourseOffering(updated);
-      return res.json({
-        ...updated,
-        subjectSync,
-      });
+      subjectSync = await syncSubjectFromCourseOffering(updated);
     } catch (syncError) {
       console.error('Subject sync error:', syncError);
-      return res.json({
-        ...updated,
-        subjectSync: {
-          action: 'failed',
-          error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
-        },
-      });
+      subjectSync = {
+        action: 'failed',
+        error: syncError instanceof Error ? syncError.message : 'Unknown subject sync error',
+      };
     }
+
+    try {
+      roomSync = await syncRoomsFromCourseOffering(updated);
+    } catch (syncError) {
+      console.error('Room sync error:', syncError);
+      roomSync = {
+        action: 'failed',
+        error: syncError instanceof Error ? syncError.message : 'Unknown room sync error',
+      };
+    }
+
+    return res.json({
+      ...updated,
+      subjectSync,
+      roomSync,
+    });
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
@@ -1184,6 +1467,22 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (existingError) {
+      return res.status(500).json({ error: existingError.message });
+    }
+
+    if (!existingRows || existingRows.length === 0) {
+      return res.status(404).json({ error: 'Course offering not found' });
+    }
+
+    const target = existingRows[0];
 
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
@@ -1199,7 +1498,48 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Course offering not found' });
     }
 
-    return res.json({ success: true, deleted: data[0] });
+    let subjectDelete = { action: 'skipped', reason: 'No subject code.' };
+    let roomPrune = { action: 'skipped' };
+
+    const subjectCode = normalizeCell(target?.code);
+    if (subjectCode) {
+      try {
+        const { data: deletedSubjects, error: subjectDeleteError } = await supabaseAdmin
+          .from('subjects')
+          .delete()
+          .eq('subject_code', subjectCode)
+          .select('subject_id,subject_code');
+
+        if (subjectDeleteError) {
+          subjectDelete = {
+            action: 'failed',
+            error: subjectDeleteError.message,
+          };
+        } else {
+          subjectDelete = {
+            action: 'deleted',
+            count: deletedSubjects?.length ?? 0,
+            rows: deletedSubjects ?? [],
+          };
+        }
+      } catch (subjectErr) {
+        subjectDelete = {
+          action: 'failed',
+          error: subjectErr instanceof Error ? subjectErr.message : 'Unknown subject delete error',
+        };
+      }
+    }
+
+    try {
+      roomPrune = await pruneOrphanRoomsFromCourseOffering(target);
+    } catch (roomErr) {
+      roomPrune = {
+        action: 'failed',
+        error: roomErr instanceof Error ? roomErr.message : 'Unknown room prune error',
+      };
+    }
+
+    return res.json({ success: true, deleted: data[0], subjectDelete, roomPrune });
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
