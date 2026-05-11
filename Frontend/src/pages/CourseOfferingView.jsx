@@ -341,6 +341,10 @@ export default function CourseOfferingView() {
       setSuccessMessage(`Updated "${editingData.code}"`);
       setEditingId(null);
       setEditingData({});
+      setEditingFromNotification(false);
+      setNotificationMissingFields(new Set());
+      // Re-sync notifications for this offering in the background then refresh list
+      syncCourseOfferingNotifications(editingId).catch(() => {});
       await loadInitialPage();
     } catch (err) {
       if (String(err.message || '').includes('404')) {

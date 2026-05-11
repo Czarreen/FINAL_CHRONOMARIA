@@ -302,6 +302,7 @@ export default function RoomsView() {
       setShowAddModal(false);
       resetForm();
       createAuditLog({ action: 'Created room', module: 'Rooms', description: `Added room "${newRoom.room_name}"`, changesAfter: newRoom });
+      await loadRoomNotifications();
     } catch (err) {
       console.error('Failed to create room:', err);
       setFormError(err.message);
@@ -333,6 +334,7 @@ export default function RoomsView() {
       setEditingRoom(null);
       resetForm();
       createAuditLog({ action: 'Updated room', module: 'Rooms', description: `Updated room "${updatedRoom.room_name}": ${buildChangeSummary(editingRoom, updatedRoom, { room_name: 'Name', room_type: 'Type', room_status: 'Status' })}` });
+      await loadRoomNotifications();
     } catch (err) {
       console.error('Failed to update room:', err);
       setFormError(err.message);

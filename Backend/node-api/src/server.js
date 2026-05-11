@@ -27,6 +27,14 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+
+// Give the CSV import endpoint a long timeout — large files can take several minutes
+app.use('/api/course-offerings/import-csv', (req, res, next) => {
+  req.setTimeout(10 * 60 * 1000); // 10 minutes
+  res.setTimeout(10 * 60 * 1000);
+  next();
+});
+
 app.use('/api/faculty', facultyRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/rooms', roomsRouter);
