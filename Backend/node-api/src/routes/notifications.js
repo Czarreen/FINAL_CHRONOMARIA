@@ -267,6 +267,22 @@ function buildRoomNotification(room) {
   };
 }
 
+// POST /api/notifications/rooms/sync
+// Re-computes notifications for a single room after a save
+router.post('/rooms/sync', async (req, res) => {
+  try {
+    const roomId = Number(req.body?.room_id);
+    if (!roomId) return res.status(400).json({ error: 'room_id required' });
+
+    const { error } = await supabaseAdmin.rpc('refresh_room_notifications', { p_room_id: roomId });
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ synced: true, room_id: roomId });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 // GET /api/notifications/rooms
 router.get('/rooms', async (req, res) => {
   try {
@@ -303,57 +319,14 @@ router.post('/rooms/rescan-all', async (_req, res) => {
   try {
     const { data: roomRows, error: fetchErr } = await supabaseAdmin
       .from('rooms')
-      .select('room_id, room_name, room_type, room_status');
+      .select('room_id');
 
     if (fetchErr) return res.status(500).json({ error: fetchErr.message });
 
-    const inserts = [];
-    for (const room of roomRows || []) {
-      const notification = buildRoomNotification(room);
-      const missingFields = JSON.parse(notification.missing_fields || '[]');
-      const issues = JSON.parse(notification.issues || '[]');
-      if (missingFields.length === 0 && issues.length === 0) continue;
-      inserts.push(notification);
-    }
+    const { error: refreshErr } = await supabaseAdmin.rpc('refresh_all_room_notifications');
+    if (refreshErr) return res.status(500).json({ error: refreshErr.message });
 
-    const { data: existingRows, error: existingErr } = await supabaseAdmin
-      .from('room_notifications')
-      .select('room_id, is_resolved')
-      .in('room_id', inserts.map((item) => item.room_id));
-
-    if (existingErr) return res.status(500).json({ error: existingErr.message });
-
-    const existingMap = (existingRows || []).reduce((acc, row) => {
-      acc[row.room_id] = row;
-      return acc;
-    }, {});
-
-    const toUpsert = inserts.map((item) => ({
-      ...item,
-      is_resolved: existingMap[item.room_id]?.is_resolved ? true : false,
-      updated_at: new Date().toISOString(),
-    }));
-
-    if (toUpsert.length > 0) {
-      const { error: upsertErr } = await supabaseAdmin
-        .from('room_notifications')
-        .upsert(toUpsert, { onConflict: 'room_id' });
-      if (upsertErr) return res.status(500).json({ error: upsertErr.message });
-    }
-
-    const roomIdsWithProblems = new Set(inserts.map((item) => item.room_id));
-    const allRoomIds = new Set((roomRows || []).map((room) => room.room_id));
-    const roomIdsWithoutProblems = Array.from(allRoomIds).filter((id) => !roomIdsWithProblems.has(id));
-
-    if (roomIdsWithoutProblems.length > 0) {
-      const { error: deleteErr } = await supabaseAdmin
-        .from('room_notifications')
-        .delete()
-        .in('room_id', roomIdsWithoutProblems);
-      if (deleteErr) return res.status(500).json({ error: deleteErr.message });
-    }
-
-    return res.json({ scanned: (roomRows || []).length, inserted: toUpsert.length, cleared: roomIdsWithoutProblems.length });
+    return res.json({ scanned: (roomRows || []).length, refreshed: true });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
@@ -389,9 +362,11 @@ router.patch('/rooms/:id/resolve', async (req, res) => {
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
     const resp = await supabaseAdmin
-      .from('room_notifications')
+      .from('data_quality_notifications')
       .update({ is_resolved: true, updated_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('entity_type', 'room')
+      .eq('entity_id', id)
+      .eq('is_resolved', false);
 
     if (resp.error) return res.status(500).json({ error: resp.error.message });
     return res.json({ updated: resp.data });

@@ -227,16 +227,58 @@ export default function RoomsView() {
       }
 
       const rows = Array.isArray(data.rows) ? data.rows : [];
-      const transformedNotifications = rows.map((row) => ({
-        ...row,
-        id: row.id,
-        room_id: row.room_id,
-        title: row.title || `Room #${row.room_id}`,
-        description: row.description || '',
-        severity: row.severity === 'high' ? 'critical' : (row.severity || 'medium'),
-        missingFields: Array.isArray(row.missingFields) ? row.missingFields : [],
-        issues: Array.isArray(row.issues) ? row.issues : [],
-      }));
+      const severityRank = { low: 1, medium: 2, critical: 3 };
+      const normalizeSeverity = (value) => {
+        if (!value) return 'medium';
+        if (value === 'high') return 'critical';
+        return value;
+      };
+
+      const roomsById = new Map(rooms.map((room) => [String(room.room_id), room]));
+      const grouped = new Map();
+
+      rows.forEach((row) => {
+        const roomId = row.entity_id ?? row.room_id;
+        if (roomId == null) return;
+
+        const key = String(roomId);
+        const room = roomsById.get(key);
+        const issueSeverity = normalizeSeverity(row.severity);
+        const fieldName = row.field_name || row.field || null;
+        const issue = {
+          field: fieldName,
+          field_name: fieldName,
+          message: row.message || '',
+          issue_type: row.issue_type || 'missing',
+          severity: issueSeverity,
+          details: row.details || null,
+        };
+
+        const existing = grouped.get(key) || {
+          id: roomId,
+          room_id: roomId,
+          title: room?.room_name || row.title || `Room #${roomId}`,
+          description: room?.room_type || row.description || '',
+          severity: issueSeverity,
+          missingFields: [],
+          issues: [],
+        };
+
+        if (fieldName && issue.issue_type === 'missing' && !existing.missingFields.includes(fieldName)) {
+          existing.missingFields.push(fieldName);
+        }
+
+        existing.issues.push(issue);
+        if (severityRank[issueSeverity] > severityRank[existing.severity] || !existing.severity) {
+          existing.severity = issueSeverity;
+        }
+
+        grouped.set(key, existing);
+      });
+
+      const transformedNotifications = Array.from(grouped.values()).sort(
+        (a, b) => Number(a.room_id) - Number(b.room_id)
+      );
 
       const stats = { total: transformedNotifications.length, critical: 0, medium: 0, low: 0 };
       transformedNotifications.forEach((notif) => {
@@ -398,19 +440,37 @@ export default function RoomsView() {
         return;
       }
 
-      // Check if all required fields are filled
-      const hasName = room.room_name && room.room_name.trim() !== '';
-      const hasType = room.room_type && room.room_type.trim() !== '';
-      const hasStatus = room.room_status && room.room_status.trim() !== '';
+      // Check if all issues reported in the notification have been resolved
+      const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+      const issues = Array.isArray(item.issues) ? item.issues : [];
 
-      if (!hasName || !hasType || !hasStatus) {
-        setResolveMessage('Issue is not yet Resolved');
-        setResolveMessageType('error');
-        setTimeout(() => setResolveMessage(null), 3000);
-        return;
+      // Validate that all missing fields are now filled
+      for (const field of missingFields) {
+        const value = room[field];
+        if (!value || (typeof value === 'string' && value.trim() === '')) {
+          setResolveMessage(`Field "${field}" is still missing`);
+          setResolveMessageType('error');
+          setTimeout(() => setResolveMessage(null), 3000);
+          return;
+        }
       }
 
-      // All requirements met, resolve the notification
+      // If there are specific issues, ensure they're addressed
+      if (issues.length > 0) {
+        // Verify room has basic required data to resolve issues
+        const hasName = room.room_name && room.room_name.trim() !== '';
+        const hasType = room.room_type && room.room_type.trim() !== '';
+        const hasStatus = room.room_status && room.room_status.trim() !== '';
+
+        if (!hasName || !hasType || !hasStatus) {
+          setResolveMessage('Complete room information required to resolve issues');
+          setResolveMessageType('error');
+          setTimeout(() => setResolveMessage(null), 3000);
+          return;
+        }
+      }
+
+      // All issues have been resolved, mark the notification as resolved
       await resolveRoomNotification(item.id);
       setResolveMessage('Issue resolved successfully!');
       setResolveMessageType('success');
