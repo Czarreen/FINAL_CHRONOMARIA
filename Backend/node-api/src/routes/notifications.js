@@ -237,6 +237,36 @@ router.get('/course-offerings/debug', async (_req, res) => {
   }
 });
 
+function buildRoomNotification(room) {
+  const missingFields = [];
+  const issues = [];
+
+  if (!room.room_name || String(room.room_name).trim() === '') {
+    missingFields.push('room_name');
+    issues.push({ message: 'Missing room name' });
+  }
+
+  if (!room.room_type || String(room.room_type).trim() === '') {
+    missingFields.push('room_type');
+    issues.push({ message: 'Missing room type' });
+  }
+
+  if (!room.room_status || String(room.room_status).trim() === '') {
+    missingFields.push('room_status');
+    issues.push({ message: 'Missing room status' });
+  }
+
+  return {
+    room_id: room.room_id,
+    title: room.room_name || `Room #${room.room_id}`,
+    description: room.room_type || null,
+    severity: missingFields.length > 0 ? 'high' : 'low',
+    missing_fields: JSON.stringify(missingFields),
+    issues: JSON.stringify(issues),
+    metadata: JSON.stringify({}),
+  };
+}
+
 // GET /api/notifications/rooms
 router.get('/rooms', async (req, res) => {
   try {
@@ -263,6 +293,67 @@ router.get('/rooms', async (req, res) => {
     }
 
     return res.json({ page, limit, total: count ?? 0, rows: data ?? [] });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+// POST /api/notifications/rooms/rescan-all
+router.post('/rooms/rescan-all', async (_req, res) => {
+  try {
+    const { data: roomRows, error: fetchErr } = await supabaseAdmin
+      .from('rooms')
+      .select('room_id, room_name, room_type, room_status');
+
+    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+
+    const inserts = [];
+    for (const room of roomRows || []) {
+      const notification = buildRoomNotification(room);
+      const missingFields = JSON.parse(notification.missing_fields || '[]');
+      const issues = JSON.parse(notification.issues || '[]');
+      if (missingFields.length === 0 && issues.length === 0) continue;
+      inserts.push(notification);
+    }
+
+    const { data: existingRows, error: existingErr } = await supabaseAdmin
+      .from('room_notifications')
+      .select('room_id, is_resolved')
+      .in('room_id', inserts.map((item) => item.room_id));
+
+    if (existingErr) return res.status(500).json({ error: existingErr.message });
+
+    const existingMap = (existingRows || []).reduce((acc, row) => {
+      acc[row.room_id] = row;
+      return acc;
+    }, {});
+
+    const toUpsert = inserts.map((item) => ({
+      ...item,
+      is_resolved: existingMap[item.room_id]?.is_resolved ? true : false,
+      updated_at: new Date().toISOString(),
+    }));
+
+    if (toUpsert.length > 0) {
+      const { error: upsertErr } = await supabaseAdmin
+        .from('room_notifications')
+        .upsert(toUpsert, { onConflict: 'room_id' });
+      if (upsertErr) return res.status(500).json({ error: upsertErr.message });
+    }
+
+    const roomIdsWithProblems = new Set(inserts.map((item) => item.room_id));
+    const allRoomIds = new Set((roomRows || []).map((room) => room.room_id));
+    const roomIdsWithoutProblems = Array.from(allRoomIds).filter((id) => !roomIdsWithProblems.has(id));
+
+    if (roomIdsWithoutProblems.length > 0) {
+      const { error: deleteErr } = await supabaseAdmin
+        .from('room_notifications')
+        .delete()
+        .in('room_id', roomIdsWithoutProblems);
+      if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+    }
+
+    return res.json({ scanned: (roomRows || []).length, inserted: toUpsert.length, cleared: roomIdsWithoutProblems.length });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
@@ -298,7 +389,7 @@ router.patch('/rooms/:id/resolve', async (req, res) => {
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
     const resp = await supabaseAdmin
-      .from('data_quality_notifications')
+      .from('room_notifications')
       .update({ is_resolved: true, updated_at: new Date().toISOString() })
       .eq('id', id);
 
@@ -577,23 +668,41 @@ router.patch('/subjects/:id/resolve', async (req, res) => {
 
 router.delete('/clear-all', async (req, res) => {
   try {
-    // Delete all unresolved notifications from both tables
-    const [facultyResp, courseOfferingResp] = await Promise.all([
+    const [facultyResp, courseOfferingResp, roomResp, subjectResp] = await Promise.all([
       supabaseAdmin
         .from('faculty_notifications')
         .delete()
-        .eq('is_resolved', false),
+        .gte('id', 0)
+        .select('id', { count: 'exact' }),
       supabaseAdmin
         .from('data_quality_notifications')
         .delete()
-        .eq('is_resolved', false),
+        .gte('id', 0)
+        .select('id', { count: 'exact' }),
+      supabaseAdmin
+        .from('room_notifications')
+        .delete()
+        .gte('id', 0)
+        .select('id', { count: 'exact' }),
+      supabaseAdmin
+        .from('subject_notifications')
+        .delete()
+        .gte('id', 0)
+        .select('id', { count: 'exact' }),
     ]);
 
     if (facultyResp.error) return res.status(500).json({ error: facultyResp.error.message });
     if (courseOfferingResp.error) return res.status(500).json({ error: courseOfferingResp.error.message });
+    if (roomResp.error) return res.status(500).json({ error: roomResp.error.message });
+    if (subjectResp.error) return res.status(500).json({ error: subjectResp.error.message });
 
-    const clearedCount = (facultyResp.count ?? 0) + (courseOfferingResp.count ?? 0);
-    return res.json({ cleared: clearedCount, message: `Cleared ${clearedCount} unresolved notifications` });
+    const clearedCount =
+      (facultyResp.data?.length ?? 0) +
+      (courseOfferingResp.data?.length ?? 0) +
+      (roomResp.data?.length ?? 0) +
+      (subjectResp.data?.length ?? 0);
+
+    return res.json({ cleared: clearedCount, message: `Cleared ${clearedCount} notifications` });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }

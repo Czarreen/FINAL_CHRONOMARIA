@@ -68,6 +68,7 @@ export default function SubjectsView() {
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
+  const pendingStatusUpdatesRef = useRef(new Set());
 
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -176,6 +177,56 @@ export default function SubjectsView() {
   useEffect(() => {
     loadRoomLookup();
   }, []);
+
+  // Auto-toggle subject_status based on open notification issues
+  // Runs on initial load, refresh, and whenever notifications or subjects change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!subjects.length || subjectNotificationsLoading) return;
+
+    const toUpdate = subjects.filter((s) => {
+      if (pendingStatusUpdatesRef.current.has(s.subject_id)) return false;
+      const { hasOpenIssues } = getSubjectIssueState(s.subject_id);
+      const desired = hasOpenIssues ? 'inactive' : 'active';
+      return desired !== s.subject_status;
+    });
+
+    if (!toUpdate.length) return;
+
+    toUpdate.forEach((s) => pendingStatusUpdatesRef.current.add(s.subject_id));
+
+    async function runBatched() {
+      const CONCURRENCY = 5;
+      for (let i = 0; i < toUpdate.length; i += CONCURRENCY) {
+        const batch = toUpdate.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (s) => {
+            const { hasOpenIssues } = getSubjectIssueState(s.subject_id);
+            const desired = hasOpenIssues ? 'inactive' : 'active';
+            try {
+              setUpdatingStatus(s.subject_id);
+              await updateSubjectStatus(s.subject_id, desired);
+              setSubjects((prev) =>
+                prev.map((sub) =>
+                  sub.subject_id === s.subject_id
+                    ? { ...sub, subject_status: desired }
+                    : sub
+                )
+              );
+              setActiveCount((c) => c + (desired === 'active' ? 1 : -1));
+            } catch (_) {
+              // ignore individual failures; effect will retry on next notification reload
+            } finally {
+              pendingStatusUpdatesRef.current.delete(s.subject_id);
+              setUpdatingStatus((prev) => (prev === s.subject_id ? null : prev));
+            }
+          })
+        );
+      }
+    }
+
+    runBatched();
+  }, [subjectNotifications, subjects, subjectNotificationsLoading]);
 
   async function loadRoomLookup() {
     try {
@@ -592,6 +643,14 @@ export default function SubjectsView() {
     return mthRoom || tfsRoom || '—';
   }
 
+  function getSubjectIssueState(subjectId) {
+    const id = Number(subjectId);
+    const hasOpenIssues = subjectNotifications.some(
+      (item) => Number(item.rowId) === id
+    );
+    return { hasOpenIssues };
+  }
+
   return (
 <div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-right-4 duration-500">
       {/* Header with Title, Description, and Action Buttons */}
@@ -626,9 +685,9 @@ export default function SubjectsView() {
             {total} subjects
           </span>
           <button
-            onClick={() => loadSubjects()}
+            onClick={() => { loadSubjects(); loadSubjectNotifications(); }}
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
-            title="Reload subjects"
+            title="Reload subjects and sync status"
           >
             <RotateCcw size={16} />
           </button>

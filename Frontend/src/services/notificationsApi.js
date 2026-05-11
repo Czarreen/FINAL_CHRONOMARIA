@@ -157,26 +157,16 @@ export async function fetchRoomNotifications({ page = 1, limit = 200, unresolved
     throw new Error(txt || `Failed to fetch room notifications: ${res.status}`);
   }
 
-  const data = await res.json();
+  return res.json();
+}
 
-  // Transform snake_case from DB to camelCase for component, and parse JSON fields
-  const transformed = {
-    ...data,
-    rows: (data.rows || []).map((row) => ({
-      id: row.id,
-      room_id: row.room_id,
-      title: row.title || `Room #${row.room_id}`,
-      description: row.description || '',
-      severity: row.severity || 'medium',
-      missingFields: row.missing_fields ? JSON.parse(row.missing_fields) : [],
-      issues: row.issues ? JSON.parse(row.issues) : [],
-      is_resolved: row.is_resolved,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    })),
-  };
-
-  return transformed;
+export async function rescanAllRoomNotifications() {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/rescan-all`, { method: 'POST' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to rescan room notifications: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function resolveRoomNotification(id) {

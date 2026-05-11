@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom } from '../services/roomsApi.js';
-import { resolveRoomNotification } from '../services/notificationsApi.js';
+import { fetchRoomNotifications, rescanAllRoomNotifications, resolveRoomNotification } from '../services/notificationsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 
 export default function RoomsView() {
@@ -167,77 +167,38 @@ export default function RoomsView() {
   const loadRoomNotifications = async () => {
     setNotificationsLoading(true);
     try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-      const url = `${baseUrl}/api/notifications/rooms?is_resolved=false&limit=200`;
-      console.log('Fetching room notifications from:', url);
-      const response = await fetch(url);
-      console.log('Response status:', response.status);
-      if (!response.ok) throw new Error(`Failed to fetch room notifications: ${response.status}`);
-      const data = await response.json();
-      console.log('Full API response:', data);
-      console.log('Rows array:', data.rows);
-      console.log('Rows count:', data.rows ? data.rows.length : 0);
-      console.log('Total from API:', data.total);
-      
-      // Transform API response into NotificationButton format
-      // Group multiple issues from the same room into one notification
-      const notificationMap = {};
-      
-      (data.rows || []).forEach((notification) => {
-        const room = rooms.find((r) => r.room_id === notification.entity_id);
-        const roomName = room ? room.room_name : `Room #${notification.entity_id}`;
-        
-        // Use the first issue's id as the notification id (we'll use the room_id as the key)
-        const key = `room-${notification.entity_id}`;
-        
-        // Map severity from 'high' to 'critical' for UI display
-        const mappedSeverity = notification.severity === 'high' ? 'critical' : (notification.severity || 'medium');
-        
-        if (!notificationMap[key]) {
-          notificationMap[key] = {
-            id: notification.id, // Store first issue's id
-            title: roomName,
-            severity: mappedSeverity,
-            issues: [],
-            room_id: notification.entity_id,
-          };
-        }
-        
-        // Map field names to more descriptive text
-        let fieldLabel = notification.field_name || 'unknown';
-        if (fieldLabel.toLowerCase().includes('name')) {
-          fieldLabel = 'missing name';
-        } else if (fieldLabel.toLowerCase().includes('type')) {
-          fieldLabel = 'missing type';
-        } else if (fieldLabel.toLowerCase().includes('status')) {
-          fieldLabel = 'missing status';
-        }
-        
-        // Add this issue to the issues array
-        notificationMap[key].issues.push({
-          field: fieldLabel,
-          message: notification.message,
-          type: notification.issue_type,
-        });
-      });
-      
-      // Convert map to array
-      const transformedNotifications = Object.values(notificationMap);
-      
-      // Calculate stats by severity
+      let data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
+
+      if ((data.total ?? 0) === 0) {
+        await rescanAllRoomNotifications();
+        data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
+      }
+
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const transformedNotifications = rows.map((row) => ({
+        ...row,
+        id: row.id,
+        room_id: row.room_id,
+        title: row.title || `Room #${row.room_id}`,
+        description: row.description || '',
+        severity: row.severity === 'high' ? 'critical' : (row.severity || 'medium'),
+        missingFields: Array.isArray(row.missingFields) ? row.missingFields : [],
+        issues: Array.isArray(row.issues) ? row.issues : [],
+      }));
+
       const stats = { total: transformedNotifications.length, critical: 0, medium: 0, low: 0 };
       transformedNotifications.forEach((notif) => {
         if (notif.severity === 'critical') stats.critical += 1;
         else if (notif.severity === 'medium') stats.medium += 1;
         else if (notif.severity === 'low') stats.low += 1;
       });
-      
-      console.log('Transformed notifications:', transformedNotifications);
+
       setNotifications(transformedNotifications);
       setNotificationStats(stats);
     } catch (err) {
       console.error('Failed to fetch room notifications:', err);
       setNotifications([]);
+      setNotificationStats({ total: 0, critical: 0, medium: 0, low: 0 });
     } finally {
       setNotificationsLoading(false);
     }
