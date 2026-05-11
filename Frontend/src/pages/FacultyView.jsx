@@ -67,6 +67,11 @@ export default function FacultyView() {
   const [pendingScrollToId, setPendingScrollToId] = useState(null);
   const [findingRow, setFindingRow] = useState(false);
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [facultyToDelete, setFacultyToDelete] = useState(null);
+  const [deletingFaculty, setDeletingFaculty] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
   const { setHighlight } = useRowHighlight();
 
   useEffect(() => {
@@ -427,6 +432,33 @@ export default function FacultyView() {
     }
   }
 
+  function openDeleteConfirm(member) {
+    setDeleteError(null);
+    setFacultyToDelete(member);
+    setShowDeleteConfirm(true);
+  }
+
+  function closeDeleteConfirm() {
+    setShowDeleteConfirm(false);
+    setFacultyToDelete(null);
+    setDeletingFaculty(false);
+    setDeleteError(null);
+  }
+
+  async function confirmDeleteFaculty() {
+    if (!facultyToDelete) return;
+
+    try {
+      setDeletingFaculty(true);
+      setDeleteError(null);
+      await handleDeleteFaculty(facultyToDelete);
+      closeDeleteConfirm();
+    } catch (err) {
+      setDeleteError(err?.message || 'Failed to delete faculty member');
+      setDeletingFaculty(false);
+    }
+  }
+
   async function handleStatusToggle(memberId, currentStatus) {
     const current = String(currentStatus || '').toLowerCase();
     const newStatus = current === 'active' ? 'inactive' : 'active';
@@ -720,7 +752,7 @@ export default function FacultyView() {
                           <Edit2 size={16} />
                         </button>
                         <button
-                          onClick={() => handleDeleteFaculty(member)}
+                          onClick={() => openDeleteConfirm(member)}
                           className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
                         >
                           <Trash2 size={16} />
@@ -966,6 +998,55 @@ export default function FacultyView() {
         </div>
       )}
 
+      {showDeleteConfirm && facultyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Delete Faculty Member</h3>
+              <button
+                onClick={closeDeleteConfirm}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                aria-label="Close delete confirmation"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle size={16} className="mt-0.5" />
+              <div>
+                Are you sure you want to delete{' '}
+                <span className="font-bold">{facultyToDelete.faculty_name}</span>? This action cannot be undone.
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle size={16} />
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={closeDeleteConfirm}
+                disabled={deletingFaculty}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteFaculty}
+                disabled={deletingFaculty}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingFaculty ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showEditModal && editingFaculty && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
@@ -1134,4 +1215,3 @@ export default function FacultyView() {
     </div>
   );
 }
-
