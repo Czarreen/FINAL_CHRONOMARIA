@@ -5,6 +5,7 @@ import TopAppBar from './components/TopAppBar';
 import LoginView from './components/LoginView';
 import DashboardView from './pages/DashboardView';
 import FacultyView from './pages/FacultyView';
+import FacultyLoadingView from './pages/FacultyLoadingView';
 import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
@@ -36,6 +37,7 @@ export default function App() {
       case 'subjects': return <SubjectsView />;
       case 'rooms': return <RoomsView />;
       case 'schedule': return <ScheduleView />;
+      case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView />;
       default: return <DashboardView />;
     }
