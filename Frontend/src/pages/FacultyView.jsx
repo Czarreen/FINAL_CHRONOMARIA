@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useRef, createPortal } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowUpDown,
   Users,
@@ -562,43 +563,39 @@ export default function FacultyView() {
           </button>
           <button
             ref={colButtonRef}
-            onClick={(e) => {
-              e.stopPropagation();
-              setColMenuOpen(!colMenuOpen);
-            }}
-            className={`rounded-lg p-1.5 transition-colors flex-shrink-0 ${
-              colMenuOpen
-                ? 'bg-white text-primary'
-                : 'bg-white/30 text-slate-400 hover:bg-white hover:text-primary'
-            }`}
+            className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+            onClick={() => setColMenuOpen((prev) => !prev)}
+            type="button"
             title="Column visibility"
           >
-            <Settings size={16} />
+            <Settings size={14} />
+            <span>Cols</span>
           </button>
-          {colMenuOpen && createPortal(
+          {colMenuOpen && typeof document !== 'undefined' && createPortal(
             <div
               ref={colMenuRef}
               style={{
                 position: 'fixed',
                 top: `${colMenuPos.top}px`,
                 left: `${colMenuPos.left}px`,
-                zIndex: 1000,
+                zIndex: 9999,
               }}
-              className="w-56 rounded-lg border border-white/20 bg-white/95 shadow-lg backdrop-blur-sm"
+              className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
             >
-              <div className="space-y-1 p-3">
-                {columns.map(col => (
-                  <label key={col.key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.has(col.key)}
-                      onChange={() => toggleColumnVisibility(col.key)}
-                      className="h-4 w-4 rounded border-primary accent-primary"
-                    />
-                    <span className="text-sm font-medium text-on-surface">{col.label}</span>
-                  </label>
-                ))}
-              </div>
+              {columns.map((col) => (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(col.key)}
+                    onChange={() => toggleColumnVisibility(col.key)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                  />
+                  {col.label}
+                </label>
+              ))}
             </div>,
             document.body
           )}
