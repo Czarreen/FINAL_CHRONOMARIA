@@ -20,5 +20,4 @@ export const env = {
   supabaseUrl: getRequiredEnv('SUPABASE_URL'),
   supabaseServiceRoleKey: getRequiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
-  jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
 };

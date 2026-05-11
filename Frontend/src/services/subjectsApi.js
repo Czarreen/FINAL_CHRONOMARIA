@@ -1,12 +1,11 @@
-import { apiFetch, API_BASE_URL } from './apiClient.js';
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function fetchSubjects({ page = 1, limit = 50, search = '', status = '' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
   if (status) params.status = String(status);
   const query = new URLSearchParams(params);
-  const response = await apiFetch(`/api/subjects?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/subjects?${query.toString()}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -24,7 +23,7 @@ export async function fetchSubjects({ page = 1, limit = 50, search = '', status 
 }
 
 export async function fetchSubjectById(id) {
-  const response = await apiFetch(`/api/subjects/${id}`);
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -35,7 +34,7 @@ export async function fetchSubjectById(id) {
 }
 
 export async function updateSubjectStatus(id, status) {
-  const response = await apiFetch(`/api/subjects/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -52,7 +51,7 @@ export async function updateSubjectStatus(id, status) {
 }
 
 export async function updateSubject(id, updates) {
-  const response = await apiFetch(`/api/subjects/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -69,7 +68,7 @@ export async function updateSubject(id, updates) {
 }
 
 export async function deleteSubject(id) {
-  const response = await apiFetch(`/api/subjects/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'DELETE',
   });
 
@@ -82,7 +81,7 @@ export async function deleteSubject(id) {
 }
 
 export async function activateAllSubjects() {
-  const response = await apiFetch(`/api/subjects/bulk/activate-all`, {
+  const response = await fetch(`${API_BASE_URL}/api/subjects/bulk/activate-all`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -98,7 +97,7 @@ export async function activateAllSubjects() {
 }
 
 export async function createSubject(subjectData) {
-  const response = await apiFetch(`/api/subjects`, {
+  const response = await fetch(`${API_BASE_URL}/api/subjects`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

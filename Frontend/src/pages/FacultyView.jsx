@@ -29,7 +29,6 @@ import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
-import { createAuditLog, buildChangeSummary } from '../services/auditLogsApi.js';
 
 export default function FacultyView() {
   const [faculty, setFaculty] = useState([]);
@@ -413,7 +412,7 @@ export default function FacultyView() {
     try {
       setSavingFaculty(true);
       setFacultyError(null);
-      const createdFaculty = await createFaculty(normalizePayload(newFaculty));
+      await createFaculty(normalizePayload(newFaculty));
       setShowAddModal(false);
       setNewFaculty({
         faculty_name: '',
@@ -427,7 +426,6 @@ export default function FacultyView() {
       setNewSpecializationInput('');
       await loadFaculty();
       await loadFacultyNotifications(); // ← Refresh notifications after add
-      createAuditLog({ action: 'Created faculty', module: 'Faculty', description: `Added faculty "${createdFaculty?.faculty_name || newFaculty.faculty_name}"`, changesAfter: createdFaculty });
     } catch (err) {
       setFacultyError(err.message || 'Failed to create faculty member');
     } finally {
@@ -466,7 +464,6 @@ export default function FacultyView() {
       setEditingFaculty(null);
       await loadFaculty();
       await loadFacultyNotifications(); // ← Refresh notifications after edit
-      createAuditLog({ action: 'Updated faculty', module: 'Faculty', description: `Updated faculty "${editingFaculty.faculty_name}": ${buildChangeSummary(editingFaculty, normalized, { faculty_name: 'Name', faculty_role: 'Role', faculty_status: 'Status', faculty_email: 'Email', faculty_max_units: 'Max Units' })}` });
     } catch (err) {
       console.error('Edit error details:', err);
       if (String(err.message || '').includes('404')) {
@@ -488,7 +485,6 @@ export default function FacultyView() {
       await deleteFaculty(member.faculty_id);
       await loadFaculty();
       await loadFacultyNotifications(); // ← Refresh notifications after delete
-      createAuditLog({ action: 'Deleted faculty', module: 'Faculty', description: `Deleted faculty "${member.faculty_name}"`, changesBefore: member });
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadFaculty();
@@ -536,7 +532,6 @@ export default function FacultyView() {
       await updateFacultyStatus(memberId, newStatus);
       await loadFaculty();
       await loadFacultyNotifications(); // ← Refresh notifications after status change
-      createAuditLog({ action: `Set faculty status to ${newStatus}`, module: 'Faculty', description: `Changed faculty #${memberId} status to ${newStatus}` });
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         await loadFaculty();

@@ -1,5 +1,4 @@
-import { apiFetch, API_BASE_URL } from './apiClient.js';
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function fetchCourseOfferingsPage(page = 1, limit = 50, sortBy = 'id', sortOrder = 'asc') {
   return fetchCourseOfferings({ page, limit, sortBy, sortOrder });
@@ -11,7 +10,7 @@ export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', 
   if (sortBy) params.sortBy = String(sortBy);
   if (sortOrder) params.sortOrder = String(sortOrder);
   const query = new URLSearchParams(params);
-  const response = await apiFetch(`/api/course-offerings?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings?${query.toString()}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -26,7 +25,7 @@ export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', 
 }
 
 export async function createCourseOffering(data) {
-  const response = await apiFetch(`/api/course-offerings`, {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -41,7 +40,7 @@ export async function createCourseOffering(data) {
 }
 
 export async function updateCourseOffering(id, data) {
-  const response = await apiFetch(`/api/course-offerings/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -56,7 +55,7 @@ export async function updateCourseOffering(id, data) {
 }
 
 export async function deleteCourseOffering(id) {
-  const response = await apiFetch(`/api/course-offerings/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
     method: 'DELETE',
   });
 
@@ -75,7 +74,7 @@ export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode 
 
   let response;
   try {
-    response = await apiFetch(`/api/course-offerings/import-csv`, {
+    response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ csvText, fileName, replaceMode }),
@@ -99,7 +98,7 @@ export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode 
 }
 
 export async function fetchCourseOfferingById(id) {
-  const response = await apiFetch(`/api/course-offerings/${id}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`);
 
   if (!response.ok) {
     const body = await response.text();
