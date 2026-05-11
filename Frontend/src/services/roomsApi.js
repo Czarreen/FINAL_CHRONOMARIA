@@ -83,3 +83,16 @@ export async function deleteRoom(room_id) {
 
   return payload;
 }
+
+// GET - Fetch all course offerings for a room
+export async function fetchRoomOfferings(room_id) {
+  const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}/offerings`);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload.rows) ? payload.rows : [];
+}

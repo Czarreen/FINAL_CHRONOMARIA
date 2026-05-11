@@ -150,4 +150,38 @@ router.delete('/:room_id', async (req, res) => {
   }
 });
 
+// GET - Fetch all course offerings for a specific room
+router.get('/:room_id/offerings', async (req, res) => {
+  try {
+    const rid = String(req.params.room_id);
+
+    // Match room_id in mth_room_id or tfs_room_id (handles "1/5" slash-separated values)
+    const orFilter = [
+      `mth_room_id.eq.${rid}`,
+      `mth_room_id.like.${rid}/%`,
+      `mth_room_id.like.%/${rid}`,
+      `mth_room_id.like.%/${rid}/%`,
+      `tfs_room_id.eq.${rid}`,
+      `tfs_room_id.like.${rid}/%`,
+      `tfs_room_id.like.%/${rid}`,
+      `tfs_room_id.like.%/${rid}/%`,
+    ].join(',');
+
+    const { data, error } = await supabaseAdmin
+      .from('course_offerings')
+      .select('id, code, course_no, descriptive_title, section, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
+      .or(orFilter);
+
+    if (error) {
+      console.error('Room offerings query error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.json({ rows: data ?? [] });
+  } catch (err) {
+    console.error('Room offerings route error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
