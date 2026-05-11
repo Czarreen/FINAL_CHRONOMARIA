@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+import { apiFetch, API_BASE_URL } from './apiClient.js';
+
 
 export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, unresolvedOnly = true } = {}) {
   const params = new URLSearchParams();
@@ -6,7 +7,7 @@ export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, 
   params.set('limit', String(limit));
   if (unresolvedOnly) params.set('is_resolved', 'false');
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/course-offerings?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch notifications: ${res.status}`);
@@ -15,7 +16,7 @@ export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, 
 }
 
 export async function resolveCourseOfferingNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/${id}/resolve`, { method: 'PATCH' });
+  const res = await apiFetch(`/api/notifications/course-offerings/${id}/resolve`, { method: 'PATCH' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);
@@ -24,7 +25,7 @@ export async function resolveCourseOfferingNotification(id) {
 }
 
 export async function rescanAllCourseOfferingNotifications() {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, { method: 'POST' });
+  const res = await apiFetch(`/api/notifications/course-offerings/rescan-all`, { method: 'POST' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to rescan notifications: ${res.status}`);
@@ -33,7 +34,7 @@ export async function rescanAllCourseOfferingNotifications() {
 }
 
 export async function syncCourseOfferingNotifications(offeringId) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/sync`, {
+  const res = await apiFetch(`/api/notifications/course-offerings/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ offering_id: offeringId }),
@@ -52,7 +53,7 @@ export async function fetchFacultyNotifications({ page = 1, limit = 500 } = {}) 
   params.set('page', String(page));
   params.set('limit', String(limit));
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/faculty?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/faculty?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch faculty notifications: ${res.status}`);
@@ -65,7 +66,7 @@ export async function fetchSubjectNotifications({ page = 1, limit = 500 } = {}) 
   params.set('page', String(page));
   params.set('limit', String(limit));
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/subjects?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch subject notifications: ${res.status}`);
@@ -82,7 +83,7 @@ export async function fetchPersistedSubjectNotifications({ page = 1, limit = 200
   params.set('limit', String(limit));
   if (unresolvedOnly) params.set('is_resolved', 'false');
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/persisted?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/subjects/persisted?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch persisted subject notifications: ${res.status}`);
@@ -91,7 +92,7 @@ export async function fetchPersistedSubjectNotifications({ page = 1, limit = 200
 }
 
 export async function resolveSubjectNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/${id}/resolve`, { method: 'PATCH' });
+  const res = await apiFetch(`/api/notifications/subjects/${id}/resolve`, { method: 'PATCH' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve subject notification: ${res.status}`);
@@ -104,7 +105,7 @@ export async function fetchPersistedFacultyNotifications({ page = 1, limit = 200
   params.set('limit', String(limit));
   if (unresolvedOnly) params.set('is_resolved', 'false');
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/faculty/persisted?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/faculty/persisted?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch persisted faculty notifications: ${res.status}`);
@@ -137,7 +138,7 @@ export async function fetchPersistedFacultyNotifications({ page = 1, limit = 200
 }
 
 export async function resolveFacultyNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/faculty/${id}/resolve`, { method: 'PATCH' });
+  const res = await apiFetch(`/api/notifications/faculty/${id}/resolve`, { method: 'PATCH' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);
@@ -151,7 +152,7 @@ export async function fetchRoomNotifications({ page = 1, limit = 200, unresolved
   params.set('limit', String(limit));
   if (unresolvedOnly) params.set('is_resolved', 'false');
 
-  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms?${params.toString()}`);
+  const res = await apiFetch(`/api/notifications/rooms?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to fetch room notifications: ${res.status}`);
@@ -170,7 +171,7 @@ export async function rescanAllRoomNotifications() {
 }
 
 export async function resolveRoomNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/${id}/resolve`, { method: 'PATCH' });
+  const res = await apiFetch(`/api/notifications/rooms/${id}/resolve`, { method: 'PATCH' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);
@@ -179,7 +180,7 @@ export async function resolveRoomNotification(id) {
 }
 
 export async function clearAllNotifications() {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/clear-all`, { method: 'DELETE' });
+  const res = await apiFetch(`/api/notifications/clear-all`, { method: 'DELETE' });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to clear notifications: ${res.status}`);

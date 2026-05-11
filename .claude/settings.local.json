@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(curl -s http://localhost:5000/api/users)",
+      "Bash(curl -s -X POST http://localhost:5000/api/users -H \"Content-Type: application/json\" -d '{\"\"username\"\":\"\"testuser123\"\",\"\"email\"\":\"\"test123@example.com\"\",\"\"password\"\":\"\"testpass123\"\",\"\"role\"\":\"\"staff\"\",\"\"status\"\":\"\"active\"\"}')",
+      "Bash(curl -s -X DELETE http://localhost:5000/api/users/9)"
+    ]
+  }
+}

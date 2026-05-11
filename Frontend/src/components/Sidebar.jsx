@@ -7,10 +7,14 @@ import {
   NotebookTabs,
   LogOut,
   CircleUserRound,
+  Settings,
 } from 'lucide-react';
 
 export default function Sidebar({ currentView, onViewChange, onLogout }) {
-  const menuItems = [
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const userRole = user.role || 'staff';
+
+  let menuItems = [
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
     { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
     { id: 'faculty', icon: Users, label: 'Faculty' },
@@ -18,6 +22,11 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
     { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
     { id: 'schedule', icon: Calendar, label: 'Schedule' },
   ];
+
+  // Only show Settings tab for admin and super-admin users
+  if (userRole !== 'staff') {
+    menuItems.push({ id: 'settings', icon: Settings, label: 'Settings' });
+  }
 
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col overflow-y-auto border-r border-white/40 bg-white/70 p-6 shadow-[30px_0_40px_rgba(0,0,0,0.05)] backdrop-blur-[20px]">
@@ -61,8 +70,10 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
             <CircleUserRound size={16} />
           </div>
           <div>
-            <p className="text-label-bold font-medium text-on-surface">Administrator</p>
-            <p className="text-[10px] text-on-surface-variant">System Admin</p>
+            <p className="text-label-bold font-medium text-on-surface capitalize">{user.username || 'User'}</p>
+            <p className="text-[10px] text-on-surface-variant capitalize">
+              {userRole === 'super-admin' ? 'Super Admin' : userRole === 'admin' ? 'Administrator' : 'Staff'}
+            </p>
           </div>
         </div>
 
