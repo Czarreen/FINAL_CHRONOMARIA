@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect } from 'react';
-import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
@@ -50,6 +51,71 @@ export default function SubjectsView() {
   const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
+
+  const columns = [
+    { key: 'subject_code', label: 'Code' },
+    { key: 'subject_course_no', label: 'Course No' },
+    { key: 'subject_descriptive_title', label: 'Description' },
+    { key: 'mth_schedule', label: 'MTH' },
+    { key: 'tfs_schedule', label: 'TFS' },
+    { key: 'room', label: 'Room' },
+    { key: 'subject_units', label: 'Units' },
+    { key: 'subject_lec_lab', label: 'Lec/Lab' },
+    { key: 'subject_status', label: 'Status' },
+  ];
+
+  const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
+  const colButtonRef = useRef(null);
+  const colMenuRef = useRef(null);
+  const pendingStatusUpdatesRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!colMenuOpen) return;
+
+    const updatePosition = () => {
+      if (!colButtonRef.current) return;
+      const rect = colButtonRef.current.getBoundingClientRect();
+      setColMenuPos({
+        top: rect.bottom + 8,
+        left: rect.right - 224,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    const handleClickOutside = (e) => {
+      const isButtonClick = colButtonRef.current && colButtonRef.current.contains(e.target);
+      const isMenuClick = colMenuRef.current && colMenuRef.current.contains(e.target);
+
+      if (!isButtonClick && !isMenuClick) {
+        setColMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [colMenuOpen]);
+
+  function toggleColumnVisibility(columnKey) {
+    setVisibleColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(columnKey)) {
+        next.delete(columnKey);
+      } else {
+        next.add(columnKey);
+      }
+      return next;
+    });
+  }
 
   function normalizeNotificationSeverity(severity) {
     if (severity === 'high') return 'critical';
@@ -112,6 +178,56 @@ export default function SubjectsView() {
   useEffect(() => {
     loadRoomLookup();
   }, []);
+
+  // Auto-toggle subject_status based on open notification issues
+  // Runs on initial load, refresh, and whenever notifications or subjects change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!subjects.length || subjectNotificationsLoading) return;
+
+    const toUpdate = subjects.filter((s) => {
+      if (pendingStatusUpdatesRef.current.has(s.subject_id)) return false;
+      const { hasOpenIssues } = getSubjectIssueState(s.subject_id);
+      const desired = hasOpenIssues ? 'inactive' : 'active';
+      return desired !== s.subject_status;
+    });
+
+    if (!toUpdate.length) return;
+
+    toUpdate.forEach((s) => pendingStatusUpdatesRef.current.add(s.subject_id));
+
+    async function runBatched() {
+      const CONCURRENCY = 5;
+      for (let i = 0; i < toUpdate.length; i += CONCURRENCY) {
+        const batch = toUpdate.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (s) => {
+            const { hasOpenIssues } = getSubjectIssueState(s.subject_id);
+            const desired = hasOpenIssues ? 'inactive' : 'active';
+            try {
+              setUpdatingStatus(s.subject_id);
+              await updateSubjectStatus(s.subject_id, desired);
+              setSubjects((prev) =>
+                prev.map((sub) =>
+                  sub.subject_id === s.subject_id
+                    ? { ...sub, subject_status: desired }
+                    : sub
+                )
+              );
+              setActiveCount((c) => c + (desired === 'active' ? 1 : -1));
+            } catch (_) {
+              // ignore individual failures; effect will retry on next notification reload
+            } finally {
+              pendingStatusUpdatesRef.current.delete(s.subject_id);
+              setUpdatingStatus((prev) => (prev === s.subject_id ? null : prev));
+            }
+          })
+        );
+      }
+    }
+
+    runBatched();
+  }, [subjectNotifications, subjects, subjectNotificationsLoading]);
 
   async function loadRoomLookup() {
     try {
@@ -532,78 +648,120 @@ export default function SubjectsView() {
     return mthRoom || tfsRoom || '—';
   }
 
+  function getSubjectIssueState(subjectId) {
+    const id = Number(subjectId);
+    const hasOpenIssues = subjectNotifications.some(
+      (item) => Number(item.rowId) === id
+    );
+    return { hasOpenIssues };
+  }
+
   return (
-    <div className="space-y-gutter animate-in slide-in-from-right-4 duration-500">
-      {/* Header with stats */}
-      <div className="grid grid-cols-1 gap-gutter lg:grid-cols-12">
-        <div className="glass-panel col-span-1 flex items-center justify-between p-8 lg:col-span-8">
-          <div className="space-y-1">
-            <h2 className="text-headline-xl font-headline-xl text-on-surface">Curriculum Repository</h2>
-            <p className="text-body-md text-on-surface-variant">Manage subjects, credit units, and classifications.</p>
-          </div>
-          <div className="flex gap-2">
-              <NotificationButton
-              items={visibleSubjectNotifications}
-              title="Subject Notifications"
-              emptyLabel="No subject issues"
-              buttonLabel="Issues"
-              onItemEdit={(item) => {
-                const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
-                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
-                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+<div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-right-4 duration-500">
+      {/* Header with Title, Description, and Action Buttons */}
+<div className="bg-white/90 rounded-xl border border-white/60 flex items-center justify-between p-3 flex-shrink-0">
+        <div className="space-y-0.5 min-w-0">
+          <h2 className="text-lg font-bold text-on-surface truncate">Curriculum Repository</h2>
+          <p className="text-xs text-on-surface-variant truncate">Manage subjects, credit units, and classifications.</p>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0 ml-4">
+          <NotificationButton
+            items={visibleSubjectNotifications}
+            title="Subject Notifications"
+            emptyLabel="No subject issues"
+            buttonLabel="Issues"
+            onItemEdit={(item) => {
+              const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
+              const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+              if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+            }}
+            onItemJump={(item) => {
+              const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
+              if (rowId) scrollToSubjectRowById(rowId);
+            }}
+            onItemResolve={(item) => handleResolveNotification(item)}
+            severityFilter={notifSeverityFilter}
+            onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
+            notificationSearch={notifSearch}
+            onNotificationSearchChange={(v) => setNotifSearch(v)}
+            notificationStats={subjectNotificationStats}
+          />
+          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+            {total} subjects
+          </span>
+          <button
+            onClick={() => { loadSubjects(); loadSubjectNotifications(); }}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
+            title="Reload subjects and sync status"
+          >
+            <RotateCcw size={16} />
+          </button>
+          <button
+            ref={colButtonRef}
+            className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+            onClick={() => setColMenuOpen((prev) => !prev)}
+            type="button"
+            title="Column visibility"
+          >
+            <Settings size={14} />
+            <span>Cols</span>
+          </button>
+          {colMenuOpen && typeof document !== 'undefined' && createPortal(
+            <div
+              ref={colMenuRef}
+              style={{
+                position: 'fixed',
+                top: `${colMenuPos.top}px`,
+                left: `${colMenuPos.left}px`,
+                zIndex: 9999,
               }}
-              onItemJump={(item) => {
-                const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
-                if (rowId) scrollToSubjectRowById(rowId);
-              }}
-              onItemResolve={(item) => handleResolveNotification(item)}
-              severityFilter={notifSeverityFilter}
-              onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
-              notificationSearch={notifSearch}
-              onNotificationSearchChange={(v) => setNotifSearch(v)}
-              notificationStats={subjectNotificationStats}
-            />
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="btn-primary flex items-center gap-2"
+              className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
             >
-              <PlusCircle size={18} />
-              <span>Add Subject</span>
-            </button>
-          </div>
-        </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <BookOpen size={24} className="text-primary" />
-          <span className="mt-3 text-3xl font-bold text-on-surface">{total}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Total Subjects</span>
-        </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <Check size={24} className="text-green-500" />
-          <span className="mt-3 text-3xl font-bold text-on-surface">{activeCount}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Active</span>
+              {columns.map((col) => (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(col.key)}
+                    onChange={() => toggleColumnVisibility(col.key)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                  />
+                  {col.label}
+                </label>
+              ))}
+            </div>,
+            document.body
+          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn-primary flex items-center gap-1 px-3 py-1.5 text-sm flex-shrink-0"
+          >
+            <PlusCircle size={16} />
+            <span>Add</span>
+          </button>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="glass-panel space-y-4 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Search Input */}
+<div className="bg-white/90 rounded-xl border border-white/60 space-y-2 p-3 flex-shrink-0 mt-1">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="relative flex-1 md:max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
-              placeholder="Search by code, description, schedule, or room..."
+              placeholder="Search subjects..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
             />
           </div>
 
-          {/* Status Filter */}
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             {['', 'active', 'inactive'].map((status) => (
               <button
                 key={status}
@@ -611,7 +769,7 @@ export default function SubjectsView() {
                   setStatusFilter(status);
                   setPage(1);
                 }}
-                className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
                     : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
@@ -623,10 +781,9 @@ export default function SubjectsView() {
           </div>
         </div>
 
-        {/* Error Message */}
         {updateError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+            <AlertCircle size={14} />
             {updateError}
           </div>
         )}
@@ -634,160 +791,116 @@ export default function SubjectsView() {
 
       {/* Loading State */}
       {loading && (
-        <div className="glass-panel flex flex-col items-center justify-center py-16">
+<div className="bg-white/90 rounded-xl border border-white/60 flex flex-col items-center justify-center flex-1 mt-1">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary"></div>
-          <p className="mt-4 text-on-surface-variant">Loading subjects...</p>
+          <p className="mt-4 text-sm text-on-surface-variant">Loading subjects...</p>
         </div>
       )}
 
       {/* Error State */}
       {error && !loading && (
-        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-700">
-          <AlertCircle size={20} />
+<div className="bg-red-50 rounded-xl border border-white/60 flex items-center gap-3 p-3 text-red-700 flex-1 mt-1">
+          <AlertCircle size={18} />
           <div>
-            <p className="font-bold">Error loading subjects</p>
-            <p className="text-sm">{error}</p>
+            <p className="font-bold text-sm">Error loading subjects</p>
+            <p className="text-xs">{error}</p>
           </div>
         </div>
       )}
 
       {/* Subjects Table */}
       {!loading && !error && subjects.length > 0 && (
-        <div className="glass-panel overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+<div className="bg-white/90 rounded-xl border border-white/60 overflow-hidden flex-1 flex flex-col mt-1 min-h-0">
+          <div className="overflow-auto flex-1">
+            <table className="min-w-full w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/20 bg-white/30">
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('subject_code')} className={sortHeaderClass('subject_code')}>
-                      <span>Code</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('subject_course_no')} className={sortHeaderClass('subject_course_no')}>
-                      <span>Course No</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('subject_descriptive_title')} className={sortHeaderClass('subject_descriptive_title')}>
-                      <span>Description</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('mth_schedule')} className={sortHeaderClass('mth_schedule')}>
-                      <span>MTH</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('tfs_schedule')} className={sortHeaderClass('tfs_schedule')}>
-                      <span>TFS</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left">
-                    <button type="button" onClick={() => handleSort('room')} className={sortHeaderClass('room')}>
-                      <span>Room</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-center">
-                    <button type="button" onClick={() => handleSort('subject_units')} className={sortHeaderClass('subject_units')}>
-                      <span>Units</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-center">
-                    <button type="button" onClick={() => handleSort('subject_lec_lab')} className={sortHeaderClass('subject_lec_lab')}>
-                      <span>Lec/Lab</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-center">
-                    <button type="button" onClick={() => handleSort('subject_status')} className={sortHeaderClass('subject_status')}>
-                      <span>Status</span>
-                      <ArrowUpDown size={12} />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Actions</th>
+<tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
+                  {columns.map(col => visibleColumns.has(col.key) && (
+                    <th key={col.key} className="px-4 py-2 text-left">
+                      <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
+                        <span>{col.label}</span>
+                        <ArrowUpDown size={10} />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="sticky right-0 z-30 px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20">
                 {sortedSubjects.map((subject, index) => (
                   <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
-                    <td className="px-6 py-4">
-                      <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                        {subject.subject_code || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-on-surface">
-                      {subject.subject_course_no || '—'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="max-w-xs">
-                        <p className="text-sm font-medium text-on-surface">{subject.subject_descriptive_title || '—'}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      <span className="block text-sm text-on-surface-variant">{extractTimeRange(subject.mth_schedule)}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      <span className="block text-sm text-on-surface-variant">{extractTimeRange(subject.tfs_schedule)}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      <span className="block text-sm text-on-surface-variant">{extractRoomSummary(subject)}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center text-sm font-medium text-on-surface">
-                      {subject.subject_units || 0}
-                    </td>
-                    <td className="px-6 py-4 text-center text-sm font-medium text-on-surface-variant">
-                      {subject.subject_lec_hrs || 0}h / {subject.subject_lab_hrs || 0}h
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => handleStatusToggle(subject.subject_id, subject.subject_status)}
-                          disabled={updatingStatus === subject.subject_id}
-                          className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-xs font-bold transition-all ${
-                            subject.subject_status === 'active'
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          } disabled:opacity-50`}
-                        >
-                          {updatingStatus === subject.subject_id ? (
-                            <>
-                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                            </>
-                          ) : subject.subject_status === 'active' ? (
-                            <>
-                              <Check size={14} />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <X size={14} />
-                              Inactive
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center gap-2">
+                    {columns.map(col => visibleColumns.has(col.key) && (
+                      <td key={col.key} className="px-4 py-2">
+                        {col.key === 'subject_code' && (
+                          <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                            {subject.subject_code || 'N/A'}
+                          </span>
+                        )}
+                        {col.key === 'subject_course_no' && (
+                          <span className="text-xs font-medium text-on-surface">{subject.subject_course_no || '—'}</span>
+                        )}
+                        {col.key === 'subject_descriptive_title' && (
+                          <div className="max-w-xs">
+                            <p className="text-xs font-medium text-on-surface truncate">{subject.subject_descriptive_title || '—'}</p>
+                          </div>
+                        )}
+                        {col.key === 'mth_schedule' && (
+                          <span className="block text-xs text-on-surface-variant">{extractTimeRange(subject.mth_schedule)}</span>
+                        )}
+                        {col.key === 'tfs_schedule' && (
+                          <span className="block text-xs text-on-surface-variant">{extractTimeRange(subject.tfs_schedule)}</span>
+                        )}
+                        {col.key === 'room' && (
+                          <span className="block text-xs text-on-surface-variant">{extractRoomSummary(subject)}</span>
+                        )}
+                        {col.key === 'subject_units' && (
+                          <span className="text-center text-xs font-medium text-on-surface">{subject.subject_units || 0}</span>
+                        )}
+                        {col.key === 'subject_lec_lab' && (
+                          <span className="text-center text-xs font-medium text-on-surface-variant">{subject.subject_lec_hrs || 0}h / {subject.subject_lab_hrs || 0}h</span>
+                        )}
+                        {col.key === 'subject_status' && (
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => handleStatusToggle(subject.subject_id, subject.subject_status)}
+                              disabled={updatingStatus === subject.subject_id}
+                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
+                                subject.subject_status === 'active'
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              } disabled:opacity-50`}
+                            >
+                              {updatingStatus === subject.subject_id ? (
+                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                              ) : subject.subject_status === 'active' ? (
+                                <>
+                                  <Check size={12} />
+                                  Active
+                                </>
+                              ) : (
+                                <>
+                                  <X size={12} />
+                                  Inactive
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    ))}
+                    <td className="sticky right-0 z-10 px-4 py-2 bg-white">
+                      <div className="flex justify-center gap-1">
                         <button
                           onClick={() => handleEditSubject(subject)}
-                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
+                          className="rounded-md bg-white/30 p-1 text-slate-400 transition-colors hover:bg-white hover:text-primary"
                         >
-                          <Edit2 size={16} />
+                          <Edit2 size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteSubject(subject)}
-                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          className="rounded-md bg-white/30 p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -799,20 +912,19 @@ export default function SubjectsView() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-6 py-4">
-              <div className="text-sm text-on-surface-variant">
-                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} subjects
+            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2 flex-shrink-0">
+              <div className="text-xs text-on-surface-variant">
+                {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
                 >
-                  <ChevronLeft size={16} />
-                  Previous
+                  <ChevronLeft size={14} />
                 </button>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum;
                     if (totalPages <= 5) {
@@ -828,7 +940,7 @@ export default function SubjectsView() {
                       <button
                         key={pageNum}
                         onClick={() => setPage(pageNum)}
-                        className={`rounded-lg px-3 py-2 text-sm font-bold transition-all ${
+                        className={`rounded-lg px-2 py-1 text-xs font-bold transition-all ${
                           pageNum === page
                             ? 'bg-primary text-white'
                             : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
@@ -842,10 +954,9 @@ export default function SubjectsView() {
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
                 >
-                  Next
-                  <ChevronRight size={16} />
+                  <ChevronRight size={14} />
                 </button>
               </div>
             </div>
@@ -853,12 +964,12 @@ export default function SubjectsView() {
         </div>
       )}
 
-{/* Empty State */}
+      {/* Empty State */}
       {!loading && !error && subjects.length === 0 && (
-        <div className="glass-panel flex flex-col items-center justify-center py-16 text-center">
-          <BookOpen size={48} className="text-on-surface-variant/30" />
-          <p className="mt-4 text-lg font-bold text-on-surface">No subjects found</p>
-          <p className="mt-1 text-sm text-on-surface-variant">
+<div className="bg-white/90 rounded-xl border border-white/60 flex flex-col items-center justify-center flex-1 mt-1 text-center">
+          <BookOpen size={40} className="text-on-surface-variant/30" />
+          <p className="mt-3 text-sm font-bold text-on-surface">No subjects found</p>
+          <p className="mt-1 text-xs text-on-surface-variant">
             {search || statusFilter ? 'Try adjusting your filters' : 'Create your first subject to get started'}
           </p>
         </div>
@@ -867,25 +978,25 @@ export default function SubjectsView() {
       {/* Add Subject Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Add New Subject</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Add New Subject</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {subjectError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {subjectError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {subjectError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {subjectError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     Subject Code *
@@ -894,7 +1005,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.subject_code}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_code: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., 4700"
                   />
                 </div>
@@ -907,7 +1018,7 @@ export default function SubjectsView() {
                   type="text"
                   value={newSubject.subject_course_no}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g., HCI-101"
                 />
               </div>
@@ -920,12 +1031,12 @@ export default function SubjectsView() {
                   type="text"
                   value={newSubject.subject_descriptive_title}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g., Introduction to Human Computer Interactions"
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     MTH Schedule
@@ -934,7 +1045,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.mth_schedule}
                     onChange={(e) => setNewSubject({ ...newSubject, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., M 7:00-10:00"
                   />
                 </div>
@@ -945,7 +1056,7 @@ export default function SubjectsView() {
                   <select
                     value={newSubject.mth_room}
                     onChange={(e) => setNewSubject({ ...newSubject, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">— No Room —</option>
                     {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
@@ -961,7 +1072,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.tfs_schedule}
                     onChange={(e) => setNewSubject({ ...newSubject, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., T 1:00-4:00"
                   />
                 </div>
@@ -972,7 +1083,7 @@ export default function SubjectsView() {
                   <select
                     value={newSubject.tfs_room}
                     onChange={(e) => setNewSubject({ ...newSubject, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">— No Room —</option>
                     {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
@@ -993,7 +1104,7 @@ export default function SubjectsView() {
                     max="10"
                     value={newSubject.subject_units}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1005,7 +1116,7 @@ export default function SubjectsView() {
                     min="0"
                     value={newSubject.subject_lec_hrs}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1017,7 +1128,7 @@ export default function SubjectsView() {
                     min="0"
                     value={newSubject.subject_lab_hrs}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -1029,28 +1140,28 @@ export default function SubjectsView() {
                 <select
                   value={newSubject.subject_status}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddSubject}
-                disabled={savingSubject}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingSubject ? 'Saving...' : 'Save Subject'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddSubject}
+                  disabled={savingSubject}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingSubject ? 'Saving...' : 'Save Subject'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1059,32 +1170,32 @@ export default function SubjectsView() {
       {/* Edit Subject Modal */}
       {showEditModal && editingSubject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
-                <h3 className="text-xl font-bold text-on-surface">
+                <h3 className="text-lg font-bold text-white">
                   {editingSubject._fromNotification ? 'Fix Missing Fields' : 'Edit Subject'}
                 </h3>
                 {editingSubject._fromNotification && (
-                  <p className="text-xs text-amber-600 mt-0.5">Only fields with missing data are editable. Filled fields are locked.</p>
+                  <p className="text-xs text-white/70 mt-0.5">Only fields with missing data are editable. Filled fields are locked.</p>
                 )}
               </div>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {editError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {editError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {editError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                   Subject Code *
@@ -1093,7 +1204,7 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_code}
                   onChange={(e) => setEditingData({ ...editingData, subject_code: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., CMSC 11"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_code')}
                 />
@@ -1107,7 +1218,7 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_course_no}
                   onChange={(e) => setEditingData({ ...editingData, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
                 />
@@ -1121,13 +1232,13 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_descriptive_title}
                   onChange={(e) => setEditingData({ ...editingData, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., Introduction to Computer Science"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_descriptive_title')}
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     MTH Schedule
@@ -1136,7 +1247,7 @@ export default function SubjectsView() {
                     type="text"
                     value={editingData.mth_schedule}
                     onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     placeholder="e.g., M 7:00-10:00"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_schedule')}
                   />
@@ -1148,7 +1259,7 @@ export default function SubjectsView() {
                   <select
                     value={editingData.mth_room}
                     onChange={(e) => setEditingData({ ...editingData, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_room')}
                   >
                     <option value="">— No Room —</option>
@@ -1165,7 +1276,7 @@ export default function SubjectsView() {
                     type="text"
                     value={editingData.tfs_schedule}
                     onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     placeholder="e.g., T 1:00-4:00"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_schedule')}
                   />
@@ -1177,7 +1288,7 @@ export default function SubjectsView() {
                   <select
                     value={editingData.tfs_room}
                     onChange={(e) => setEditingData({ ...editingData, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_room')}
                   >
                     <option value="">— No Room —</option>
@@ -1199,7 +1310,7 @@ export default function SubjectsView() {
                     max="10"
                     value={editingData.subject_units}
                     onChange={(e) => setEditingData({ ...editingData, subject_units: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1211,7 +1322,7 @@ export default function SubjectsView() {
                     min="0"
                     value={editingData.subject_lec_hrs}
                     onChange={(e) => setEditingData({ ...editingData, subject_lec_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1223,7 +1334,7 @@ export default function SubjectsView() {
                     min="0"
                     value={editingData.subject_lab_hrs}
                     onChange={(e) => setEditingData({ ...editingData, subject_lab_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -1235,28 +1346,28 @@ export default function SubjectsView() {
                 <select
                   value={editingData.subject_status}
                   onChange={(e) => setEditingData({ ...editingData, subject_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={savingEdit}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
