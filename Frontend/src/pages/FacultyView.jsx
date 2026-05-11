@@ -53,6 +53,10 @@ export default function FacultyView() {
   const [editingFaculty, setEditingFaculty] = useState(null);
   const [newSpecializationInput, setNewSpecializationInput] = useState('');
   const [editSpecializationInput, setEditSpecializationInput] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [facultyToDelete, setFacultyToDelete] = useState(null);
+  const [deletingFaculty, setDeletingFaculty] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const [newFaculty, setNewFaculty] = useState({
     faculty_name: '',
     faculty_role: '',
@@ -814,7 +818,7 @@ export default function FacultyView() {
                             <Edit2 size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteFaculty(member)}
+                            onClick={() => openDeleteConfirm(member)}
                             className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
                           >
                             <Trash2 size={14} />
