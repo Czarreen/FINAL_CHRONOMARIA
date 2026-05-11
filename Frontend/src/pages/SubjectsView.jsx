@@ -862,25 +862,25 @@ export default function SubjectsView() {
       {/* Add Subject Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Add New Subject</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Add New Subject</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {subjectError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {subjectError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {subjectError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {subjectError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     Subject Code *
@@ -889,7 +889,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.subject_code}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_code: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., 4700"
                   />
                 </div>
@@ -902,7 +902,7 @@ export default function SubjectsView() {
                   type="text"
                   value={newSubject.subject_course_no}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g., HCI-101"
                 />
               </div>
@@ -915,12 +915,12 @@ export default function SubjectsView() {
                   type="text"
                   value={newSubject.subject_descriptive_title}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g., Introduction to Human Computer Interactions"
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     MTH Schedule
@@ -929,7 +929,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.mth_schedule}
                     onChange={(e) => setNewSubject({ ...newSubject, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., M 7:00-10:00"
                   />
                 </div>
@@ -940,7 +940,7 @@ export default function SubjectsView() {
                   <select
                     value={newSubject.mth_room}
                     onChange={(e) => setNewSubject({ ...newSubject, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">— No Room —</option>
                     {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
@@ -956,7 +956,7 @@ export default function SubjectsView() {
                     type="text"
                     value={newSubject.tfs_schedule}
                     onChange={(e) => setNewSubject({ ...newSubject, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g., T 1:00-4:00"
                   />
                 </div>
@@ -967,7 +967,7 @@ export default function SubjectsView() {
                   <select
                     value={newSubject.tfs_room}
                     onChange={(e) => setNewSubject({ ...newSubject, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">— No Room —</option>
                     {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
@@ -988,7 +988,7 @@ export default function SubjectsView() {
                     max="10"
                     value={newSubject.subject_units}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1000,7 +1000,7 @@ export default function SubjectsView() {
                     min="0"
                     value={newSubject.subject_lec_hrs}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1012,7 +1012,7 @@ export default function SubjectsView() {
                     min="0"
                     value={newSubject.subject_lab_hrs}
                     onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -1024,28 +1024,28 @@ export default function SubjectsView() {
                 <select
                   value={newSubject.subject_status}
                   onChange={(e) => setNewSubject({ ...newSubject, subject_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddSubject}
-                disabled={savingSubject}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingSubject ? 'Saving...' : 'Save Subject'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddSubject}
+                  disabled={savingSubject}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingSubject ? 'Saving...' : 'Save Subject'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1054,32 +1054,32 @@ export default function SubjectsView() {
       {/* Edit Subject Modal */}
       {showEditModal && editingSubject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
-                <h3 className="text-xl font-bold text-on-surface">
+                <h3 className="text-lg font-bold text-white">
                   {editingSubject._fromNotification ? 'Fix Missing Fields' : 'Edit Subject'}
                 </h3>
                 {editingSubject._fromNotification && (
-                  <p className="text-xs text-amber-600 mt-0.5">Only fields with missing data are editable. Filled fields are locked.</p>
+                  <p className="text-xs text-white/70 mt-0.5">Only fields with missing data are editable. Filled fields are locked.</p>
                 )}
               </div>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {editError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {editError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {editError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                   Subject Code *
@@ -1088,7 +1088,7 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_code}
                   onChange={(e) => setEditingData({ ...editingData, subject_code: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., CMSC 11"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_code')}
                 />
@@ -1102,7 +1102,7 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_course_no}
                   onChange={(e) => setEditingData({ ...editingData, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
                 />
@@ -1116,13 +1116,13 @@ export default function SubjectsView() {
                   type="text"
                   value={editingData.subject_descriptive_title}
                   onChange={(e) => setEditingData({ ...editingData, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., Introduction to Computer Science"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_descriptive_title')}
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     MTH Schedule
@@ -1131,7 +1131,7 @@ export default function SubjectsView() {
                     type="text"
                     value={editingData.mth_schedule}
                     onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     placeholder="e.g., M 7:00-10:00"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_schedule')}
                   />
@@ -1143,7 +1143,7 @@ export default function SubjectsView() {
                   <select
                     value={editingData.mth_room}
                     onChange={(e) => setEditingData({ ...editingData, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_room')}
                   >
                     <option value="">— No Room —</option>
@@ -1160,7 +1160,7 @@ export default function SubjectsView() {
                     type="text"
                     value={editingData.tfs_schedule}
                     onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     placeholder="e.g., T 1:00-4:00"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_schedule')}
                   />
@@ -1172,7 +1172,7 @@ export default function SubjectsView() {
                   <select
                     value={editingData.tfs_room}
                     onChange={(e) => setEditingData({ ...editingData, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                     disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_room')}
                   >
                     <option value="">— No Room —</option>
@@ -1194,7 +1194,7 @@ export default function SubjectsView() {
                     max="10"
                     value={editingData.subject_units}
                     onChange={(e) => setEditingData({ ...editingData, subject_units: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1206,7 +1206,7 @@ export default function SubjectsView() {
                     min="0"
                     value={editingData.subject_lec_hrs}
                     onChange={(e) => setEditingData({ ...editingData, subject_lec_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1218,7 +1218,7 @@ export default function SubjectsView() {
                     min="0"
                     value={editingData.subject_lab_hrs}
                     onChange={(e) => setEditingData({ ...editingData, subject_lab_hrs: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -1230,28 +1230,28 @@ export default function SubjectsView() {
                 <select
                   value={editingData.subject_status}
                   onChange={(e) => setEditingData({ ...editingData, subject_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={savingEdit}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -802,43 +802,43 @@ export default function FacultyView() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Add Faculty Member</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Add Faculty Member</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {facultyError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {facultyError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {facultyError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {facultyError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Faculty Name *</label>
                 <input
                   type="text"
                   value={newFaculty.faculty_name}
                   onChange={(e) => setNewFaculty({ ...newFaculty, faculty_name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Role</label>
                   <input
                     type="text"
                     value={newFaculty.faculty_role}
                     onChange={(e) => setNewFaculty({ ...newFaculty, faculty_role: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -846,7 +846,7 @@ export default function FacultyView() {
                   <select
                     value={newFaculty.faculty_status}
                     onChange={(e) => setNewFaculty({ ...newFaculty, faculty_status: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -855,13 +855,13 @@ export default function FacultyView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Department</label>
                   <select
                     value={newFaculty.department_id}
                     onChange={(e) => setNewFaculty({ ...newFaculty, department_id: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">Select department</option>
                     {departments.map((department) => (
@@ -878,7 +878,7 @@ export default function FacultyView() {
                     min="0"
                     value={newFaculty.faculty_max_units}
                     onChange={(e) => setNewFaculty({ ...newFaculty, faculty_max_units: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -889,7 +889,7 @@ export default function FacultyView() {
                   type="email"
                   value={newFaculty.faculty_email}
                   onChange={(e) => setNewFaculty({ ...newFaculty, faculty_email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
@@ -912,7 +912,7 @@ export default function FacultyView() {
                           );
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     />
                     <button
                       type="button"
@@ -924,7 +924,7 @@ export default function FacultyView() {
                           setNewSpecializationInput
                         )
                       }
-                      className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-slate-50"
+                      className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50"
                     >
                       Add
                     </button>
@@ -945,22 +945,22 @@ export default function FacultyView() {
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddFaculty}
-                disabled={savingFaculty}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingFaculty ? 'Saving...' : 'Save Faculty'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddFaculty}
+                  disabled={savingFaculty}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingFaculty ? 'Saving...' : 'Save Faculty'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -968,43 +968,43 @@ export default function FacultyView() {
 
       {showEditModal && editingFaculty && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Edit Faculty Member</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Edit Faculty Member</h3>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {editError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {editError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {editError}
+                </div>
+              )}
 
-            <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Faculty Name *</label>
                 <input
                   type="text"
                   value={editingData.faculty_name}
                   onChange={(e) => setEditingData({ ...editingData, faculty_name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Role</label>
                   <input
                     type="text"
                     value={editingData.faculty_role}
                     onChange={(e) => setEditingData({ ...editingData, faculty_role: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -1012,7 +1012,7 @@ export default function FacultyView() {
                   <select
                     value={editingData.faculty_status}
                     onChange={(e) => setEditingData({ ...editingData, faculty_status: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -1021,13 +1021,13 @@ export default function FacultyView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Department</label>
                   <select
                     value={editingData.department_id}
                     onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">Select department</option>
                     {departments.map((department) => (
@@ -1044,7 +1044,7 @@ export default function FacultyView() {
                     min="0"
                     value={editingData.faculty_max_units}
                     onChange={(e) => setEditingData({ ...editingData, faculty_max_units: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -1055,7 +1055,7 @@ export default function FacultyView() {
                   type="email"
                   value={editingData.faculty_email}
                   onChange={(e) => setEditingData({ ...editingData, faculty_email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
@@ -1078,7 +1078,7 @@ export default function FacultyView() {
                           );
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     />
                     <button
                       type="button"
@@ -1090,7 +1090,7 @@ export default function FacultyView() {
                           setEditSpecializationInput
                         )
                       }
-                      className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-slate-50"
+                      className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-slate-50"
                     >
                       Add
                     </button>
@@ -1111,22 +1111,22 @@ export default function FacultyView() {
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={savingEdit}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {savingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div className="flex gap-3 pt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

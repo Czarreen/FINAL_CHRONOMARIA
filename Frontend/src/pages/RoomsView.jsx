@@ -490,7 +490,7 @@ export default function RoomsView() {
               </thead>
               <tbody className="divide-y divide-white/20">
                 {currentRooms.map((room, index) => (
-                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`transition-colors hover:bg-white/45 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-6 py-4">
                       <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                         {room.room_name || 'N/A'}
@@ -625,87 +625,89 @@ export default function RoomsView() {
       {/* Add Room Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Add New Room</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Add New Room</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {formError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {formError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {formError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {formError}
+                </div>
+              )}
 
-            <form onSubmit={handleAddRoom} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Room Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.room_name}
-                  onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  placeholder="e.g., Room 101"
-                  disabled={isSubmitting}
-                />
-              </div>
+              <form onSubmit={handleAddRoom} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Room Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.room_name}
+                    onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g., Room 101"
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Room Type
-                </label>
-                <input
-                  type="text"
-                  value={formData.room_type}
-                  onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  placeholder="e.g., Lecture Hall"
-                  disabled={isSubmitting}
-                />
-              </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Room Type
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.room_type}
+                    onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g., Lecture Hall"
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Status
-                </label>
-                <select
-                  value={formData.room_status}
-                  onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  disabled={isSubmitting}
-                >
-                  <option value="available">Available</option>
-                  <option value="unavailable">Unavailable</option>
-                  <option value="occupied">Occupied</option>
-                </select>
-              </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Status
+                  </label>
+                  <select
+                    value={formData.room_status}
+                    onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    disabled={isSubmitting}
+                  >
+                    <option value="available">Available</option>
+                    <option value="unavailable">Unavailable</option>
+                    <option value="occupied">Occupied</option>
+                  </select>
+                </div>
 
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  disabled={isSubmitting}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-medium text-white transition-all hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create'}
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    disabled={isSubmitting}
+                    className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Room'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -713,87 +715,89 @@ export default function RoomsView() {
       {/* Edit Room Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Edit Room</h3>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Edit Room</h3>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {formError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {formError}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-4">
+              {formError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {formError}
+                </div>
+              )}
 
-            <form onSubmit={handleUpdateRoom} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Room Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.room_name}
-                  onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  placeholder="e.g., Room 101"
-                  disabled={isSubmitting}
-                />
-              </div>
+              <form onSubmit={handleUpdateRoom} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Room Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.room_name}
+                    onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g., Room 101"
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Room Type
-                </label>
-                <input
-                  type="text"
-                  value={formData.room_type}
-                  onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  placeholder="e.g., Lecture Hall"
-                  disabled={isSubmitting}
-                />
-              </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Room Type
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.room_type}
+                    onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g., Lecture Hall"
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Status
-                </label>
-                <select
-                  value={formData.room_status}
-                  onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                  disabled={isSubmitting}
-                >
-                  <option value="available">Available</option>
-                  <option value="unavailable">Unavailable</option>
-                  <option value="occupied">Occupied</option>
-                </select>
-              </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Status
+                  </label>
+                  <select
+                    value={formData.room_status}
+                    onChange={(e) => setFormData({ ...formData, room_status: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    disabled={isSubmitting}
+                  >
+                    <option value="available">Available</option>
+                    <option value="unavailable">Unavailable</option>
+                    <option value="occupied">Occupied</option>
+                  </select>
+                </div>
 
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  disabled={isSubmitting}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2 font-medium text-white transition-all hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Updating...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    disabled={isSubmitting}
+                    className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Updating...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -801,45 +805,47 @@ export default function RoomsView() {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && deleteTargetRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Delete Room</h3>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/20 bg-red-600 px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Delete Room</h3>
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {formError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
-                {formError}
+            <div className="px-6 py-5 space-y-4">
+              {formError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle size={16} />
+                  {formError}
+                </div>
+              )}
+
+              <p className="text-on-surface">
+                Are you sure you want to delete <span className="font-bold">{deleteTargetRoom.room_name}</span>? This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Deleting...' : 'Delete Room'}
+                </button>
               </div>
-            )}
-
-            <p className="mb-6 text-on-surface">
-              Are you sure you want to delete <span className="font-bold">{deleteTargetRoom.room_name}</span>? This action cannot be undone.
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={isSubmitting}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isSubmitting}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-all hover:bg-red-700 disabled:opacity-50"
-              >
-                {isSubmitting ? 'Deleting...' : 'Delete'}
-              </button>
             </div>
           </div>
         </div>
