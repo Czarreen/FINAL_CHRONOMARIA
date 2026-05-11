@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { upsertSubjectNotificationCache } from '../lib/subjectNotifications.js';
 
 const router = Router();
 
@@ -120,6 +121,12 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    try {
+      await upsertSubjectNotificationCache(data);
+    } catch (notifErr) {
+      console.error('Failed to sync subject notifications after create:', notifErr);
+    }
+
     return res.status(201).json(data);
   } catch (err) {
     console.error('Server error:', err);
@@ -145,6 +152,12 @@ router.get('/:id', async (req, res) => {
         return res.status(404).json({ error: 'Subject not found' });
       }
       return res.status(500).json({ error: error.message });
+    }
+
+    try {
+      await upsertSubjectNotificationCache(data);
+    } catch (notifErr) {
+      console.error('Failed to sync subject notifications after update:', notifErr);
     }
 
     return res.json(data);
@@ -222,6 +235,15 @@ router.delete('/:id', async (req, res) => {
         return res.status(404).json({ error: 'Subject not found' });
       }
       return res.status(500).json({ error: error.message });
+    }
+
+    try {
+      await supabaseAdmin
+        .from('subject_notifications')
+        .delete()
+        .eq('entity_id', data.subject_id);
+    } catch (notifErr) {
+      console.error('Failed to clear subject notifications after delete:', notifErr);
     }
 
     return res.json({
