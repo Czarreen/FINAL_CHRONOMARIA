@@ -19,13 +19,14 @@ export default function LoginView({ onLogin }) {
       
       // Store user info in localStorage
       localStorage.setItem('user', JSON.stringify({
-        user_id: user.user_id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
+        user_id: user.user.user_id,
+        username: user.user.username,
+        email: user.user.email,
+        role: user.user.role,
       }));
+      localStorage.setItem('token', user.token);
 
-      createAuditLog({ action: 'User logged in', module: 'Auth', description: `"${user.username}" logged in` });
+      createAuditLog({ action: 'User logged in', module: 'Auth', description: `"${user.user.username}" logged in` });
 
       // Clear fields immediately
       setUsername('');

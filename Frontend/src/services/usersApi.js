@@ -1,10 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+import { apiFetch, API_BASE_URL } from './apiClient.js';
 
 export async function fetchUsers({ page = 1, limit = 50, search = '' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/users?${query.toString()}`);
+  const response = await apiFetch(`/api/users?${query.toString()}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -22,7 +22,7 @@ export async function fetchUsers({ page = 1, limit = 50, search = '' } = {}) {
 
 export async function fetchUserById(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users/${id}`);
+    const response = await apiFetch(`/api/users/${id}`);
 
     if (!response.ok) {
       const body = await response.text();
@@ -32,7 +32,7 @@ export async function fetchUserById(id) {
     return response.json();
   } catch (err) {
     if (err instanceof TypeError && err.message.includes('fetch')) {
-      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/users/${id}`);
+      throw new Error(`Network error: Unable to reach API at /api/users/${id}`);
     }
     throw err;
   }
@@ -40,7 +40,7 @@ export async function fetchUserById(id) {
 
 export async function createUser(userData) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users`, {
+    const response = await apiFetch(`/api/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -68,7 +68,7 @@ export async function createUser(userData) {
 
 export async function updateUser(id, userData) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
+    const response = await apiFetch(`/api/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -82,7 +82,7 @@ export async function updateUser(id, userData) {
     return response.json();
   } catch (err) {
     if (err instanceof TypeError && err.message.includes('fetch')) {
-      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/users/${id}`);
+      throw new Error(`Network error: Unable to reach API at /api/users/${id}`);
     }
     throw err;
   }
@@ -112,7 +112,7 @@ export async function updateUserStatus(id, status) {
 
 export async function deleteUser(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
+    const response = await apiFetch(`/api/users/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -125,7 +125,7 @@ export async function deleteUser(id) {
     return;
   } catch (err) {
     if (err instanceof TypeError && err.message.includes('fetch')) {
-      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/users/${id}`);
+      throw new Error(`Network error: Unable to reach API at /api/users/${id}`);
     }
     throw err;
   }

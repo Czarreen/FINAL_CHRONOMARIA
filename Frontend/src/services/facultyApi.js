@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+import { apiFetch, API_BASE_URL } from './apiClient.js';
+
 
 export async function fetchFacultyPage(page = 1, limit = 50) {
   return fetchFaculty({ page, limit });
@@ -9,7 +10,7 @@ export async function fetchFaculty({ page = 1, limit = 50, search = '', status =
   if (search) params.search = String(search);
   if (status) params.status = String(status);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/faculty?${query.toString()}`);
+  const response = await apiFetch(`/api/faculty?${query.toString()}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -28,7 +29,7 @@ export async function fetchFaculty({ page = 1, limit = 50, search = '', status =
 
 export async function fetchFacultyById(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`);
+    const response = await apiFetch(`/api/faculty/${id}`);
 
     if (!response.ok) {
       const body = await response.text();
@@ -46,7 +47,7 @@ export async function fetchFacultyById(id) {
 
 export async function createFaculty(facultyData) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/faculty`, {
+    const response = await apiFetch(`/api/faculty`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -70,7 +71,7 @@ export async function createFaculty(facultyData) {
 
 export async function updateFaculty(id, updates) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
+    const response = await apiFetch(`/api/faculty/${id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -98,7 +99,7 @@ export async function updateFacultyStatus(id, status) {
 
 export async function deleteFaculty(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {
+    const response = await apiFetch(`/api/faculty/${id}`, {
       method: 'DELETE',
     });
 

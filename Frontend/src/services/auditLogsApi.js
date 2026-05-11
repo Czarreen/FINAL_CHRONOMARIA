@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+import { apiFetch, API_BASE_URL } from './apiClient.js';
 
 /**
  * Compares two objects and returns a human-readable summary of what changed.
@@ -28,7 +28,7 @@ export async function fetchAuditLogs({ page = 1, limit = 50, search = '', user =
   if (startDate) params.startDate = String(startDate);
   if (endDate) params.endDate = String(endDate);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/audit-logs?${query.toString()}`);
+  const response = await apiFetch(`/api/audit-logs?${query.toString()}`);
 
   if (!response.ok) {
     const body = await response.text();
@@ -46,7 +46,7 @@ export async function fetchAuditLogs({ page = 1, limit = 50, search = '', user =
 
 export async function fetchAuditLogById(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/audit-logs/${id}`);
+    const response = await apiFetch(`/api/audit-logs/${id}`);
 
     if (!response.ok) {
       const body = await response.text();
@@ -68,7 +68,7 @@ export async function exportAuditLogs({ format = 'csv', startDate = '', endDate 
     if (startDate) params.startDate = startDate;
     if (endDate) params.endDate = endDate;
     const query = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/api/audit-logs/export?${query.toString()}`);
+    const response = await apiFetch(`/api/audit-logs/export?${query.toString()}`);
 
     if (!response.ok) {
       const body = await response.text();
@@ -97,7 +97,7 @@ export async function createAuditLog({ action, module, description = '', status 
       changes_before: changesBefore,
       changes_after: changesAfter,
     };
-    const response = await fetch(`${API_BASE_URL}/api/audit-logs`, {
+    const response = await apiFetch(`/api/audit-logs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -111,7 +111,7 @@ export async function createAuditLog({ action, module, description = '', status 
 
 export async function clearOldAuditLogs(daysOld = 90) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/audit-logs/clear`, {
+    const response = await apiFetch(`/api/audit-logs/clear`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ daysOld: Number(daysOld) }),

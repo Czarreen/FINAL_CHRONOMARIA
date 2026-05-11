@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase.js';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -31,8 +32,18 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'User account is inactive' });
     }
 
-    // Verify password using bcrypt
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    // Verify password using bcrypt or SHA256 (for legacy hashes)
+    let passwordMatch = false;
+
+    // Try bcrypt first (for new passwords)
+    if (user.password_hash.startsWith('$2')) {
+      passwordMatch = await bcrypt.compare(password, user.password_hash);
+    } else {
+      // Fall back to SHA256 for legacy hashes
+      const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
+      passwordMatch = sha256Hash === user.password_hash;
+    }
+
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
