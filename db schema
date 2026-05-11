@@ -1,6 +1,22 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.audit_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  timestamp timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  username text NOT NULL,
+  role text,
+  action text NOT NULL,
+  module text NOT NULL,
+  status text DEFAULT 'success'::text,
+  ip_address text,
+  description text,
+  changes_before jsonb,
+  changes_after jsonb,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.course_offering_mth_rooms (
   offering_id integer NOT NULL,
   room_id integer NOT NULL,
@@ -35,6 +51,20 @@ CREATE TABLE public.course_offerings (
   id integer NOT NULL DEFAULT nextval('course_offerings_id_seq'::regclass),
   CONSTRAINT course_offerings_pkey PRIMARY KEY (id),
   CONSTRAINT course_offerings_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
+);
+CREATE TABLE public.data_quality_notifications (
+  id bigint NOT NULL DEFAULT nextval('data_quality_notifications_id_seq'::regclass),
+  entity_type text NOT NULL,
+  entity_id bigint NOT NULL,
+  field_name text,
+  issue_type text,
+  severity text,
+  message text,
+  details jsonb,
+  is_resolved boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT data_quality_notifications_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.departments (
   department_id integer NOT NULL DEFAULT nextval('departments_department_id_seq'::regclass),
@@ -77,6 +107,20 @@ CREATE TABLE public.faculty_loading (
   CONSTRAINT faculty_loading_mth_room_id_fkey FOREIGN KEY (mth_room_id) REFERENCES public.rooms(room_id),
   CONSTRAINT faculty_loading_tfs_room_id_fkey FOREIGN KEY (tfs_room_id) REFERENCES public.rooms(room_id)
 );
+CREATE TABLE public.faculty_notifications (
+  id integer NOT NULL DEFAULT nextval('faculty_notifications_id_seq'::regclass),
+  faculty_id integer NOT NULL,
+  title text,
+  description text,
+  severity text DEFAULT 'medium'::text,
+  missing_fields jsonb,
+  issues jsonb,
+  is_resolved boolean DEFAULT false,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faculty_notifications_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.rooms (
   room_id integer NOT NULL DEFAULT nextval('rooms_room_id_seq'::regclass),
   room_name text NOT NULL,
@@ -84,23 +128,36 @@ CREATE TABLE public.rooms (
   room_status text,
   CONSTRAINT rooms_pkey PRIMARY KEY (room_id)
 );
+CREATE TABLE public.subject_notifications (
+  id bigint NOT NULL DEFAULT nextval('subject_notifications_id_seq'::regclass),
+  entity_id bigint NOT NULL,
+  field_name text,
+  issue_type text,
+  severity text,
+  message text,
+  details jsonb,
+  is_resolved boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subject_notifications_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.subjects (
   subject_id integer NOT NULL DEFAULT nextval('subjects_subject_id_seq'::regclass),
   subject_code text,
   subject_course_no text,
-  subject_name text,
   department_id integer,
   subject_section text,
   subject_descriptive_title text,
   subject_units integer,
   subject_lec_hrs integer,
   subject_lab_hrs integer,
-  subject_schedule text,
-  room_id integer,
-  subject_status text,
+  subject_status text NOT NULL DEFAULT 'active'::text,
+  mth_schedule text,
+  tfs_schedule text,
+  mth_room text,
+  tfs_room text,
   CONSTRAINT subjects_pkey PRIMARY KEY (subject_id),
-  CONSTRAINT subjects_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id),
-  CONSTRAINT subjects_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(room_id)
+  CONSTRAINT subjects_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
 );
 CREATE TABLE public.users (
   user_id integer NOT NULL DEFAULT nextval('users_user_id_seq'::regclass),

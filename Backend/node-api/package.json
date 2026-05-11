@@ -7,7 +7,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "run-subject-migration": "node tools/run_subject_migration.js",
-    "backfill:course-offerings": "node tools/backfill_course_offering_notifications.js"
+    "backfill:course-offerings": "node tools/backfill_course_offering_notifications.js",
+    "backfill:faculty-loading": "node tools/ga_backfill.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",

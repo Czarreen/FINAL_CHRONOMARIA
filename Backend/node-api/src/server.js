@@ -7,6 +7,7 @@ import facultyRouter from './routes/faculty.js';
 import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
 import notificationsRouter from './routes/notifications.js';
+import gaRouter from './routes/ga.js';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/ga', gaRouter);
 
 app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);

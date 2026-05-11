@@ -5,6 +5,7 @@ import {
   DoorOpen,
   Calendar,
   NotebookTabs,
+  Sparkles,
   LogOut,
   CircleUserRound,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
     { id: 'subjects', icon: BookOpen, label: 'Subjects' },
     { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
     { id: 'schedule', icon: Calendar, label: 'Schedule' },
+    { id: 'faculty-loading', icon: Sparkles, label: 'Faculty Loading' },
   ];
 
   return (
