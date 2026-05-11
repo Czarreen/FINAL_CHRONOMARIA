@@ -42,8 +42,9 @@ app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
 app.use('/api/notifications', notificationsRouter);
 
+// Protected routes: require authentication only
+app.use('/api/users', verifyToken, usersRouter);
 // Protected routes: require authentication and admin role
-app.use('/api/users', verifyToken, requireAdmin, usersRouter);
 app.use('/api/audit-logs', verifyToken, requireAdmin, auditLogsRouter);
 
 app.listen(env.port, () => {

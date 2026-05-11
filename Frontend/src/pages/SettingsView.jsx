@@ -935,39 +935,37 @@ export default function SettingsView() {
                 </div>
               </div>
 
-              {/* Password Section - shown when editing a super-admin or admin user */}
-              {(editingData.role === 'super-admin' || editingData.role === 'admin') && (
-                <div>
-                  <div className="mb-4 rounded-lg bg-surface-dim p-3">
-                    <p className="text-sm font-medium text-on-surface">Change Password (Optional)</p>
-                    <p className="text-xs text-on-surface-variant mt-1">Leave blank to keep current password</p>
+              {/* Password Section - shown for all user roles */}
+              <div>
+                <div className="mb-4 rounded-lg bg-surface-dim p-3">
+                  <p className="text-sm font-medium text-on-surface">Change Password (Optional)</p>
+                  <p className="text-xs text-on-surface-variant mt-1">Leave blank to keep current password</p>
+                </div>
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-label-md font-semibold text-on-surface mb-2">New Password</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={editingData.password}
+                      onChange={(e) => setEditingData({ ...editingData, password: e.target.value })}
+                      placeholder="Enter new password (min 6 characters)"
+                      className="w-full rounded-lg border border-outline bg-surface px-4 py-3 text-sm transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-8">
-                    <div>
-                      <label className="block text-label-md font-semibold text-on-surface mb-2">New Password</label>
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={editingData.password}
-                        onChange={(e) => setEditingData({ ...editingData, password: e.target.value })}
-                        placeholder="Enter new password (min 6 characters)"
-                        className="w-full rounded-lg border border-outline bg-surface px-4 py-3 text-sm transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-label-md font-semibold text-on-surface mb-2">Confirm Password</label>
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={editingData.confirmPassword}
-                        onChange={(e) => setEditingData({ ...editingData, confirmPassword: e.target.value })}
-                        placeholder="Confirm new password"
-                        className="w-full rounded-lg border border-outline bg-surface px-4 py-3 text-sm transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-label-md font-semibold text-on-surface mb-2">Confirm Password</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={editingData.confirmPassword}
+                      onChange={(e) => setEditingData({ ...editingData, confirmPassword: e.target.value })}
+                      placeholder="Confirm new password"
+                      className="w-full rounded-lg border border-outline bg-surface px-4 py-3 text-sm transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Buttons - Centered between columns */}
               <div className="flex justify-center gap-3 pt-6">

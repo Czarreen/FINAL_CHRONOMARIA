@@ -5,6 +5,13 @@ import bcrypt from 'bcrypt';
 const router = Router();
 const BCRYPT_ROUNDS = 12;
 
+function requireAdmin(req, res, next) {
+  if (!req.user || !['admin', 'super-admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
 /**
  * Escapes reserved PostgREST filter characters to prevent filter injection
  * @param {string} value - The value to escape
@@ -18,7 +25,7 @@ function escapePostgRESTFilter(value) {
     .replace(/;/g, '\\;');    // Escape semicolons (AND operator in PostgREST)
 }
 
-router.get('/', async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
@@ -58,7 +65,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.id);
 
@@ -89,7 +96,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { username, email, password, role, status } = req.body;
 
@@ -139,7 +146,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.id);
     const { username, email, role, status } = req.body;
@@ -185,7 +192,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.id);
     const { status } = req.body;
@@ -222,7 +229,7 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.id);
 
@@ -259,6 +266,14 @@ router.patch('/:id/password', async (req, res) => {
 
     if (!userId) {
       return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    // Check if user has permission to change this password
+    const isOwnPassword = req.user.user_id === userId;
+    const isAdmin = ['admin', 'super-admin'].includes(req.user.role);
+
+    if (!isOwnPassword && !isAdmin) {
+      return res.status(403).json({ error: 'You can only change your own password' });
     }
 
     if (!password || password.length < 6) {

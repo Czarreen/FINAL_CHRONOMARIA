@@ -133,9 +133,8 @@ export async function deleteUser(id) {
 
 export async function updateUserPassword(id, password) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users/${id}/password`, {
+    const response = await apiFetch(`/api/users/${id}/password`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),
     });
 
