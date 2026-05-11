@@ -11,12 +11,18 @@ export async function loginUser(username, password) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Login failed');
+      let errorMessage = 'Login failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } catch {
+        errorMessage = await response.text() || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    return data; // Should contain { username, role, user_id, email }
+    return data; // Should contain { token, user: { username, role, user_id, email } }
   } catch (err) {
     throw err instanceof Error ? err : new Error('Login request failed');
   }

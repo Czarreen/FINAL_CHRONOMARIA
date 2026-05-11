@@ -1,8 +1,22 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
-import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 
 const router = Router();
+const BCRYPT_ROUNDS = 12;
+
+/**
+ * Escapes reserved PostgREST filter characters to prevent filter injection
+ * @param {string} value - The value to escape
+ * @returns {string} - The escaped value safe for PostgREST filter strings
+ */
+function escapePostgRESTFilter(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')  // Escape backslash first
+    .replace(/"/g, '\\"')     // Escape double quotes
+    .replace(/,/g, '\\,')     // Escape commas (OR operator in PostgREST)
+    .replace(/;/g, '\\;');    // Escape semicolons (AND operator in PostgREST)
+}
 
 router.get('/', async (req, res) => {
   try {
@@ -17,7 +31,8 @@ router.get('/', async (req, res) => {
       .select('user_id, username, email, role, status, created_at, updated_at', { count: 'exact' });
 
     if (search) {
-      query = query.or(`username.ilike.%${search}%,email.ilike.%${search}%`);
+      const escapedSearch = escapePostgRESTFilter(search);
+      query = query.or(`username.ilike.%${escapedSearch}%,email.ilike.%${escapedSearch}%`);
     }
 
     const { data, error, count } = await query
@@ -89,8 +104,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'password is required' });
     }
 
-    // Hash password using SHA-256
-    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    // Hash password using bcrypt with salt rounds
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const userData = {
       username: username.trim().toLowerCase(),
@@ -134,8 +149,8 @@ router.put('/:id', async (req, res) => {
     }
 
     const updateData = {};
-    if (username !== undefined) updateData.username = username.trim();
-    if (email !== undefined) updateData.email = email.trim();
+    if (username !== undefined) updateData.username = username.trim().toLowerCase();
+    if (email !== undefined) updateData.email = email.trim().toLowerCase();
     if (role !== undefined) updateData.role = role;
     if (status !== undefined) updateData.status = status;
 
@@ -250,8 +265,8 @@ router.patch('/:id/password', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Hash password using SHA-256
-    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    // Hash password using bcrypt with salt rounds
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const { data, error } = await supabaseAdmin
       .from('users')

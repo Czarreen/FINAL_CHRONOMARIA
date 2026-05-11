@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
+import { verifyToken, requireAdmin } from './middleware/auth.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
 import departmentsRouter from './routes/departments.js';
 import facultyRouter from './routes/faculty.js';
@@ -32,8 +33,10 @@ app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
 app.use('/api/notifications', notificationsRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/audit-logs', auditLogsRouter);
+
+// Protected routes: require authentication and admin role
+app.use('/api/users', verifyToken, requireAdmin, usersRouter);
+app.use('/api/audit-logs', verifyToken, requireAdmin, auditLogsRouter);
 
 app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);

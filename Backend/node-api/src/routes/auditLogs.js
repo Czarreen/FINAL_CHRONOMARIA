@@ -3,6 +3,19 @@ import { supabaseAdmin } from '../lib/supabase.js';
 
 const router = Router();
 
+/**
+ * Escapes reserved PostgREST filter characters to prevent filter injection
+ * @param {string} value - The value to escape
+ * @returns {string} - The escaped value safe for PostgREST filter strings
+ */
+function escapePostgRESTFilter(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')  // Escape backslash first
+    .replace(/"/g, '\\"')     // Escape double quotes
+    .replace(/,/g, '\\,')     // Escape commas (OR operator in PostgREST)
+    .replace(/;/g, '\\;');    // Escape semicolons (AND operator in PostgREST)
+}
+
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -25,7 +38,8 @@ router.get('/', async (req, res) => {
       );
 
     if (search) {
-      query = query.or(`username.ilike.%${search}%,action.ilike.%${search}%,module.ilike.%${search}%`);
+      const escapedSearch = escapePostgRESTFilter(search);
+      query = query.or(`username.ilike.%${escapedSearch}%,action.ilike.%${escapedSearch}%,module.ilike.%${escapedSearch}%`);
     }
 
     if (user) {
@@ -77,11 +91,14 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { username, role, action, module, status, description, changes_before, changes_after } = req.body;
+    const { action, module, status, description, changes_before, changes_after } = req.body;
 
     if (!action || !module) {
       return res.status(400).json({ error: 'action and module are required' });
     }
+
+    // Use authenticated user's info to prevent log forgery
+    const { username, role } = req.user || {};
 
     const { data, error } = await supabaseAdmin
       .from('audit_logs')
@@ -109,37 +126,6 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('Audit log create route error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
-  }
-});
-
-router.get('/:id', async (req, res) => {
-  try {
-    const logId = String(req.params.id);
-
-    if (!logId) {
-      return res.status(400).json({ error: 'Invalid log ID' });
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('audit_logs')
-      .select('*')
-      .eq('id', logId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ error: 'Log not found' });
-      }
-      console.error('Audit log fetch error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    return res.json(data);
-  } catch (err) {
-    console.error('Audit log fetch route error:', err);
-    return res.status(500).json({
-      error: err instanceof Error ? err.message : 'Unknown error',
-    });
   }
 });
 
@@ -203,6 +189,37 @@ router.get('/export', async (req, res) => {
   }
 });
 
+router.get('/:id', async (req, res) => {
+  try {
+    const logId = String(req.params.id);
+
+    if (!logId) {
+      return res.status(400).json({ error: 'Invalid log ID' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('audit_logs')
+      .select('*')
+      .eq('id', logId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Log not found' });
+      }
+      console.error('Audit log fetch error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.json(data);
+  } catch (err) {
+    console.error('Audit log fetch route error:', err);
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+});
+
 router.delete('/clear', async (req, res) => {
   try {
     const daysOld = Number(req.body.daysOld || 90);
@@ -216,10 +233,11 @@ router.delete('/clear', async (req, res) => {
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
     const cutoffISO = cutoffDate.toISOString();
 
-    const { data, error: deleteError, count } = await supabaseAdmin
+    const { count, error: deleteError } = await supabaseAdmin
       .from('audit_logs')
       .delete()
-      .lt('timestamp', cutoffISO);
+      .lt('timestamp', cutoffISO)
+      .select(undefined, { count: 'exact' });
 
     if (deleteError) {
       console.error('Audit logs clear error:', deleteError);

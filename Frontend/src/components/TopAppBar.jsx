@@ -10,12 +10,18 @@ export default function TopAppBar({ title, onLogout, onSettingsClick }) {
       <div className="hidden text-xl font-bold text-indigo-600 md:block">Chronomaria</div>
 
       <div className="flex items-center gap-4">
-        <button className="flex items-center justify-center rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+        <button
+          aria-label="Notifications"
+          title="Notifications"
+          className="flex items-center justify-center rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        >
           <Bell size={20} />
         </button>
         {canAccessSettings && (
           <button
             onClick={onSettingsClick}
+            aria-label="Open settings"
+            title="Open settings"
             className="flex items-center justify-center rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
           >
             <SettingsIcon size={20} />

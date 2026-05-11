@@ -1,13 +1,10 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
-import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import bcrypt from 'bcrypt';
 
 const router = Router();
-
-// Hash password using SHA-256 (same as frontend)
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
 
 router.post('/login', async (req, res) => {
   try {
@@ -34,18 +31,33 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'User account is inactive' });
     }
 
-    // Verify password
-    const hashedPassword = hashPassword(password);
-    if (user.password_hash !== hashedPassword) {
+    // Verify password using bcrypt
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Return user info with role
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        user_id: user.user_id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+      env.jwtSecret || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    // Return user info with JWT token
     return res.json({
-      user_id: user.user_id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
+      token,
+      user: {
+        user_id: user.user_id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (err) {
     console.error('Login error:', err);
