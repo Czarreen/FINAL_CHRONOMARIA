@@ -18,6 +18,38 @@ function parseStartMinutes(schedule) {
   return h * 60 + m;
 }
 
+function parseScheduleRange(schedule) {
+  if (!schedule) return null;
+  const match = schedule.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return null;
+  let sh = parseInt(match[1], 10);
+  const sm = parseInt(match[2], 10);
+  const smer = match[3].toUpperCase();
+  let eh = parseInt(match[4], 10);
+  const em = parseInt(match[5], 10);
+  const emer = match[6].toUpperCase();
+  if (smer === 'PM' && sh !== 12) sh += 12;
+  if (smer === 'AM' && sh === 12) sh = 0;
+  if (emer === 'PM' && eh !== 12) eh += 12;
+  if (emer === 'AM' && eh === 12) eh = 0;
+  return { start: sh * 60 + sm, end: eh * 60 + em };
+}
+
+function findConflictIds(offerings, scheduleKey) {
+  const ids = new Set();
+  for (let i = 0; i < offerings.length; i++) {
+    for (let j = i + 1; j < offerings.length; j++) {
+      const a = parseScheduleRange(offerings[i][scheduleKey]);
+      const b = parseScheduleRange(offerings[j][scheduleKey]);
+      if (a && b && a.start < b.end && b.start < a.end) {
+        ids.add(offerings[i].id);
+        ids.add(offerings[j].id);
+      }
+    }
+  }
+  return ids;
+}
+
 export default function RoomsView() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +79,7 @@ export default function RoomsView() {
   const [subjectsOfferings, setSubjectsOfferings] = useState([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [subjectCols, setSubjectCols] = useState(new Set(['code', 'course_no', 'descriptive_title', 'schedule']));
+  const [subjectSort, setSubjectSort] = useState({ key: 'schedule', dir: 'asc' });
 
   // Info overlay states
   const [showAddInfo, setShowAddInfo] = useState(false);
@@ -286,21 +319,41 @@ export default function RoomsView() {
     return filtered;
   }, [notifications, notificationSeverityFilter, notificationSearch]);
 
-  const { mthOfferings, tfsOfferings } = useMemo(() => {
-    if (!subjectsRoom) return { mthOfferings: [], tfsOfferings: [] };
+  const { mthOfferings, tfsOfferings, conflictMthIds, conflictTfsIds } = useMemo(() => {
+    if (!subjectsRoom) return { mthOfferings: [], tfsOfferings: [], conflictMthIds: new Set(), conflictTfsIds: new Set() };
     const rid = String(subjectsRoom.room_id);
     const containsRoom = (field) => {
       if (!field) return false;
       return field === rid || field.startsWith(`${rid}/`) || field.endsWith(`/${rid}`) || field.includes(`/${rid}/`);
     };
-    const mth = subjectsOfferings
-      .filter((o) => containsRoom(o.mth_room_id))
-      .sort((a, b) => parseStartMinutes(a.mth_schedule) - parseStartMinutes(b.mth_schedule));
-    const tfs = subjectsOfferings
-      .filter((o) => containsRoom(o.tfs_room_id))
-      .sort((a, b) => parseStartMinutes(a.tfs_schedule) - parseStartMinutes(b.tfs_schedule));
-    return { mthOfferings: mth, tfsOfferings: tfs };
-  }, [subjectsOfferings, subjectsRoom]);
+
+    const applySortAndFilter = (list, scheduleKey) => {
+      const filtered = list.filter((o) => containsRoom(o[scheduleKey === 'mth_schedule' ? 'mth_room_id' : 'tfs_room_id']));
+      return [...filtered].sort((a, b) => {
+        let aVal, bVal;
+        if (subjectSort.key === 'schedule') {
+          aVal = parseStartMinutes(a[scheduleKey]);
+          bVal = parseStartMinutes(b[scheduleKey]);
+        } else {
+          aVal = (a[subjectSort.key] || '').toLowerCase();
+          bVal = (b[subjectSort.key] || '').toLowerCase();
+        }
+        if (aVal < bVal) return subjectSort.dir === 'asc' ? -1 : 1;
+        if (aVal > bVal) return subjectSort.dir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    };
+
+    const mth = applySortAndFilter(subjectsOfferings, 'mth_schedule');
+    const tfs = applySortAndFilter(subjectsOfferings, 'tfs_schedule');
+
+    return {
+      mthOfferings: mth,
+      tfsOfferings: tfs,
+      conflictMthIds: findConflictIds(mth, 'mth_schedule'),
+      conflictTfsIds: findConflictIds(tfs, 'tfs_schedule'),
+    };
+  }, [subjectsOfferings, subjectsRoom, subjectSort]);
 
   const handlePrevPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1));
@@ -423,6 +476,14 @@ export default function RoomsView() {
       else next.add(col);
       return next;
     });
+  };
+
+  const handleSubjectSort = (key) => {
+    setSubjectSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }
+    );
   };
 
   // CRUD handlers
@@ -1110,138 +1171,223 @@ export default function RoomsView() {
       )}
 
       {/* Subjects Modal */}
-      {showSubjectsModal && subjectsRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/20 bg-indigo-600 px-6 py-4">
-              <div>
-                <h3 className="text-lg font-bold text-white">{subjectsRoom.room_name}</h3>
-                <p className="text-indigo-200 text-xs mt-0.5">Scheduled Course Offerings</p>
-              </div>
-              <button
-                onClick={() => setShowSubjectsModal(false)}
-                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Column toggle pills */}
-            <div className="flex flex-wrap gap-1.5 px-6 pt-4 pb-2">
-              {[
-                { key: 'code', label: 'Code' },
-                { key: 'course_no', label: 'Course No' },
-                { key: 'descriptive_title', label: 'Description' },
-                { key: 'schedule', label: 'Schedule' },
-              ].map((col) => (
+      {showSubjectsModal && subjectsRoom && (() => {
+        const totalConflicts = conflictMthIds.size + conflictTfsIds.size;
+        const sortCols = [
+          { key: 'code', label: 'Code' },
+          { key: 'course_no', label: 'Course No' },
+          { key: 'descriptive_title', label: 'Description' },
+          { key: 'schedule', label: 'Schedule' },
+        ];
+        const sortIndicator = (key) => {
+          if (subjectSort.key !== key) return <span className="ml-1 text-[10px] text-indigo-300">↕</span>;
+          return <span className="ml-1 text-[10px]">{subjectSort.dir === 'asc' ? '↑' : '↓'}</span>;
+        };
+        const mthThClass = (key) =>
+          `px-3 py-2 text-left font-bold cursor-pointer select-none transition-colors hover:bg-indigo-50 ${subjectSort.key === key ? 'text-indigo-900' : 'text-indigo-700'}`;
+        const tfsThClass = (key) =>
+          `px-3 py-2 text-left font-bold cursor-pointer select-none transition-colors hover:bg-amber-50 ${subjectSort.key === key ? 'text-amber-900' : 'text-amber-700'}`;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/20 bg-indigo-600 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{subjectsRoom.room_name}</h3>
+                    <p className="text-indigo-200 text-xs mt-0.5">Scheduled Course Offerings</p>
+                  </div>
+                  {totalConflicts > 0 && !subjectsLoading && (
+                    <span className="rounded-full bg-red-500 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                      {totalConflicts} conflict{totalConflicts !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
                 <button
-                  key={col.key}
-                  onClick={() => toggleSubjectCol(col.key)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    subjectCols.has(col.key)
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
+                  onClick={() => setShowSubjectsModal(false)}
+                  className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
                 >
-                  {col.label}
+                  <X size={20} />
                 </button>
-              ))}
-            </div>
+              </div>
 
-            <div className="overflow-y-auto flex-1 px-6 pb-6">
-              {subjectsLoading ? (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
-                  <p className="mt-4 text-sm text-on-surface-variant">Loading offerings...</p>
-                </div>
-              ) : subjectsOfferings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <BookOpen size={40} className="text-slate-300" />
-                  <p className="mt-3 text-sm font-semibold text-on-surface">No offerings scheduled in this room</p>
-                </div>
-              ) : (
-                <>
-                  {/* MTh Section */}
-                  <div className="mt-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-2">Mon / Thu</h4>
-                    {mthOfferings.length === 0 ? (
-                      <p className="text-xs text-slate-400 pl-2">None</p>
-                    ) : (
-                      <table className="min-w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-indigo-100">
-                            {subjectCols.has('code') && <th className="px-3 py-2 text-left font-bold text-indigo-700">Code</th>}
-                            {subjectCols.has('course_no') && <th className="px-3 py-2 text-left font-bold text-indigo-700">Course No</th>}
-                            {subjectCols.has('descriptive_title') && <th className="px-3 py-2 text-left font-bold text-indigo-700">Description</th>}
-                            {subjectCols.has('schedule') && <th className="px-3 py-2 text-left font-bold text-indigo-700">Schedule</th>}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-indigo-50">
-                          {mthOfferings.map((o) => (
-                            <tr key={`mth-${o.id}`} className="hover:bg-indigo-50/40">
-                              {subjectCols.has('code') && <td className="px-3 py-2 font-medium text-on-surface">{o.code || '—'}</td>}
-                              {subjectCols.has('course_no') && <td className="px-3 py-2 text-on-surface-variant">{o.course_no || '—'}</td>}
-                              {subjectCols.has('descriptive_title') && <td className="px-3 py-2 text-on-surface-variant">{o.descriptive_title || '—'}</td>}
-                              {subjectCols.has('schedule') && <td className="px-3 py-2 text-on-surface-variant">{o.mth_schedule || '—'}</td>}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+              {/* Column toggle pills */}
+              <div className="flex flex-wrap items-center gap-1.5 px-6 pt-4 pb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Cols:</span>
+                {[
+                  { key: 'code', label: 'Code' },
+                  { key: 'course_no', label: 'Course No' },
+                  { key: 'descriptive_title', label: 'Description' },
+                  { key: 'schedule', label: 'Schedule' },
+                ].map((col) => (
+                  <button
+                    key={col.key}
+                    onClick={() => toggleSubjectCol(col.key)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      subjectCols.has(col.key)
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {col.label}
+                  </button>
+                ))}
+                {totalConflicts > 0 && !subjectsLoading && (
+                  <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-red-600">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200 border border-red-400"></span>
+                    = schedule conflict
+                  </span>
+                )}
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-6 pb-6">
+                {subjectsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
+                    <p className="mt-4 text-sm text-on-surface-variant">Loading offerings...</p>
                   </div>
-
-                  {/* TFS Section */}
-                  <div className="mt-6">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-2">Tue / Fri / Sat</h4>
-                    {tfsOfferings.length === 0 ? (
-                      <p className="text-xs text-slate-400 pl-2">None</p>
-                    ) : (
-                      <table className="min-w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-amber-100">
-                            {subjectCols.has('code') && <th className="px-3 py-2 text-left font-bold text-amber-700">Code</th>}
-                            {subjectCols.has('course_no') && <th className="px-3 py-2 text-left font-bold text-amber-700">Course No</th>}
-                            {subjectCols.has('descriptive_title') && <th className="px-3 py-2 text-left font-bold text-amber-700">Description</th>}
-                            {subjectCols.has('schedule') && <th className="px-3 py-2 text-left font-bold text-amber-700">Schedule</th>}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-amber-50">
-                          {tfsOfferings.map((o) => (
-                            <tr key={`tfs-${o.id}`} className="hover:bg-amber-50/40">
+                ) : subjectsOfferings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <BookOpen size={40} className="text-slate-300" />
+                    <p className="mt-3 text-sm font-semibold text-on-surface">No offerings scheduled in this room</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* MTh Section */}
+                    <div className="mt-4">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-2">
+                        Mon / Thu
+                        {conflictMthIds.size > 0 && (
+                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">{conflictMthIds.size} conflict{conflictMthIds.size !== 1 ? 's' : ''}</span>
+                        )}
+                      </h4>
+                      {mthOfferings.length === 0 ? (
+                        <p className="text-xs text-slate-400 pl-2">None</p>
+                      ) : (
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-indigo-100">
                               {subjectCols.has('code') && (
-                                <td className="px-3 py-2 font-medium text-on-surface">
-                                  {o.code || '—'}
-                                  {o.tfs_schedule?.toLowerCase().includes('sat') && (
-                                    <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Sat</span>
-                                  )}
-                                </td>
+                                <th className={mthThClass('code')} onClick={() => handleSubjectSort('code')}>
+                                  Code{sortIndicator('code')}
+                                </th>
                               )}
-                              {subjectCols.has('course_no') && <td className="px-3 py-2 text-on-surface-variant">{o.course_no || '—'}</td>}
-                              {subjectCols.has('descriptive_title') && <td className="px-3 py-2 text-on-surface-variant">{o.descriptive_title || '—'}</td>}
-                              {subjectCols.has('schedule') && <td className="px-3 py-2 text-on-surface-variant">{o.tfs_schedule || '—'}</td>}
+                              {subjectCols.has('course_no') && (
+                                <th className={mthThClass('course_no')} onClick={() => handleSubjectSort('course_no')}>
+                                  Course No{sortIndicator('course_no')}
+                                </th>
+                              )}
+                              {subjectCols.has('descriptive_title') && (
+                                <th className={mthThClass('descriptive_title')} onClick={() => handleSubjectSort('descriptive_title')}>
+                                  Description{sortIndicator('descriptive_title')}
+                                </th>
+                              )}
+                              {subjectCols.has('schedule') && (
+                                <th className={mthThClass('schedule')} onClick={() => handleSubjectSort('schedule')}>
+                                  Schedule{sortIndicator('schedule')}
+                                </th>
+                              )}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+                          </thead>
+                          <tbody className="divide-y divide-indigo-50">
+                            {mthOfferings.map((o) => {
+                              const isConflict = conflictMthIds.has(o.id);
+                              return (
+                                <tr key={`mth-${o.id}`} className={isConflict ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-indigo-50/40'}>
+                                  {subjectCols.has('code') && (
+                                    <td className={`px-3 py-2 font-medium ${isConflict ? 'text-red-700' : 'text-on-surface'}`}>
+                                      {o.code || '—'}
+                                      {isConflict && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-red-500 align-middle"></span>}
+                                    </td>
+                                  )}
+                                  {subjectCols.has('course_no') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600' : 'text-on-surface-variant'}`}>{o.course_no || '—'}</td>}
+                                  {subjectCols.has('descriptive_title') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600' : 'text-on-surface-variant'}`}>{o.descriptive_title || '—'}</td>}
+                                  {subjectCols.has('schedule') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600 font-semibold' : 'text-on-surface-variant'}`}>{o.mth_schedule || '—'}</td>}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
 
-            {/* Footer */}
-            <div className="flex justify-end border-t border-slate-100 px-6 py-4">
-              <button
-                onClick={() => setShowSubjectsModal(false)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-on-surface hover:bg-slate-50"
-              >
-                Close
-              </button>
+                    {/* TFS Section */}
+                    <div className="mt-6">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-2">
+                        Tue / Fri / Sat
+                        {conflictTfsIds.size > 0 && (
+                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">{conflictTfsIds.size} conflict{conflictTfsIds.size !== 1 ? 's' : ''}</span>
+                        )}
+                      </h4>
+                      {tfsOfferings.length === 0 ? (
+                        <p className="text-xs text-slate-400 pl-2">None</p>
+                      ) : (
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-amber-100">
+                              {subjectCols.has('code') && (
+                                <th className={tfsThClass('code')} onClick={() => handleSubjectSort('code')}>
+                                  Code{sortIndicator('code')}
+                                </th>
+                              )}
+                              {subjectCols.has('course_no') && (
+                                <th className={tfsThClass('course_no')} onClick={() => handleSubjectSort('course_no')}>
+                                  Course No{sortIndicator('course_no')}
+                                </th>
+                              )}
+                              {subjectCols.has('descriptive_title') && (
+                                <th className={tfsThClass('descriptive_title')} onClick={() => handleSubjectSort('descriptive_title')}>
+                                  Description{sortIndicator('descriptive_title')}
+                                </th>
+                              )}
+                              {subjectCols.has('schedule') && (
+                                <th className={tfsThClass('schedule')} onClick={() => handleSubjectSort('schedule')}>
+                                  Schedule{sortIndicator('schedule')}
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-50">
+                            {tfsOfferings.map((o) => {
+                              const isConflict = conflictTfsIds.has(o.id);
+                              return (
+                                <tr key={`tfs-${o.id}`} className={isConflict ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-amber-50/40'}>
+                                  {subjectCols.has('code') && (
+                                    <td className={`px-3 py-2 font-medium ${isConflict ? 'text-red-700' : 'text-on-surface'}`}>
+                                      {o.code || '—'}
+                                      {isConflict && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-red-500 align-middle"></span>}
+                                      {o.tfs_schedule?.toLowerCase().includes('sat') && (
+                                        <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Sat</span>
+                                      )}
+                                    </td>
+                                  )}
+                                  {subjectCols.has('course_no') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600' : 'text-on-surface-variant'}`}>{o.course_no || '—'}</td>}
+                                  {subjectCols.has('descriptive_title') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600' : 'text-on-surface-variant'}`}>{o.descriptive_title || '—'}</td>}
+                                  {subjectCols.has('schedule') && <td className={`px-3 py-2 ${isConflict ? 'text-red-600 font-semibold' : 'text-on-surface-variant'}`}>{o.tfs_schedule || '—'}</td>}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end border-t border-slate-100 px-6 py-4">
+                <button
+                  onClick={() => setShowSubjectsModal(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-on-surface hover:bg-slate-50"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
