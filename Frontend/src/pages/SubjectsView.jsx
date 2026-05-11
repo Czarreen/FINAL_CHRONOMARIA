@@ -4,10 +4,10 @@ import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, 
 import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification } from '../services/notificationsApi';
+import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
-export default function SubjectsView() {
+export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -171,8 +171,8 @@ export default function SubjectsView() {
   }, [page, limit, search, statusFilter]);
 
   useEffect(() => {
-    loadSubjectNotifications();
-  }, []);
+    loadSubjectNotifications({ forceRescan: true });
+  }, [authRefreshKey]);
 
   useEffect(() => {
     loadRoomLookup();
@@ -277,9 +277,12 @@ export default function SubjectsView() {
     }
   }
 
-  async function loadSubjectNotifications() {
+  async function loadSubjectNotifications({ forceRescan = false } = {}) {
     try {
       setSubjectNotificationsLoading(true);
+      if (forceRescan) {
+        await rescanAllSubjectNotifications();
+      }
       // Prefer persisted notifications (allows resolving); fallback to computed live
       try {
         const persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
@@ -687,7 +690,10 @@ export default function SubjectsView() {
             {total} subjects
           </span>
           <button
-            onClick={() => { loadSubjects(); loadSubjectNotifications(); }}
+            onClick={async () => {
+              await loadSubjects();
+              await loadSubjectNotifications({ forceRescan: true });
+            }}
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
             title="Reload subjects and sync status"
           >

@@ -10,12 +10,25 @@ import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
-import { clearAllNotifications } from './services/notificationsApi';
+import { clearAllNotifications, rescanAllSubjectNotifications } from './services/notificationsApi';
 import { RowHighlightProvider } from './hooks/useRowHighlight.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
+  const [authRefreshKey, setAuthRefreshKey] = useState(0);
+
+  const handleLogin = async () => {
+    setAuthRefreshKey((value) => value + 1);
+    setCurrentView('dashboard');
+    setIsAuthenticated(true);
+
+    try {
+      await rescanAllSubjectNotifications();
+    } catch (err) {
+      console.error('Failed to refresh subject notifications on login:', err);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -23,19 +36,21 @@ export default function App() {
     } catch (err) {
       console.error('Failed to clear notifications on logout:', err);
     }
+    setAuthRefreshKey((value) => value + 1);
+    setCurrentView('dashboard');
     setIsAuthenticated(false);
   };
 
   if (!isAuthenticated) {
-    return <LoginView onLogin={() => setIsAuthenticated(true)} />;
+    return <LoginView onLogin={handleLogin} />;
   }
 
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
       case 'faculty': return <FacultyView />;
-      case 'subjects': return <SubjectsView />;
-      case 'rooms': return <RoomsView />;
+      case 'subjects': return <SubjectsView authRefreshKey={authRefreshKey} />;
+      case 'rooms': return <RoomsView authRefreshKey={authRefreshKey} />;
       case 'schedule': return <ScheduleView />;
       case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView />;

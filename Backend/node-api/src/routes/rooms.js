@@ -69,6 +69,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
+    if (data && data.length > 0) {
+      try {
+        await supabaseAdmin.rpc('refresh_room_notifications', { p_room_id: data[0].room_id });
+      } catch (syncErr) {
+        console.error('Failed to sync room notifications:', syncErr);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Room created successfully',
@@ -110,6 +118,12 @@ router.put('/:room_id', async (req, res) => {
       return res.status(404).json({ error: 'Room not found' });
     }
 
+    try {
+      await supabaseAdmin.rpc('refresh_room_notifications', { p_room_id: Number(room_id) });
+    } catch (syncErr) {
+      console.error('Failed to sync room notifications:', syncErr);
+    }
+
     return res.json({
       success: true,
       message: 'Room updated successfully',
@@ -138,6 +152,12 @@ router.delete('/:room_id', async (req, res) => {
     if (error) {
       console.error('Room deletion error:', error);
       return res.status(400).json({ error: error.message });
+    }
+
+    try {
+      await supabaseAdmin.rpc('refresh_room_notifications', { p_room_id: Number(room_id) });
+    } catch (deleteErr) {
+      console.error('Failed to delete room notifications:', deleteErr);
     }
 
     return res.json({
@@ -169,7 +189,7 @@ router.get('/:room_id/offerings', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, section, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
+      .select('id, code, course_no, descriptive_title, section, lab_hrs, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
       .or(orFilter);
 
     if (error) {

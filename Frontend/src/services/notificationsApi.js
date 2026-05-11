@@ -76,6 +76,15 @@ export async function fetchSubjectNotifications({ page = 1, limit = 500 } = {}) 
   return data;
 }
 
+export async function rescanAllSubjectNotifications() {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/rescan-all`, { method: 'POST' });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to rescan subject notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchPersistedSubjectNotifications({ page = 1, limit = 200, unresolvedOnly = true } = {}) {
   const params = new URLSearchParams();
   params.set('page', String(page));
