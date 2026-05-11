@@ -37,7 +37,6 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
-import { createAuditLog, buildChangeSummary } from '../services/auditLogsApi.js';
 
 const PAGE_SIZE = 50;
 
@@ -288,7 +287,6 @@ export default function CourseOfferingView() {
       };
 
       await createCourseOffering(payload);
-      createAuditLog({ action: 'Created course offering', module: 'Course Offerings', description: `Added offering "${editingData.code}"`, changesAfter: payload });
       setSuccessMessage(`Created "${editingData.code}"`);
       setShowAddModal(false);
       setEditingData({});
@@ -346,9 +344,6 @@ export default function CourseOfferingView() {
         tfs_room_id: tfsRoomIds,
       };
 
-      const originalOffering = offerings.find((o) => o.id === editingId);
-      await updateCourseOffering(editingId, payload);
-      createAuditLog({ action: 'Updated course offering', module: 'Course Offerings', description: `Updated offering "${editingData.code}": ${buildChangeSummary(originalOffering, payload, { code: 'Code', descriptive_title: 'Title', section: 'Section', units: 'Units', lec_hrs: 'Lec Hrs', lab_hrs: 'Lab Hrs', mth_schedule: 'MTH Schedule', tfs_schedule: 'TFS Schedule' })}` });
       const savedId = editingId;
       await updateCourseOffering(savedId, payload);
       setSuccessMessage(`Updated "${editingData.code}"`);
@@ -357,7 +352,6 @@ export default function CourseOfferingView() {
       setEditingFromNotification(false);
       setNotificationMissingFields(new Set());
       // Re-sync notifications for this offering in the background then refresh list
-      syncCourseOfferingNotifications(editingId).catch(() => {});
       syncCourseOfferingNotifications(savedId).catch(() => {});
       await loadInitialPage();
     } catch (err) {
@@ -403,7 +397,6 @@ export default function CourseOfferingView() {
         try {
           setUpdateError(null);
           await deleteCourseOffering(offering.id);
-          createAuditLog({ action: 'Deleted course offering', module: 'Course Offerings', description: `Deleted offering "${offering.code}"`, changesBefore: offering });
           setSuccessMessage(`Deleted "${offering.code}"`);
           await loadInitialPage();
         } catch (err) {

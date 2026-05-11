@@ -9,7 +9,6 @@ import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
-import SettingsView from './pages/SettingsView';
 import { clearAllNotifications } from './services/notificationsApi';
 import { RowHighlightProvider } from './hooks/useRowHighlight.jsx';
 
@@ -23,12 +22,11 @@ export default function App() {
     } catch (err) {
       console.error('Failed to clear notifications on logout:', err);
     }
-    localStorage.removeItem('user');
     setIsAuthenticated(false);
   };
 
   if (!isAuthenticated) {
-    return <LoginView onLogin={() => { setCurrentView('dashboard'); setIsAuthenticated(true); }} />;
+    return <LoginView onLogin={() => setIsAuthenticated(true)} />;
   }
 
   const renderView = () => {
@@ -39,7 +37,6 @@ export default function App() {
       case 'rooms': return <RoomsView />;
       case 'schedule': return <ScheduleView />;
       case 'course-offering': return <CourseOfferingView />;
-      case 'settings': return <SettingsView />;
       default: return <DashboardView />;
     }
   };
@@ -67,7 +64,6 @@ export default function App() {
             <TopAppBar
               title={getTitle()}
               onLogout={handleLogout}
-              onSettingsClick={() => setCurrentView('settings')}
             />
 
             <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">

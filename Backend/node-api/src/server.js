@@ -1,16 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
-import { verifyToken, requireAdmin } from './middleware/auth.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
 import departmentsRouter from './routes/departments.js';
 import facultyRouter from './routes/faculty.js';
 import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
 import notificationsRouter from './routes/notifications.js';
-import usersRouter from './routes/users.js';
-import auditLogsRouter from './routes/auditLogs.js';
-import authRouter from './routes/auth.js';
 
 const app = express();
 
@@ -26,8 +22,6 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'node-api' });
 });
 
-app.use('/api/auth', authRouter);
-
 // Give the CSV import endpoint a long timeout — large files can take several minutes
 app.use('/api/course-offerings/import-csv', (req, res, next) => {
   req.setTimeout(10 * 60 * 1000); // 10 minutes
@@ -41,11 +35,6 @@ app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
 app.use('/api/subjects', subjectsRouter);
 app.use('/api/notifications', notificationsRouter);
-
-// Protected routes: require authentication only
-app.use('/api/users', verifyToken, usersRouter);
-// Protected routes: require authentication and admin role
-app.use('/api/audit-logs', verifyToken, requireAdmin, auditLogsRouter);
 
 app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);
