@@ -189,7 +189,7 @@ router.get('/:room_id/offerings', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, section, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
+      .select('id, code, course_no, descriptive_title, section, lab_hrs, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
       .or(orFilter);
 
     if (error) {

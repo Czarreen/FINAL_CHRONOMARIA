@@ -50,7 +50,12 @@ function findConflictIds(offerings, scheduleKey) {
   return ids;
 }
 
-export default function RoomsView() {
+function inferRoomTypeFromOfferings(offerings) {
+  const hasLabHours = Array.isArray(offerings) && offerings.some((offering) => Number(offering?.lab_hrs || 0) > 0);
+  return hasLabHours ? 'Lab' : 'Lecture';
+}
+
+export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,6 +70,7 @@ export default function RoomsView() {
   const [notificationSearch, setNotificationSearch] = useState('');
   const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
   const [notificationStats, setNotificationStats] = useState({ total: 0, critical: 0, medium: 0, low: 0 });
+  const [refreshStatus, setRefreshStatus] = useState(null);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -109,17 +115,67 @@ export default function RoomsView() {
     { key: 'room_status', label: 'Status' },
   ];
 
-  const loadRooms = async () => {
+  const loadRooms = async ({ refreshNotifications = true, forceNotificationRescan = false } = {}) => {
     setLoading(true);
     try {
       const data = await fetchRoomsPage(1, 9999);
-      setRooms(data.rows || []);
+      const baseRows = Array.isArray(data.rows) ? data.rows : [];
+      const rowsWithDerivedTypes = await Promise.all(
+        baseRows.map(async (room) => {
+          if (room.room_type && String(room.room_type).trim() !== '') {
+            return room;
+          }
+
+          try {
+            const offerings = await fetchRoomOfferings(room.room_id);
+            const inferredType = inferRoomTypeFromOfferings(offerings);
+
+            return {
+              ...room,
+              room_type: inferredType,
+            };
+          } catch (err) {
+            console.error(`Failed to infer room type for room ${room.room_id}:`, err);
+            return {
+              ...room,
+              room_type: 'Lecture',
+            };
+          }
+        })
+      );
+
+      const roomsNeedingPersist = rowsWithDerivedTypes.filter((room) => {
+        const originalRoom = baseRows.find((candidate) => candidate.room_id === room.room_id);
+        const originalType = String(originalRoom?.room_type || '').trim();
+        const derivedType = String(room.room_type || '').trim();
+        return originalType !== derivedType && derivedType !== '';
+      });
+
+      if (roomsNeedingPersist.length > 0) {
+        await Promise.allSettled(
+          roomsNeedingPersist.map((room) =>
+            updateRoom(room.room_id, {
+              room_type: room.room_type,
+            })
+          )
+        );
+      }
+
+      setRooms(rowsWithDerivedTypes);
       setError(null);
       setCurrentPage(1);
+
+      if (refreshNotifications) {
+        setRefreshStatus('Refreshing room issues...');
+        await loadRoomNotifications(rowsWithDerivedTypes, { forceRescan: forceNotificationRescan });
+        setRefreshStatus('Room issues refreshed');
+        window.setTimeout(() => setRefreshStatus(null), 1800);
+      }
     } catch (err) {
       console.error('Failed to fetch rooms:', err);
       setError(err.message);
       setRooms([]);
+      setRefreshStatus(null);
     } finally {
       setLoading(false);
     }
@@ -216,12 +272,16 @@ export default function RoomsView() {
     });
   };
 
-  const loadRoomNotifications = async () => {
+  const loadRoomNotifications = async (roomList = rooms, { forceRescan = false } = {}) => {
     setNotificationsLoading(true);
     try {
+      if (forceRescan) {
+        await rescanAllRoomNotifications();
+      }
+
       let data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
 
-      if ((data.total ?? 0) === 0) {
+      if (!forceRescan && (data.total ?? 0) === 0) {
         await rescanAllRoomNotifications();
         data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
       }
@@ -234,7 +294,7 @@ export default function RoomsView() {
         return value;
       };
 
-      const roomsById = new Map(rooms.map((room) => [String(room.room_id), room]));
+      const roomsById = new Map(roomList.map((room) => [String(room.room_id), room]));
       const grouped = new Map();
 
       rows.forEach((row) => {
@@ -299,15 +359,8 @@ export default function RoomsView() {
   };
 
   useEffect(() => {
-    loadRooms();
-  }, []);
-
-  // Reload notifications after rooms are loaded (needed to map room names)
-  useEffect(() => {
-    if (rooms.length > 0) {
-      loadRoomNotifications();
-    }
-  }, [rooms.length]);
+    loadRooms({ refreshNotifications: true, forceNotificationRescan: true });
+  }, [authRefreshKey]);
 
   const { stats, totalPages, currentRooms } = useMemo(() => {
     // Filter rooms by search query and status
@@ -628,6 +681,11 @@ export default function RoomsView() {
 
   return (
     <div className="space-y-2 animate-in slide-in-from-right-4 duration-500 p-3 flex flex-col h-screen">
+      {refreshStatus && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-800">
+          {refreshStatus}
+        </div>
+      )}
       {resolveMessage && (
         <div className={`rounded-lg px-4 py-3 ${
           resolveMessageType === 'success'
@@ -650,6 +708,7 @@ export default function RoomsView() {
               title="Room Issues"
               emptyLabel="No room data quality issues detected"
               buttonLabel="Issues"
+              isRescanning={notificationsLoading || loading}
               onItemEdit={handleNotificationEdit}
               onItemJump={handleNotificationJump}
               onItemResolve={handleResolveNotification}
@@ -670,12 +729,13 @@ export default function RoomsView() {
             )}
             <button
               className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={loadRooms}
+              onClick={() => loadRooms({ refreshNotifications: true, forceNotificationRescan: true })}
               type="button"
               title="Reload data"
+              disabled={loading || notificationsLoading}
             >
-              <RefreshCw size={14} />
-              <span>Reload</span>
+              <RefreshCw size={14} className={loading || notificationsLoading ? 'animate-spin' : ''} />
+              <span>{loading || notificationsLoading ? 'Refreshing...' : 'Reload'}</span>
             </button>
             <button
               ref={colButtonRef}
