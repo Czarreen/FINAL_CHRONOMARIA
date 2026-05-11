@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, createPortal } from 'react';
 import {
   ArrowUpDown,
   Users,
@@ -13,6 +13,8 @@ import {
   AlertCircle,
   Building2,
   Mail,
+  RotateCcw,
+  Settings,
 } from 'lucide-react';
 import {
   fetchFaculty,
@@ -66,6 +68,68 @@ export default function FacultyView() {
   const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
   const [pendingScrollToId, setPendingScrollToId] = useState(null);
   const [findingRow, setFindingRow] = useState(false);
+
+  const columns = [
+    { key: 'faculty_name', label: 'Faculty Member' },
+    { key: 'department', label: 'Department' },
+    { key: 'faculty_role', label: 'Role' },
+    { key: 'faculty_specialization', label: 'Specialization' },
+    { key: 'faculty_max_units', label: 'Units' },
+    { key: 'faculty_status', label: 'Status' },
+  ];
+
+  const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
+  const colButtonRef = useRef(null);
+  const colMenuRef = useRef(null);
+
+  // Handle column menu positioning and click outside (consistent with CourseOffering/Rooms)
+  useEffect(() => {
+    if (!colMenuOpen) return;
+
+    const updatePosition = () => {
+      if (!colButtonRef.current) return;
+      const rect = colButtonRef.current.getBoundingClientRect();
+      setColMenuPos({
+        top: rect.bottom + 8,
+        left: rect.right - 220,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    const handleClickOutside = (e) => {
+      const isButtonClick = colButtonRef.current && colButtonRef.current.contains(e.target);
+      const isMenuClick = colMenuRef.current && colMenuRef.current.contains(e.target);
+      if (!isButtonClick && !isMenuClick) {
+        setColMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [colMenuOpen]);
+
+
+  function toggleColumnVisibility(columnKey) {
+    setVisibleColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(columnKey)) {
+        next.delete(columnKey);
+      } else {
+        next.add(columnKey);
+      }
+      return next;
+    });
+  }
 
   const { setHighlight } = useRowHighlight();
 
@@ -461,80 +525,109 @@ export default function FacultyView() {
   }
 
   return (
-    <div className="space-y-gutter animate-in slide-in-from-bottom-4 duration-500">
-      <div className="grid grid-cols-1 gap-gutter lg:grid-cols-12">
-        <div className="glass-panel col-span-1 flex items-center justify-between p-8 lg:col-span-8">
-          <div className="space-y-1">
-            <h2 className="text-headline-xl font-headline-xl text-on-surface">Faculty Directory</h2>
-            <p className="text-body-md text-on-surface-variant">Manage and track academic teaching staff.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <NotificationButton
-              items={filteredNotifications}
-              title="Faculty Notifications"
-              buttonLabel="Issues"
-              emptyLabel="No faculty issues"
-              panelSize="md"
-              onItemEdit={handleNotificationEdit}
-              onItemJump={handleNotificationJump}
-              onItemResolve={handleResolveNotification}
-              severityFilter={notificationSeverityFilter}
-              onSeverityFilterChange={setNotificationSeverityFilter}
-              notificationSearch={notificationSearch}
-              onNotificationSearchChange={setNotificationSearch}
-              notificationStats={notificationStats}
-            />
-            <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2">
-              <PlusCircle size={18} />
-              <span>Add Faculty</span>
-            </button>
-          </div>
+<div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-bottom-4 duration-500 bg-cover">
+
+      {/* Header with Title, Description, and Action Buttons */}
+      <div className="bg-white/90 rounded-xl border border-white/60 flex items-center justify-between p-3 flex-shrink-0">
+
+        <div className="space-y-0.5 min-w-0">
+          <h2 className="text-lg font-bold text-on-surface truncate">Faculty Directory</h2>
+          <p className="text-xs text-on-surface-variant truncate">Manage and track academic teaching staff.</p>
         </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <Users size={24} className="text-primary" />
-          <span className="mt-3 text-3xl font-bold text-on-surface">{total}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Total Faculty</span>
-        </div>
-        <div className="glass-panel flex flex-col items-center justify-center p-6 text-center">
-          <Check size={24} className="text-green-500" />
-          <span className="mt-3 text-3xl font-bold text-on-surface">{activeCount}</span>
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Active</span>
+        <div className="flex items-center gap-1 flex-shrink-0 ml-4">
+          <NotificationButton
+            items={filteredNotifications}
+            title="Faculty Notifications"
+            buttonLabel="Issues"
+            emptyLabel="No faculty issues"
+            panelSize="md"
+            onItemEdit={handleNotificationEdit}
+            onItemJump={handleNotificationJump}
+            onItemResolve={handleResolveNotification}
+            severityFilter={notificationSeverityFilter}
+            onSeverityFilterChange={setNotificationSeverityFilter}
+            notificationSearch={notificationSearch}
+            onNotificationSearchChange={setNotificationSearch}
+            notificationStats={notificationStats}
+          />
+          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+            {total} faculty
+          </span>
+          <button
+            onClick={() => loadFaculty()}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
+            title="Reload faculty members"
+          >
+            <RotateCcw size={16} />
+          </button>
+          <button
+            ref={colButtonRef}
+            onClick={(e) => {
+              e.stopPropagation();
+              setColMenuOpen(!colMenuOpen);
+            }}
+            className={`rounded-lg p-1.5 transition-colors flex-shrink-0 ${
+              colMenuOpen
+                ? 'bg-white text-primary'
+                : 'bg-white/30 text-slate-400 hover:bg-white hover:text-primary'
+            }`}
+            title="Column visibility"
+          >
+            <Settings size={16} />
+          </button>
+          {colMenuOpen && createPortal(
+            <div
+              ref={colMenuRef}
+              style={{
+                position: 'fixed',
+                top: `${colMenuPos.top}px`,
+                left: `${colMenuPos.left}px`,
+                zIndex: 1000,
+              }}
+              className="w-56 rounded-lg border border-white/20 bg-white/95 shadow-lg backdrop-blur-sm"
+            >
+              <div className="space-y-1 p-3">
+                {columns.map(col => (
+                  <label key={col.key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => toggleColumnVisibility(col.key)}
+                      className="h-4 w-4 rounded border-primary accent-primary"
+                    />
+                    <span className="text-sm font-medium text-on-surface">{col.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>,
+            document.body
+          )}
+          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1 px-3 py-1.5 text-sm flex-shrink-0">
+            <PlusCircle size={16} />
+            <span>Add</span>
+          </button>
         </div>
       </div>
 
-      <div className="glass-panel space-y-4 p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-white/60 px-4 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">On Leave (Current Page)</p>
-            <p className="mt-2 text-2xl font-bold text-on-surface">{onLeaveCount}</p>
-          </div>
-          <div className="rounded-xl bg-white/60 px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">Departments (Current Page)</p>
-                <p className="mt-2 text-2xl font-bold text-on-surface">{departmentCount}</p>
-              </div>
-              <Building2 size={18} className="text-primary" />
-            </div>
-          </div>
-        </div>
+      {/* Search and Filter Bar */}
+      <div className="bg-white/90 rounded-xl border border-white/60 space-y-2 p-3 flex-shrink-0 mt-1">
 
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="relative flex-1 md:max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
-              placeholder="Search by name, email, or role..."
+              placeholder="Search faculty..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             {['', 'active', 'inactive', 'on-leave'].map((status) => (
               <button
                 key={status}
@@ -542,7 +635,7 @@ export default function FacultyView() {
                   setStatusFilter(status);
                   setPage(1);
                 }}
-                className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
                     : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
@@ -555,246 +648,220 @@ export default function FacultyView() {
         </div>
 
         {updateError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+            <AlertCircle size={14} />
             {updateError}
           </div>
         )}
       </div>
 
       {loading && (
-        <div className="glass-panel flex flex-col items-center justify-center py-16">
+        <div className="glass-panel flex flex-col items-center justify-center flex-1 mt-1">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary"></div>
-          <p className="mt-4 text-on-surface-variant">Loading faculty members...</p>
+          <p className="mt-4 text-sm text-on-surface-variant">Loading faculty members...</p>
         </div>
       )}
 
       {error && !loading && (
-        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-700">
-          <AlertCircle size={20} />
+        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-3 text-red-700 flex-1 mt-1">
+          <AlertCircle size={18} />
           <div>
-            <p className="font-bold">Error loading faculty</p>
-            <p className="text-sm">{error}</p>
+            <p className="font-bold text-sm">Error loading faculty</p>
+            <p className="text-xs">{error}</p>
           </div>
         </div>
       )}
 
       {!loading && !error && faculty.length > 0 && (
-        <div className="glass-panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-white/20 bg-white/30">
-                <th className="px-6 py-4 text-left">
-                  <button type="button" onClick={() => handleSort('faculty_name')} className={sortHeaderClass('faculty_name')}>
-                    <span>Faculty Member</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-left">
-                  <button type="button" onClick={() => handleSort('department')} className={sortHeaderClass('department')}>
-                    <span>Department</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-left">
-                  <button type="button" onClick={() => handleSort('faculty_role')} className={sortHeaderClass('faculty_role')}>
-                    <span>Role</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-left">
-                  <button
-                    type="button"
-                    onClick={() => handleSort('faculty_specialization')}
-                    className={sortHeaderClass('faculty_specialization')}
-                  >
-                    <span>Specialization</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-center">
-                  <button type="button" onClick={() => handleSort('faculty_max_units')} className={sortHeaderClass('faculty_max_units')}>
-                    <span>Units</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-center">
-                  <button type="button" onClick={() => handleSort('faculty_status')} className={sortHeaderClass('faculty_status')}>
-                    <span>Status</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-center">
-                  <button type="button" onClick={() => handleSort('actions')} className={sortHeaderClass('actions')}>
-                    <span>Actions</span>
-                    <ArrowUpDown size={12} />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/20">
-              {sortedFaculty.map((member) => {
-                const specializationItems = parseSpecializations(member.faculty_specialization);
-                const visibleSpecializations = specializationItems.slice(0, 2);
-                const hiddenSpecializationCount = Math.max(0, specializationItems.length - visibleSpecializations.length);
+        <div className="bg-white/90 rounded-xl border border-white/60 overflow-hidden flex-1 flex flex-col mt-1 min-h-0">
 
-                return (
-                  <tr key={member.faculty_id} id={`faculty-row-${member.faculty_id}`} className="group transition-colors hover:bg-white/45">
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="font-bold text-on-surface">{member.faculty_name}</p>
-                          <div className="mt-1 flex items-center gap-1.5 text-xs text-on-surface-variant/70">
-                            <Mail size={12} />
-                            <span>
-                              {member.faculty_email ||
-                                `${String(member.faculty_name || '')
-                                  .toLowerCase()
-                                  .replace(/\s+/g, '.')}@chronomaria.edu`}
-                            </span>
-                          </div>
-                        </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-on-surface-variant">
-                      {member.departments?.department_name || 'Unassigned'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">{member.faculty_role}</td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      {specializationItems.length === 0 ? (
-                        '—'
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {visibleSpecializations.map((specialization) => (
-                            <span
-                              key={`${member.faculty_id}-${specialization}`}
-                              className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
-                            >
-                              {specialization}
-                            </span>
-                          ))}
-                          {hiddenSpecializationCount > 0 && (
-                            <span
-                              title={specializationItems.join(', ')}
-                              className="cursor-help rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
-                            >
-                              +{hiddenSpecializationCount} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center text-sm font-medium text-on-surface">
-                      {member.faculty_max_units ?? '—'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => handleStatusToggle(member.faculty_id, member.faculty_status)}
-                          disabled={updatingStatus === member.faculty_id}
-                          className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-xs font-bold transition-all ${getStatusBadgeClass(
-                            member.faculty_status
-                          )} disabled:opacity-50`}
-                        >
-                          {updatingStatus === member.faculty_id ? (
-                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                          ) : String(member.faculty_status || '').toLowerCase() === 'active' ? (
-                            <>
-                              <Check size={14} />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <X size={14} />
-                              {String(member.faculty_status || 'inactive').replace('-', ' ')}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
-                        <button
-                          onClick={() => handleEditFaculty(member)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-white hover:text-primary"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteFaculty(member)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+          <div className="overflow-auto flex-1">
+            <table className="min-w-full w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-6 py-4">
-            <div className="text-sm text-on-surface-variant">
-              Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} faculty members
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
-              >
-                <ChevronLeft size={16} />
-                Previous
-              </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = index + 1;
-                  } else if (page <= 3) {
-                    pageNum = index + 1;
-                  } else if (page >= totalPages - 2) {
-                    pageNum = totalPages - 4 + index;
-                  } else {
-                    pageNum = page - 2 + index;
-                  }
+                  {columns.map(col => visibleColumns.has(col.key) && (
+                    <th key={col.key} className="px-4 py-2 text-left">
+                      <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
+                        <span>{col.label}</span>
+                        <ArrowUpDown size={10} />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="sticky right-0 z-30 px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/20">
+                {sortedFaculty.map((member) => {
+                  const specializationItems = parseSpecializations(member.faculty_specialization);
+                  const visibleSpecializations = specializationItems.slice(0, 2);
+                  const hiddenSpecializationCount = Math.max(0, specializationItems.length - visibleSpecializations.length);
+
                   return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`rounded-lg px-3 py-2 text-sm font-bold transition-all ${
-                        pageNum === page
-                          ? 'bg-primary text-white'
-                          : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
+                    <tr key={member.faculty_id} id={`faculty-row-${member.faculty_id}`} className="group transition-colors hover:bg-white/45">
+                      {columns.map(col => visibleColumns.has(col.key) && (
+                        <td key={col.key} className="px-4 py-2">
+                          {col.key === 'faculty_name' && (
+                            <div>
+                              <p className="font-bold text-on-surface">{member.faculty_name}</p>
+                              <div className="mt-0.5 flex items-center gap-1 text-xs text-on-surface-variant/70">
+                                <Mail size={10} />
+                                <span className="truncate">
+                                  {member.faculty_email ||
+                                    `${String(member.faculty_name || '')
+                                      .toLowerCase()
+                                      .replace(/\s+/g, '.')}@chronomaria.edu`}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          {col.key === 'department' && (
+                            <span className="text-xs font-medium text-on-surface-variant truncate">
+                              {member.departments?.department_name || 'Unassigned'}
+                            </span>
+                          )}
+                          {col.key === 'faculty_role' && (
+                            <span className="text-xs text-on-surface-variant">{member.faculty_role}</span>
+                          )}
+                          {col.key === 'faculty_specialization' && (
+                            <div>
+                              {specializationItems.length === 0 ? (
+                                <span className="text-xs text-on-surface-variant">—</span>
+                              ) : (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {visibleSpecializations.map((specialization) => (
+                                    <span
+                                      key={`${member.faculty_id}-${specialization}`}
+                                      className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                                    >
+                                      {specialization}
+                                    </span>
+                                  ))}
+                                  {hiddenSpecializationCount > 0 && (
+                                    <span
+                                      title={specializationItems.join(', ')}
+                                      className="cursor-help rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+                                    >
+                                      +{hiddenSpecializationCount}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {col.key === 'faculty_max_units' && (
+                            <span className="text-center text-xs font-medium text-on-surface">
+                              {member.faculty_max_units ?? '—'}
+                            </span>
+                          )}
+                          {col.key === 'faculty_status' && (
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => handleStatusToggle(member.faculty_id, member.faculty_status)}
+                                disabled={updatingStatus === member.faculty_id}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${getStatusBadgeClass(
+                                  member.faculty_status
+                                )} disabled:opacity-50`}
+                              >
+                                {updatingStatus === member.faculty_id ? (
+                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                                ) : String(member.faculty_status || '').toLowerCase() === 'active' ? (
+                                  <>
+                                    <Check size={12} />
+                                    Active
+                                  </>
+                                ) : (
+                                  <>
+                                    <X size={12} />
+                                    {String(member.faculty_status || 'inactive').replace('-', ' ')}
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                      <td className="sticky right-0 z-10 px-4 py-2 bg-white">
+                        <div className="flex items-center justify-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleEditFaculty(member)}
+                            className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-white hover:text-primary"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFaculty(member)}
+                            className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
-              </div>
-              <button
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
-                className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
-              >
-                Next
-                <ChevronRight size={16} />
-              </button>
-            </div>
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
 
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2 flex-shrink-0">
+              <div className="text-xs text-on-surface-variant">
+                {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <div className="flex items-center gap-0.5">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = index + 1;
+                    } else if (page <= 3) {
+                      pageNum = index + 1;
+                    } else if (page >= totalPages - 2) {
+                      pageNum = totalPages - 4 + index;
+                    } else {
+                      pageNum = page - 2 + index;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`rounded-lg px-2 py-1 text-xs font-bold transition-all ${
+                          pageNum === page
+                            ? 'bg-primary text-white'
+                            : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {!loading && !error && faculty.length === 0 && (
-        <div className="glass-panel flex flex-col items-center justify-center py-16 text-center">
-          <Users size={48} className="text-on-surface-variant/30" />
-          <p className="mt-4 text-lg font-bold text-on-surface">No faculty members found</p>
-          <p className="mt-1 text-sm text-on-surface-variant">
+        <div className="glass-panel flex flex-col items-center justify-center flex-1 mt-1 text-center">
+          <Users size={40} className="text-on-surface-variant/30" />
+          <p className="mt-3 text-sm font-bold text-on-surface">No faculty members found</p>
+          <p className="mt-1 text-xs text-on-surface-variant">
             {search || statusFilter ? 'Try adjusting your filters' : 'Create your first faculty member to get started'}
           </p>
         </div>

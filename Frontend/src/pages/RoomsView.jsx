@@ -638,7 +638,7 @@ export default function RoomsView() {
       {/* Rooms Table */}
       {!loading && !error && rooms.length > 0 && (
         <div className="glass-panel overflow-hidden flex-1">
-          <div className="max-h-[calc(100vh-24rem)] overflow-auto">
+          <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
             <table className="min-w-full w-full text-left text-xs">
               <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
@@ -709,13 +709,13 @@ export default function RoomsView() {
                       <div className="flex justify-center gap-2">
                         <button
                           onClick={() => handleEditClick(room)}
-                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
+                          className="rounded-md bg-white/30 p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleDeleteClick(room)}
-                          className="rounded-md p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          className="rounded-md bg-white/30 p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={16} />
                         </button>

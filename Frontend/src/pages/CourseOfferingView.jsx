@@ -1414,7 +1414,7 @@ export default function CourseOfferingView() {
 
       {/* Data Table - Compact */}
       <div className="glass-panel overflow-hidden flex-1">
-        <div className="max-h-[calc(100vh-24rem)] overflow-auto">
+        <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
           <table className="min-w-full w-full text-left text-xs">
             <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
