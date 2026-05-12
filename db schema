@@ -165,7 +165,7 @@ CREATE TABLE public.users (
   username text NOT NULL UNIQUE,
   email text,
   password_hash text NOT NULL,
-  role text DEFAULT 'staff'::text,
+  role text DEFAULT 'admin'::text,
   status text DEFAULT 'active'::text,
   created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
