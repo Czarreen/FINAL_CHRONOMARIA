@@ -1101,6 +1101,15 @@ export default function CourseOfferingView() {
   // Two offerings at the exact same time in the same room are the same physical
   // class (merged/cross-listed), regardless of code, title, dept, or curriculum.
   const isMergedSubject = (offering, compareTo) => {
+    // Same course section: same curriculum + department + course_no → intentional room-share
+    // (staggered lab sections share rooms at different times — not a conflict)
+    if (offering.curr_id && compareTo.curr_id &&
+        String(offering.curr_id) === String(compareTo.curr_id) &&
+        String(offering.department_id) === String(compareTo.department_id) &&
+        String(offering.course_no || '').trim().toUpperCase() === String(compareTo.course_no || '').trim().toUpperCase()) {
+      return true;
+    }
+
     const norm = (s) => String(s || '').trim().toUpperCase();
 
     const mthA = norm(offering.mth_schedule);

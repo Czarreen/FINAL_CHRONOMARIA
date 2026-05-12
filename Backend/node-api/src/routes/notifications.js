@@ -143,7 +143,7 @@ router.post('/course-offerings/sync', async (req, res) => {
 
     const { data: allOfferings, error: allFetchErr } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+      .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
 
     if (allFetchErr) return res.status(500).json({ error: allFetchErr.message });
 
@@ -203,7 +203,7 @@ router.post('/course-offerings/sync', async (req, res) => {
     for (const affectedId of affectedIds) {
       const { data: affectedRows } = await supabaseAdmin
         .from('course_offerings')
-        .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
+        .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
         .eq('id', affectedId)
         .limit(1);
 

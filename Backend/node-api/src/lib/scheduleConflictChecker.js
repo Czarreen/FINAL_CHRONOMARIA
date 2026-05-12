@@ -182,6 +182,18 @@ function isMergedSubject(entity, other) {
   return true;
 }
 
+// Returns true when two offerings are sections of the same course —
+// same curriculum, same department, and same course number.
+// Staggered lab sections intentionally share rooms at different times; this is not a conflict.
+function isSameCourseSection(entity, other) {
+  if (!entity.curr_id || !entity.department_id || !entity.course_no) return false;
+  return (
+    String(entity.curr_id) === String(other.curr_id) &&
+    String(entity.department_id) === String(other.department_id) &&
+    String(entity.course_no || '').trim().toUpperCase() === String(other.course_no || '').trim().toUpperCase()
+  );
+}
+
 export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRoomIds = new Set()) {
   if (isEntityGym) {
     return [];
@@ -206,7 +218,9 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
     // Skip merged subjects — same class offered under different curricula/departments.
     // They intentionally share the same room and schedule, so they are not real conflicts.
-    if (isMergedSubject(entity, other)) continue;
+    // Also skip staggered lab sections — same course (same curr_id + dept + course_no)
+    // sharing a room at different (but overlapping) times; this is intentional scheduling.
+    if (isMergedSubject(entity, other) || isSameCourseSection(entity, other)) continue;
 
     // Skip gym rooms in the other entity (they can host multiple subjects simultaneously).
     // isGymRoomValue handles both ID-based (course offerings) and name-based (subjects) detection.
