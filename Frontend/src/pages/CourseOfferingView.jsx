@@ -71,7 +71,7 @@ export default function CourseOfferingView() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
     new Set([
-      'code', 'course_no', 'descriptive_title', 'department_name', 'section',
+      'code', 'curr_id', 'course_no', 'descriptive_title', 'department_name', 'section',
       'units', 'lec_hrs', 'lab_hrs', 'mth_schedule', 'mth_room_id', 'tfs_schedule', 'tfs_room_id'
     ])
   );
@@ -508,6 +508,7 @@ export default function CourseOfferingView() {
   // Simplified column definitions for better header
   const columns = [
     { key: 'code', label: 'Code' },
+    { key: 'curr_id', label: 'Curriculum ID' },
     { key: 'course_no', label: 'Course #' },
     { key: 'descriptive_title', label: 'Title' },
     { key: 'department_name', label: 'Department' },
@@ -1546,7 +1547,7 @@ export default function CourseOfferingView() {
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <th key={col.key} className="px-3 py-2 text-left">
+                      <th key={col.key} className={`px-3 py-2 ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : 'text-left'}`}>
                         <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
                           sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
                         }`}>
@@ -1606,7 +1607,7 @@ export default function CourseOfferingView() {
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <td key={col.key} className="px-3 py-2 truncate">
+                      <td key={col.key} className={`px-3 py-2 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
                         {col.key === 'code' ? (
                           <span className="inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                             {renderCellValue(offering[col.key])}
