@@ -10,6 +10,8 @@ import {
   CircleUserRound,
 } from 'lucide-react';
 
+import logoPng from '../../logo.png';
+
 export default function Sidebar({ currentView, onViewChange, onLogout }) {
   const menuItems = [
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
@@ -22,22 +24,12 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
   ];
 
   return (
-    <aside className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col overflow-y-auto border-r border-white/40 bg-white/70 p-6 shadow-[30px_0_40px_rgba(0,0,0,0.05)] backdrop-blur-[20px]">
-      <div className="mb-4 border-b border-white/20 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-on-primary-container shadow-sm">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-              schedule
-            </span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-indigo-600">Chronomaria</h1>
-            <p className="text-body-sm text-on-surface-variant/70">Faculty Loading</p>
-          </div>
-        </div>
+    <aside className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col overflow-y-auto border-r border-white/40 bg-white/70 shadow-[30px_0_40px_rgba(0,0,0,0.05)] backdrop-blur-[20px]">
+      <div className="flex items-center justify-center border-b border-white/20 p-6 pt-0">
+        <img src={logoPng} alt="Chronomaria logo" className="h-20 w-auto object-contain" />
       </div>
 
-      <nav className="mt-4 flex-1 space-y-2">
+      <nav className="flex-1 space-y-2 px-6 py-4">
         {menuItems.map((item) => {
           const isActive = currentView === item.id;
           return (
@@ -57,7 +49,7 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
         })}
       </nav>
 
-      <div className="mt-auto border-t border-white/20 pt-6">
+      <div className="mt-auto border-t border-white/20 px-6 pt-6">
         <div className="mb-4 flex items-center gap-3 px-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/50 bg-indigo-600 text-white">
             <CircleUserRound size={16} />

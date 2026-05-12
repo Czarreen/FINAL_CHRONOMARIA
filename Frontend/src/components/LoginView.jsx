@@ -2,38 +2,19 @@ export default function LoginView({ onLogin }) {
   return (
     <div className="min-h-screen bg-mesh px-4 py-6 text-on-surface md:px-8 md:py-10">
       <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-[2rem] border border-white/50 bg-white/60 shadow-[0_30px_80px_rgba(75,42,184,0.12)] backdrop-blur-[24px] lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="relative flex flex-col justify-between overflow-hidden bg-primary px-8 py-10 text-white md:px-10">
+        <section className="relative flex flex-col justify-center items-center overflow-hidden bg-primary px-8 py-10 text-white md:px-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(202,190,255,0.35),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(155,233,253,0.25),transparent_38%)]" />
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-                schedule
-              </span>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.32em] text-white/70">Chronomaria</p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight">Faculty Loading</h1>
-            </div>
+          <div className="relative z-10 rounded-2xl bg-white p-3 flex flex-col items-center mt-8">
+            <img src="/logo.png" alt="Chronomaria Logo" className="h-40 w-auto" />
           </div>
 
-          <div className="relative z-10 max-w-md py-16">
+          <div className="relative z-10 max-w-md py-16 text-left">
             <p className="text-4xl font-extrabold leading-tight tracking-tight md:text-5xl">
-              Base UI for faculty scheduling, designed to feel calm and precise.
+              Web-based faculty loading automation system for Saint Mary's University (SMU)
             </p>
             <p className="mt-5 max-w-sm text-sm leading-6 text-white/75 md:text-base">
               Sign in to access the dashboard shell, faculty tools, room management, and schedule workspace.
             </p>
-          </div>
-
-          <div className="relative z-10 grid grid-cols-2 gap-3 text-sm text-white/80">
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Status</p>
-              <p className="mt-2 text-lg font-semibold text-white">Ready</p>
-            </div>
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Mode</p>
-              <p className="mt-2 text-lg font-semibold text-white">Dashboard Preview</p>
-            </div>
           </div>
         </section>
 
@@ -81,10 +62,6 @@ export default function LoginView({ onLogin }) {
                 Sign in
               </button>
             </div>
-
-            <p className="mt-6 text-center text-xs leading-5 text-on-surface-variant/70">
-              This is a base UI login frame. Authentication can be connected later.
-            </p>
           </form>
         </section>
       </div>
