@@ -225,6 +225,29 @@ function buildSubjectIndex(subjects) {
   return index;
 }
 
+function mapSubjectsToGaOfferings(subjects) {
+  return subjects.map((subject) => ({
+    id: Number(subject.subject_id),
+    curr_id: Number(subject.subject_id),
+    code: normalizeText(subject.subject_code) || null,
+    course_no: normalizeText(subject.subject_course_no) || null,
+    department_id: toNumber(subject.department_id),
+    section: normalizeText(subject.subject_section) || null,
+    descriptive_title: normalizeText(subject.subject_descriptive_title) || null,
+    units: toNumber(subject.subject_units),
+    lec_hrs: toNumber(subject.subject_lec_hrs),
+    lab_hrs: toNumber(subject.subject_lab_hrs),
+    mth_schedule: normalizeText(subject.mth_schedule) || null,
+    mth_room_id: normalizeText(subject.mth_room) || null,
+    tfs_schedule: normalizeText(subject.tfs_schedule) || null,
+    tfs_room_id: normalizeText(subject.tfs_room) || null,
+    merged: false,
+    department_name: subject.department_name || null,
+    source: 'subject',
+    source_subject_id: Number(subject.subject_id),
+  }));
+}
+
 function buildPreflight(snapshot) {
   const issues = [];
   const roomLookup = buildRoomLookup(snapshot.rooms);
@@ -278,16 +301,18 @@ function buildPreflight(snapshot) {
     }
   }
 
-  for (const offering of snapshot.offerings) {
+  const gaOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
+
+  for (const offering of gaOfferings) {
     const missing = REQUIRED_OFFERING_FIELDS.filter((field) => isEmptyValue(offering[field]));
     if (missing.length > 0) {
       for (const field of missing) {
         issues.push({
-          type: 'course_offering',
+          type: 'subject',
           id: offering.id,
           field,
-          severity: 'high',
-          problem: `Missing ${field.replace(/_/g, ' ')}`,
+          severity: ['department_id', 'units', 'lec_hrs', 'descriptive_title'].includes(field) ? 'high' : 'medium',
+          problem: `Missing ${field.replace(/_/g, ' ')} in subject-derived workload`,
         });
       }
     }
@@ -299,7 +324,7 @@ function buildPreflight(snapshot) {
 
     if (hasMthSchedule && !mthRoom.roomId) {
       issues.push({
-        type: 'course_offering',
+        type: 'subject',
         id: offering.id,
         field: 'mth_room_id',
         severity: 'high',
@@ -309,7 +334,7 @@ function buildPreflight(snapshot) {
 
     if (hasTfsSchedule && !tfsRoom.roomId) {
       issues.push({
-        type: 'course_offering',
+        type: 'subject',
         id: offering.id,
         field: 'tfs_room_id',
         severity: 'high',
@@ -319,11 +344,11 @@ function buildPreflight(snapshot) {
 
     if (!hasMthSchedule && !hasTfsSchedule) {
       issues.push({
-        type: 'course_offering',
+        type: 'subject',
         id: offering.id,
         field: 'schedule',
         severity: 'high',
-        problem: 'Course offering has no schedule assigned',
+        problem: 'Subject has no schedule assigned',
       });
     }
 
@@ -345,7 +370,7 @@ function buildPreflight(snapshot) {
   }
 
   const departmentsWithOfferings = new Set(
-    snapshot.offerings
+    gaOfferings
       .map((offering) => toNumber(offering.department_id))
       .filter((departmentId) => departmentId !== null)
   );
@@ -383,7 +408,7 @@ function buildPreflight(snapshot) {
     subject_count: snapshot.subjects.length,
     issues,
     suggested_next_step: issues.some((issue) => issue.severity === 'high')
-      ? 'Resolve the listed issues in Faculty, Course Offerings, or Rooms before running GA.'
+      ? 'Resolve the listed issues in Faculty, Subjects, or Rooms before running GA.'
       : 'Data is ready for GA execution.',
   };
 }
@@ -583,7 +608,9 @@ async function persistFacultyLoading(assignments, snapshot) {
 
 async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = {}) {
   const snapshot = await fetchSnapshot();
-  const preFlight = buildPreflight(snapshot);
+  const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
+  const subjectDrivenSnapshot = { ...snapshot, offerings: subjectDrivenOfferings };
+  const preFlight = buildPreflight(subjectDrivenSnapshot);
 
   if (preFlight.status === 'blocked') {
     const error = new Error('Data quality issues prevent GA execution');
@@ -601,10 +628,10 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     dry_run: Boolean(dryRun || constraints.dry_run),
   };
 
-  const runId = buildRunId(snapshot, normalizedConstraints);
+  const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
     faculty: snapshot.faculty,
-    offerings: snapshot.offerings,
+    offerings: subjectDrivenOfferings,
     rooms: snapshot.rooms,
     subjects: snapshot.subjects,
     constraints: normalizedConstraints,
@@ -619,7 +646,7 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   };
 
   if (!dryRun) {
-    mergedResult.persistence = await persistFacultyLoading(optimizerResult.assignments || [], snapshot);
+    mergedResult.persistence = await persistFacultyLoading(optimizerResult.assignments || [], subjectDrivenSnapshot);
   } else {
     mergedResult.persistence = { persisted: 0, dry_run: true };
   }
@@ -630,7 +657,9 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
 export async function getGaPreFlight(_req, res) {
   try {
     const snapshot = await fetchSnapshot();
-    return res.json(buildPreflight(snapshot));
+    const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
+    const subjectDrivenSnapshot = { ...snapshot, offerings: subjectDrivenOfferings };
+    return res.json(buildPreflight(subjectDrivenSnapshot));
   } catch (error) {
     console.error('[ga] pre-flight failed:', error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });

@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
     let query = supabaseAdmin
       .from('subjects')
-      .select('*', { count: 'exact' });
+      .select('*, departments(department_id, department_name)', { count: 'exact' });
 
 // Apply search filter (search in code, title, schedule, and rooms)
     if (search) {
@@ -92,6 +92,7 @@ router.post('/', async (req, res) => {
       'mth_room',
       'tfs_room',
       'subject_status',
+      'curr_id',
     ];
 
     const sanitizedData = {};
@@ -143,7 +144,7 @@ router.get('/:id', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('subjects')
-      .select('*')
+      .select('*, departments(department_id, department_name)')
       .eq('subject_id', id)
       .single();
 
@@ -175,7 +176,7 @@ router.patch('/:id', async (req, res) => {
     const updates = req.body;
 
     // Only allow certain fields to be updated
-    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status'];
+    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status', 'curr_id'];
     const sanitizedUpdates = {};
 
     if ('mth_room_id' in updates && !('mth_room' in updates)) {

@@ -539,6 +539,7 @@ const SUBJECT_SYNC_FIELD_MAP = [
   ['code', 'subject_code'],
   ['course_no', 'subject_course_no'],
   ['descriptive_title', 'subject_descriptive_title'],
+  ['curr_id', 'curr_id'],
   ['section', 'subject_section'],
   ['units', 'subject_units'],
   ['lec_hrs', 'subject_lec_hrs'],
@@ -578,6 +579,7 @@ function buildSubjectPayloadFromCourseOffering(courseOffering) {
     subject_code: normalizeCell(courseOffering?.code),
     subject_course_no: normalizeCell(courseOffering?.course_no),
     subject_descriptive_title: normalizeCell(courseOffering?.descriptive_title),
+    curr_id: parseNullableNumber(courseOffering?.curr_id),
     department_id: courseOffering?.department_id ?? null,
     subject_section: normalizeCell(courseOffering?.section),
     subject_units: parseNullableNumber(courseOffering?.units),
@@ -594,7 +596,7 @@ function buildSubjectSyncChecks(courseOffering, subjectPayload) {
   return SUBJECT_SYNC_FIELD_MAP.map(([courseField, subjectField]) => {
     const rawCourse = courseOffering?.[courseField];
     const normalizedCourse =
-      courseField === 'units' || courseField === 'lec_hrs' || courseField === 'lab_hrs'
+      courseField === 'units' || courseField === 'lec_hrs' || courseField === 'lab_hrs' || courseField === 'curr_id'
         ? parseNullableNumber(rawCourse)
         : normalizeCell(rawCourse);
 
