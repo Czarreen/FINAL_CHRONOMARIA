@@ -73,7 +73,8 @@ function computeOfferingIssues(offering, allOfferings = [], gymRoomIds = new Set
     if (!mthSchedule && !tfsSchedule) {
       issues.push({ field_name: 'mth_schedule', severity: 'high', message: 'No schedule assigned', issue_type: 'missing' });
     } else if (!mthRoom && !tfsRoom) {
-      issues.push({ field_name: 'mth_room_id', severity: 'high', message: 'No classroom assigned for scheduled times', issue_type: 'missing' });
+      if (mthSchedule) issues.push({ field_name: 'mth_room_id', severity: 'high', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
+      if (tfsSchedule) issues.push({ field_name: 'tfs_room_id', severity: 'high', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
     } else {
       if (mthSchedule && !mthRoom) issues.push({ field_name: 'mth_room_id', severity: 'medium', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
       if (tfsSchedule && !tfsRoom) issues.push({ field_name: 'tfs_room_id', severity: 'medium', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
@@ -86,7 +87,9 @@ function computeOfferingIssues(offering, allOfferings = [], gymRoomIds = new Set
   if (isEmptyVal(offering.department_id)) issues.push({ field_name: 'department_id', severity: 'medium', message: 'Department is not assigned', issue_type: 'missing' });
   if (isEmptyVal(offering.curr_id)) issues.push({ field_name: 'curr_id', severity: 'medium', message: 'Curriculum ID is missing', issue_type: 'missing' });
   if (isEmptyVal(offering.units)) issues.push({ field_name: 'units', severity: 'medium', message: 'Credit units are not specified', issue_type: 'missing' });
-  if (isEmptyVal(offering.lec_hrs)) issues.push({ field_name: 'lec_hrs', severity: 'medium', message: 'Lecture hours are not specified', issue_type: 'missing' });
+  const hasLecHrs = !isEmptyVal(offering.lec_hrs);
+  const hasLabHrs = !isEmptyVal(offering.lab_hrs);
+  if (!hasLecHrs && !hasLabHrs) issues.push({ field_name: 'lec_hrs', severity: 'medium', message: 'Lecture hours or lab hours must be specified', issue_type: 'missing' });
 
   // Gym detection: check by numeric ID first (course offerings), then fall back to name (subjects).
   const isMthRoomGym = gymRoomIds.has(String(offering.mth_room_id)) || isRoomGym(offering.mth_room_id);
@@ -133,7 +136,7 @@ router.post('/course-offerings/sync', async (req, res) => {
 
     const { data: allOfferings, error: allFetchErr } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+      .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
 
     if (allFetchErr) return res.status(500).json({ error: allFetchErr.message });
 
@@ -193,7 +196,7 @@ router.post('/course-offerings/sync', async (req, res) => {
     for (const affectedId of affectedIds) {
       const { data: affectedRows } = await supabaseAdmin
         .from('course_offerings')
-        .select('id, code, course_no, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
+        .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
         .eq('id', affectedId)
         .limit(1);
 

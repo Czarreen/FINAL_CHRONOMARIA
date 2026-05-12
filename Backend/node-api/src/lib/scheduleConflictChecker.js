@@ -149,6 +149,43 @@ function isGymRoomValue(roomValue, gymRoomIds) {
   return isRoomGym(roomValue);
 }
 
+// Returns true when two offerings represent the same merged physical class —
+// same physical location (room) at the same time (schedule), confirmed by matching
+// course number OR title. Code and department may vary across merged offerings.
+// Merged subjects share the same room and time deliberately and are not real conflicts.
+function isMergedSubject(entity, other) {
+  const norm = (s) => String(s || '').trim().toUpperCase();
+
+  const mthA = norm(entity.mth_schedule);
+  const mthB = norm(other.mth_schedule);
+  const tfsA = norm(entity.tfs_schedule);
+  const tfsB = norm(other.tfs_schedule);
+
+  // Must have at least one schedule on the entity side
+  if (!mthA && !tfsA) return false;
+
+  // Schedules must match exactly
+  if (mthA !== mthB || tfsA !== tfsB) return false;
+
+  // Rooms must also match (same physical location confirms it's the same class)
+  const mthRoomA = norm(entity.mth_room_id);
+  const mthRoomB = norm(other.mth_room_id);
+  const tfsRoomA = norm(entity.tfs_room_id);
+  const tfsRoomB = norm(other.tfs_room_id);
+  if (mthRoomA !== mthRoomB || tfsRoomA !== tfsRoomB) return false;
+
+  // At least course_no OR descriptive_title must match to confirm same subject matter
+  const courseNoA = norm(entity.course_no || '');
+  const courseNoB = norm(other.course_no || '');
+  const titleA = norm(entity.descriptive_title || '');
+  const titleB = norm(other.descriptive_title || '');
+
+  const courseNoMatch = courseNoA && courseNoB && courseNoA === courseNoB;
+  const titleMatch = titleA && titleB && titleA === titleB;
+
+  return courseNoMatch || titleMatch;
+}
+
 export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRoomIds = new Set()) {
   if (isEntityGym) {
     return [];
@@ -170,6 +207,10 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
     } else if (entity.subject_id !== undefined) {
       if (other.subject_id === entity.subject_id) continue;
     }
+
+    // Skip merged subjects — same class offered under different curricula/departments.
+    // They intentionally share the same room and schedule, so they are not real conflicts.
+    if (isMergedSubject(entity, other)) continue;
 
     // Skip gym rooms in the other entity (they can host multiple subjects simultaneously).
     // isGymRoomValue handles both ID-based (course offerings) and name-based (subjects) detection.

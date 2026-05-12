@@ -567,7 +567,7 @@ export default function CourseOfferingView() {
     'Department': 'department_id',
     'Curriculum': 'curr_id',
     'Credit Units': 'units',
-    'Lecture Hours': 'lec_hrs',
+    'Lecture Hours': ['lec_hrs', 'lab_hrs'],
     'Schedule': ['mth_schedule', 'tfs_schedule'],
     'Room Assignment': ['mth_room_id', 'tfs_room_id'],
     'MTH Room': 'mth_room_id',
@@ -968,7 +968,7 @@ export default function CourseOfferingView() {
               const roomIdStr = String(roomId);
               const isChecked = selectedValues.includes(roomIdStr);
               const conflicts = getConflictingOfferings(roomIdStr, scheduleType);
-              const conflictCount = conflicts.filter((o) => o.id !== editingId).length;
+              const conflictCount = conflicts.filter((o) => o.id !== editingId && !isMergedSubject(o, editingData)).length;
 
               return (
                 <div key={roomIdStr}>
@@ -1092,6 +1092,35 @@ export default function CourseOfferingView() {
         }
       },
     });
+  };
+
+  // Returns true when two offerings represent the same merged physical class —
+  // same schedule with either matching course number OR matching title confirms it.
+  // Code and department may vary; course_no may also vary across departments.
+  const isMergedSubject = (offering, compareTo) => {
+    const norm = (s) => String(s || '').trim().toUpperCase();
+
+    const mthA = norm(offering.mth_schedule);
+    const mthB = norm(compareTo.mth_schedule);
+    const tfsA = norm(offering.tfs_schedule);
+    const tfsB = norm(compareTo.tfs_schedule);
+
+    // Must have at least one schedule on the offering side
+    if (!mthA && !tfsA) return false;
+
+    // Schedules must match exactly
+    if (mthA !== mthB || tfsA !== tfsB) return false;
+
+    // At least course_no OR descriptive_title must match to confirm same subject matter
+    const courseNoA = norm(offering.course_no || '');
+    const courseNoB = norm(compareTo.course_no || '');
+    const titleA = norm(offering.descriptive_title || '');
+    const titleB = norm(compareTo.descriptive_title || '');
+
+    const courseNoMatch = courseNoA && courseNoB && courseNoA === courseNoB;
+    const titleMatch = titleA && titleB && titleA === titleB;
+
+    return courseNoMatch || titleMatch;
   };
 
   const getConflictingOfferings = (roomId, scheduleType) => {
