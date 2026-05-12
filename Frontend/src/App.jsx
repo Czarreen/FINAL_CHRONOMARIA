@@ -10,15 +10,22 @@ import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
+import SettingsView from './pages/SettingsView';
 import { clearAllNotifications, rescanAllSubjectNotifications } from './services/notificationsApi';
 import { RowHighlightProvider } from './hooks/useRowHighlight.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [authRefreshKey, setAuthRefreshKey] = useState(0);
 
-  const handleLogin = async () => {
+  const handleOpenSettings = () => {
+    setCurrentView('settings');
+  };
+
+  const handleLogin = async (user) => {
+    setCurrentUser(user);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(true);
@@ -36,6 +43,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to clear notifications on logout:', err);
     }
+    setCurrentUser(null);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(false);
@@ -54,6 +62,7 @@ export default function App() {
       case 'schedule': return <ScheduleView />;
       case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView />;
+      case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={setCurrentUser} />;
       default: return <DashboardView />;
     }
   };
@@ -81,6 +90,7 @@ export default function App() {
             <TopAppBar
               title={getTitle()}
               onLogout={handleLogout}
+              onSettings={handleOpenSettings}
             />
 
             <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">
