@@ -164,7 +164,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
 
     return stats;
-  }, [visibleSubjectNotifications]);
+  }, [subjectNotifications]);
 
   const { setHighlight } = useRowHighlight();
 

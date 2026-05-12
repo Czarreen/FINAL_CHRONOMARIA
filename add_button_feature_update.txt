@@ -1,0 +1,105 @@
+ADD BUTTON FEATURE - COURSE OFFERING VIEW
+==========================================
+
+LOCATION: Frontend/src/pages/CourseOfferingView.jsx (lines 1260-1271)
+
+BUTTON CLICK HANDLER:
+- Opens showAddModal state
+- Initializes editingData with empty room ID arrays: { mth_room_id: [], tfs_room_id: [] }
+- Clears any previous error messages
+
+ADD MODAL FORM STRUCTURE (lines 1985-2264):
+=============================================
+
+SECTION 1: BASIC INFORMATION
+- Course Code* (required, includes duplicate detection)
+- Course Number* (required)
+- Section* (required)
+- Department* (dropdown, required)
+- Curriculum ID* (required)
+- Descriptive Title (optional)
+
+SECTION 2: HOURS & UNITS
+- Units (numeric)
+- Lecture Hours (numeric)
+- Lab Hours (numeric)
+
+SECTION 3: SCHEDULES & ROOMS (at least one pair required)
+- MTH Schedule & Room pair with status indicator
+- TFS Schedule & Room pair (optional)
+- Multi-select room picker with conflict detection
+
+KEY FEATURES:
+=============
+1. VALIDATION
+   - Uses isFormValid() to check required fields
+   - Submit button disabled until validation passes
+   - getDisabledReason() explains why form is invalid
+
+2. DUPLICATE DETECTION
+   - handleCheckDuplicateCode() triggers on code input change
+   - Shows similar course codes with unit/section info
+   - Triggers from line 2041
+
+3. ROOM CONFLICT DETECTION
+   - getConflictingOfferings(roomId, scheduleType) identifies conflicts
+   - Displays count of conflicting offerings per room
+   - Prevents scheduling conflicts
+
+4. ROOM SELECTION
+   - renderRoomPicker(field) creates multi-select UI
+   - Selected rooms shown as pills
+   - Scrollable room list with room_name and room_type
+   - Conflict warnings shown inline
+
+5. SCHEDULE STATUS INDICATORS
+   - getSchedulePairStatus() shows: complete (✓), incomplete (◐), or empty (○)
+   - Color-coded: green (complete), yellow (incomplete), gray (empty)
+
+6. ERROR HANDLING
+   - Error messages display in red banner (line 2003-2008)
+   - Duplicate suggestions show in yellow banner (line 2010-2022)
+   - Success/error toasts after submission
+
+FORM SUBMISSION:
+================
+Function: handleAddOffering() (lines 311-347)
+
+Process:
+1. Validate form with isFormValid()
+2. Convert room arrays to slash-separated strings:
+   - mth_room_id: [1,2,3] → "1/2/3"
+   - tfs_room_id: [4,5] → "4/5"
+3. Create payload with converted data
+4. Call createCourseOffering(payload) API
+5. Show success message with course code
+6. Close modal and reload initial page
+7. Clear duplicate suggestions
+
+RELATED FUNCTIONS:
+==================
+- handleAddOffering(): Creates new offering (line 311)
+- handleCheckDuplicateCode(): Detects similar codes (line 293)
+- isFormValid(): Validates required fields (imported from utils)
+- getDisabledReason(): Explains validation failure (imported from utils)
+- getSchedulePairStatus(): Returns status icon/color (imported from utils)
+- renderRoomPicker(): Renders room selection UI (line 916)
+- getConflictingOfferings(): Finds schedule conflicts (line 1084)
+- createCourseOffering(): API call (imported from services)
+
+STYLING:
+========
+- Modal: Fixed z-50, centered, glass-panel design
+- Input fields: Border slate-300, focus on primary color
+- Room picker: Scrollable, max-height-56, highlighted selections
+- Status indicators: Color-coded (green/yellow/gray)
+- Buttons: Primary blue for submit, white/slate for cancel
+
+STATE MANAGEMENT:
+=================
+- showAddModal: Boolean to show/hide modal
+- editingData: Object with form field values
+- offeringError: Error message state
+- duplicateCodeSuggestions: Array of similar codes
+- checkingDuplicateCode: Loading state for duplicate check
+- savingOffering: Loading state for submission

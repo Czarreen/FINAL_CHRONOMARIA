@@ -960,6 +960,43 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
   return { payload, errors, warnings };
 }
 
+// GET /api/course-offerings/check-code/:code - Check for duplicate course codes
+router.get('/check-code/:code', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.json({ exists: false, suggestions: [] });
+    }
+
+    // Search for matching course codes (exact or partial)
+    const { data: matches, error } = await supabaseAdmin
+      .from('course_offerings')
+      .select('id, code, course_no, descriptive_title, section, units, departments(department_name)')
+      .ilike('code', `%${code}%`)
+      .order('id', { ascending: false })
+      .limit(3);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    const exists = matches?.some((m) => m.code?.toUpperCase() === code) ?? false;
+    const suggestions = (matches || []).map((m) => ({
+      id: m.id,
+      code: m.code,
+      course_no: m.course_no,
+      descriptive_title: m.descriptive_title,
+      section: m.section,
+      units: m.units,
+      department_name: m.departments?.department_name || null,
+    }));
+
+    return res.json({ exists, suggestions });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));

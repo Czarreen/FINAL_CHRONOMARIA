@@ -6,6 +6,7 @@ import { AlertCircle, Bell, ChevronDown, ChevronRight, Maximize2, Minimize2, X, 
 function getIssueCategory(field) {
   if (!field) return 'Other';
   const f = field.toLowerCase();
+  if (f.includes('conflict')) return 'Schedule Conflict';
   if (f.includes('name')) return 'Missing Name';
   if (f.includes('type')) return 'Missing Type';
   if (f.includes('status')) return 'Missing Status';
@@ -82,7 +83,10 @@ export default function NotificationButton({
       .filter((notif) => {
         if (!notificationSearch.trim()) return true;
         const q = notificationSearch.toLowerCase();
-        return (notif.title?.toLowerCase() || '').includes(q) || (notif.code?.toLowerCase() || '').includes(q);
+        const title = notif.title?.toLowerCase() || '';
+        const description = notif.description?.toLowerCase() || '';
+        const code = notif.code?.toLowerCase() || '';
+        return title.includes(q) || description.includes(q) || code.includes(q);
       });
   }, [filteredByCategory, severityFilter, notificationSearch]);
 

@@ -1,10 +1,11 @@
 import { supabaseAdmin } from './supabase.js';
+import { findConflictingSchedules, isRoomGym } from './scheduleConflictChecker.js';
 
 function normalizeSubjectText(value) {
   return value == null ? '' : String(value).trim();
 }
 
-export function buildSubjectNotificationIssues(subject) {
+export function buildSubjectNotificationIssues(subject, allSubjects = []) {
   const issues = [];
 
   if (!normalizeSubjectText(subject?.subject_code)) {
@@ -66,11 +67,27 @@ export function buildSubjectNotificationIssues(subject) {
     });
   }
 
+  const isMthRoomGym = isRoomGym(subject?.mth_room);
+  const isTfsRoomGym = isRoomGym(subject?.tfs_room);
+
+  const conflicts = findConflictingSchedules(subject, allSubjects, false);
+  for (const conflict of conflicts) {
+    if ((conflict.schedule === 'MTH' && !isMthRoomGym) || (conflict.schedule === 'TFS' && !isTfsRoomGym)) {
+      issues.push({
+        field_name: 'schedule_conflict',
+        issue_type: 'conflict',
+        severity: 'high',
+        message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
+        conflicting_subject_id: conflict.entityId,
+      });
+    }
+  }
+
   return issues;
 }
 
-export function buildSubjectNotificationRows(subject) {
-  const issues = buildSubjectNotificationIssues(subject);
+export function buildSubjectNotificationRows(subject, allSubjects = []) {
+  const issues = buildSubjectNotificationIssues(subject, allSubjects);
 
   return issues.map((issue) => ({
     entity_id: subject.subject_id,
@@ -82,6 +99,7 @@ export function buildSubjectNotificationRows(subject) {
       subject_id: subject.subject_id,
       subject_code: normalizeSubjectText(subject.subject_code) || null,
       subject_descriptive_title: normalizeSubjectText(subject.subject_descriptive_title) || null,
+      conflicting_subject_id: issue.conflicting_subject_id || null,
     },
   }));
 }
@@ -101,7 +119,16 @@ export async function upsertSubjectNotificationCache(subject) {
     throw new Error(deleteError.message);
   }
 
-  const rows = buildSubjectNotificationRows(subject);
+  // Fetch all subjects so conflict detection can compare against peers.
+  const { data: allSubjects, error: allFetchError } = await supabaseAdmin
+    .from('subjects')
+    .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room');
+
+  if (allFetchError) {
+    throw new Error(allFetchError.message);
+  }
+
+  const rows = buildSubjectNotificationRows(subject, allSubjects || []);
   if (rows.length === 0) {
     return { updated: 0, issues: [] };
   }
@@ -149,7 +176,7 @@ export async function rescanAllSubjectNotifications() {
   const inserts = [];
 
   for (const subject of subjects || []) {
-    const rows = buildSubjectNotificationRows(subject);
+    const rows = buildSubjectNotificationRows(subject, subjects || []);
     if (rows.length === 0) {
       continue;
     }

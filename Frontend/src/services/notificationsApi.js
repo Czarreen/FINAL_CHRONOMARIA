@@ -23,8 +23,12 @@ export async function resolveCourseOfferingNotification(id) {
   return res.json();
 }
 
-export async function rescanAllCourseOfferingNotifications() {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, { method: 'POST' });
+export async function rescanAllCourseOfferingNotifications(force = false) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force }),
+  });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to rescan notifications: ${res.status}`);
