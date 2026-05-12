@@ -82,7 +82,10 @@ export default function NotificationButton({
       .filter((notif) => {
         if (!notificationSearch.trim()) return true;
         const q = notificationSearch.toLowerCase();
-        return (notif.title?.toLowerCase() || '').includes(q) || (notif.code?.toLowerCase() || '').includes(q);
+        const title = notif.title?.toLowerCase() || '';
+        const description = notif.description?.toLowerCase() || '';
+        const code = notif.code?.toLowerCase() || '';
+        return title.includes(q) || description.includes(q) || code.includes(q);
       });
   }, [filteredByCategory, severityFilter, notificationSearch]);
 
