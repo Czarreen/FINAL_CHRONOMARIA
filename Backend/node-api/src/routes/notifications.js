@@ -86,7 +86,16 @@ function computeOfferingIssues(offering, allOfferings = [], gymRoomIds = new Set
   if (isEmptyVal(offering.department_id)) issues.push({ field_name: 'department_id', severity: 'medium', message: 'Department is not assigned', issue_type: 'missing' });
   if (isEmptyVal(offering.curr_id)) issues.push({ field_name: 'curr_id', severity: 'medium', message: 'Curriculum ID is missing', issue_type: 'missing' });
   if (isEmptyVal(offering.units)) issues.push({ field_name: 'units', severity: 'medium', message: 'Credit units are not specified', issue_type: 'missing' });
-  if (isEmptyVal(offering.lec_hrs)) issues.push({ field_name: 'lec_hrs', severity: 'medium', message: 'Lecture hours are not specified', issue_type: 'missing' });
+  const hasLectureHours = !isEmptyVal(offering.lec_hrs);
+  const hasLabHours = !isEmptyVal(offering.lab_hrs);
+  if (!hasLectureHours && !hasLabHours) {
+    issues.push({
+      field_name: 'hours',
+      severity: 'medium',
+      message: 'Either lecture hours or lab hours must be specified',
+      issue_type: 'missing',
+    });
+  }
 
   // Gym detection: check by numeric ID first (course offerings), then fall back to name (subjects).
   const isMthRoomGym = gymRoomIds.has(String(offering.mth_room_id)) || isRoomGym(offering.mth_room_id);
@@ -123,7 +132,7 @@ router.post('/course-offerings/sync', async (req, res) => {
 
     const { data: rows, error: fetchErr } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
+      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
       .eq('id', offeringId)
       .limit(1);
 
@@ -271,7 +280,7 @@ router.post('/course-offerings/rescan-all', async (req, res) => {
     // Fetch all offerings
     const { data: offerings, error: fetchErr } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
 
     if (fetchErr) return res.status(500).json({ error: fetchErr.message });
 

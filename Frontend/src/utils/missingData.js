@@ -164,11 +164,13 @@ export function buildCourseOfferingNotifications(offerings) {
         details: 'Specify how many credit units (credits) students earn for completing this course (e.g., 3 units).'
       });
     }
-    if (isEmptyValue(offering.lec_hrs)) {
+    const hasLectureHours = !isEmptyValue(offering.lec_hrs);
+    const hasLabHours = !isEmptyValue(offering.lab_hrs);
+    if (!hasLectureHours && !hasLabHours) {
       mediumIssues.push({
-        field: 'Lecture Hours',
-        message: 'Lecture hours are not specified',
-        details: 'Indicate how many hours per week are devoted to lectures (e.g., 3 hours).'
+        field: 'Lecture/Lab Hours',
+        message: 'Either lecture hours or lab hours is required',
+        details: 'Fill at least one: lecture hours or lab hours. Both can be filled if applicable.'
       });
     }
 

@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "run-subject-migration": "node tools/run_subject_migration.js",
     "backfill:course-offerings": "node tools/backfill_course_offering_notifications.js",
-    "backfill:faculty-loading": "node tools/ga_backfill.js"
+    "backfill:faculty-loading": "node tools/ga_backfill.js",
+    "normalize:course-offering-hours-field": "node tools/normalize_course_offering_hours_field.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",

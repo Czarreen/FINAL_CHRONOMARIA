@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 import { query, withPgClient } from '../lib/postgres.js';
 
 const REQUIRED_FACULTY_FIELDS = ['faculty_name', 'department_id', 'faculty_max_units', 'faculty_role', 'faculty_status'];
-const REQUIRED_OFFERING_FIELDS = ['curr_id', 'code', 'course_no', 'department_id', 'section', 'descriptive_title', 'units', 'lec_hrs'];
+const REQUIRED_OFFERING_FIELDS = ['curr_id', 'code', 'course_no', 'department_id', 'section', 'descriptive_title', 'units'];
 const REQUIRED_ROOM_FIELDS = ['room_name', 'room_status'];
 
 function normalizeText(value) {
@@ -367,6 +367,18 @@ function buildPreflight(snapshot) {
           problem: `Missing ${field.replace(/_/g, ' ')} in subject-derived workload`,
         });
       }
+    }
+
+    const hasLectureHours = !isEmptyValue(offering.lec_hrs);
+    const hasLabHours = !isEmptyValue(offering.lab_hrs);
+    if (!hasLectureHours && !hasLabHours) {
+      issues.push({
+        type: 'subject',
+        id: offering.id,
+        field: 'hours',
+        severity: 'high',
+        problem: 'Missing lecture/lab hours in subject-derived workload (fill at least one)',
+      });
     }
 
     const hasMthSchedule = !isEmptyValue(offering.mth_schedule);

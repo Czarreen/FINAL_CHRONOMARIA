@@ -52,7 +52,16 @@ function buildIssuesForOffering(offering) {
   if (isEmpty(offering.department_id)) issues.push({ field_name: 'department_id', severity: 'medium', message: 'Department is not assigned', issue_type: 'missing' });
   if (isEmpty(offering.curr_id)) issues.push({ field_name: 'curr_id', severity: 'medium', message: 'Curriculum ID is missing', issue_type: 'missing' });
   if (isEmpty(offering.units)) issues.push({ field_name: 'units', severity: 'medium', message: 'Credit units are not specified', issue_type: 'missing' });
-  if (isEmpty(offering.lec_hrs)) issues.push({ field_name: 'lec_hrs', severity: 'medium', message: 'Lecture hours are not specified', issue_type: 'missing' });
+  const hasLectureHours = !isEmpty(offering.lec_hrs);
+  const hasLabHours = !isEmpty(offering.lab_hrs);
+  if (!hasLectureHours && !hasLabHours) {
+    issues.push({
+      field_name: 'hours',
+      severity: 'medium',
+      message: 'Either lecture hours or lab hours must be specified',
+      issue_type: 'missing',
+    });
+  }
 
   // Severity escalation: 4+ issues and no critical → escalate all to critical
   const hasCritical = issues.some((i) => i.severity === 'high');
@@ -68,7 +77,7 @@ async function run() {
 
   const { data: offerings, error: fetchErr } = await supabaseAdmin
     .from('course_offerings')
-    .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+    .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
 
   if (fetchErr) {
     console.error('Failed to fetch course offerings:', fetchErr);
