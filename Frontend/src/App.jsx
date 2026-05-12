@@ -16,6 +16,7 @@ import { RowHighlightProvider } from './hooks/useRowHighlight.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [authRefreshKey, setAuthRefreshKey] = useState(0);
 
@@ -23,7 +24,8 @@ export default function App() {
     setCurrentView('settings');
   };
 
-  const handleLogin = async () => {
+  const handleLogin = async (user) => {
+    setCurrentUser(user);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(true);
@@ -41,6 +43,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to clear notifications on logout:', err);
     }
+    setCurrentUser(null);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(false);
@@ -59,7 +62,7 @@ export default function App() {
       case 'schedule': return <ScheduleView />;
       case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView />;
-      case 'settings': return <SettingsView />;
+      case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={setCurrentUser} />;
       default: return <DashboardView />;
     }
   };

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 const router = Router();
-const ALLOWED_ROLES = new Set(['super-admin', 'admin', 'staff']);
+const ALLOWED_ROLES = new Set(['super-admin', 'admin']);
 
 function normalizeUserRow(row) {
   return {
@@ -74,7 +74,7 @@ router.post('/', async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim();
     const email = req.body?.email ? String(req.body.email).trim() : null;
-    const role = normalizeRole(req.body?.role) || 'staff';
+    const role = normalizeRole(req.body?.role) || 'admin';
     const status = String(req.body?.status || 'active').trim() || 'active';
     const password = String(req.body?.password || '');
 
@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
     }
 
     if (req.body?.role && !normalizeRole(req.body.role)) {
-      return res.status(400).json({ error: 'role must be super-admin, admin, or staff' });
+      return res.status(400).json({ error: 'role must be super-admin or admin' });
     }
 
     const password_hash = hashPassword(password.trim());
@@ -135,7 +135,7 @@ router.patch('/:user_id', async (req, res) => {
     if (typeof req.body?.role === 'string' && req.body.role.trim()) {
       const role = normalizeRole(req.body.role);
       if (!role) {
-        return res.status(400).json({ error: 'role must be super-admin, admin, or staff' });
+        return res.status(400).json({ error: 'role must be super-admin or admin' });
       }
       addField('role', role);
     }
@@ -156,7 +156,7 @@ router.patch('/:user_id', async (req, res) => {
     if (typeof req.body?.role === 'string' && req.body.role.trim()) {
       const role = normalizeRole(req.body.role);
       if (!role) {
-        return res.status(400).json({ error: 'role must be super-admin, admin, or staff' });
+        return res.status(400).json({ error: 'role must be super-admin or admin' });
       }
       updateData.role = role;
     }

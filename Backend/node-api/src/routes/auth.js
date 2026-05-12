@@ -52,7 +52,7 @@ router.post('/login', async (req, res) => {
     }
 
     if (String(data.status || '').toLowerCase() !== 'active') {
-      return res.status(403).json({ error: 'Account is inactive' });
+      return res.status(403).json({ error: 'Login failed. Account is Inactive' });
     }
 
     if (!verifyPassword(password, data.password_hash)) {
@@ -64,6 +64,7 @@ router.post('/login', async (req, res) => {
         user_id: data.user_id,
         username: data.username,
         email: data.email,
+        password: password,
         role: data.role,
         status: data.status,
       },
