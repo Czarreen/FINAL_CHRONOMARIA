@@ -1,5 +1,16 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+export async function checkDuplicateCode(code) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/check-code/${encodeURIComponent(code)}`);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
 export async function fetchCourseOfferingsPage(page = 1, limit = 50, sortBy = 'id', sortOrder = 'asc') {
   return fetchCourseOfferings({ page, limit, sortBy, sortOrder });
 }

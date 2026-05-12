@@ -123,7 +123,33 @@ export function schedulesConflict(schedule1, schedule2) {
   };
 }
 
-export function findConflictingSchedules(entity, allEntities, isEntityGym) {
+function parseRoomIds(roomValue) {
+  if (!roomValue) return [];
+  const str = String(roomValue).trim();
+  if (!str) return [];
+  return str.split('/').map(r => r.trim()).filter(r => r !== '');
+}
+
+function roomsShareId(rooms1, rooms2) {
+  const ids1 = new Set(parseRoomIds(rooms1));
+  const ids2 = new Set(parseRoomIds(rooms2));
+  for (const id of ids1) {
+    if (ids2.has(id)) return true;
+  }
+  return false;
+}
+
+// Checks if a room value (either a name string or a numeric ID) is a gym.
+// gymRoomIds is a Set<string> of IDs for course offerings; name-based fallback for subjects.
+function isGymRoomValue(roomValue, gymRoomIds) {
+  if (gymRoomIds && gymRoomIds.size > 0) {
+    const ids = parseRoomIds(String(roomValue));
+    if (ids.some((id) => gymRoomIds.has(id))) return true;
+  }
+  return isRoomGym(roomValue);
+}
+
+export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRoomIds = new Set()) {
   if (isEntityGym) {
     return [];
   }
@@ -136,16 +162,22 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym) {
   const tfsRoom = entity.tfs_room_id || entity.tfs_room;
 
   for (const other of allEntities) {
-    if (other.id === entity.id || other.subject_id === entity.subject_id) {
-      continue;
+    // Skip self-comparison using the primary key that is actually defined for this entity type.
+    // Course offerings use `id`; subjects use `subject_id`. Using the wrong field causes
+    // `undefined === undefined → true`, which silently skips ALL comparisons.
+    if (entity.id !== undefined) {
+      if (other.id === entity.id) continue;
+    } else if (entity.subject_id !== undefined) {
+      if (other.subject_id === entity.subject_id) continue;
     }
 
-    const isOtherGym = isRoomGym(other.mth_room_id || other.mth_room) || isRoomGym(other.tfs_room_id || other.tfs_room);
-    if (isOtherGym) {
-      continue;
-    }
+    // Skip gym rooms in the other entity (they can host multiple subjects simultaneously).
+    // isGymRoomValue handles both ID-based (course offerings) and name-based (subjects) detection.
+    const isOtherMthGym = isGymRoomValue(other.mth_room_id || other.mth_room, gymRoomIds);
+    const isOtherTfsGym = isGymRoomValue(other.tfs_room_id || other.tfs_room, gymRoomIds);
 
-    if (mthRoom && mthRoom === (other.mth_room_id || other.mth_room)) {
+    // Same-type: entity's MTH room vs other's MTH room
+    if (mthRoom && !isOtherMthGym && roomsShareId(mthRoom, other.mth_room_id || other.mth_room)) {
       const otherMthSchedule = parseScheduleString(other.mth_schedule);
       const conflict = schedulesConflict(mthSchedule, otherMthSchedule);
       if (conflict.conflicts) {
@@ -159,9 +191,40 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym) {
       }
     }
 
-    if (tfsRoom && tfsRoom === (other.tfs_room_id || other.tfs_room)) {
+    // Same-type: entity's TFS room vs other's TFS room
+    if (tfsRoom && !isOtherTfsGym && roomsShareId(tfsRoom, other.tfs_room_id || other.tfs_room)) {
       const otherTfsSchedule = parseScheduleString(other.tfs_schedule);
       const conflict = schedulesConflict(tfsSchedule, otherTfsSchedule);
+      if (conflict.conflicts) {
+        conflictingEntities.push({
+          entityId: other.id || other.subject_id,
+          entityCode: other.code || other.subject_code,
+          schedule: 'TFS',
+          conflictingDays: conflict.conflictingDays,
+          room: tfsRoom,
+        });
+      }
+    }
+
+    // Cross-type: entity's MTH room vs other's TFS room (handles non-standard day combos)
+    if (mthRoom && !isOtherTfsGym && roomsShareId(mthRoom, other.tfs_room_id || other.tfs_room)) {
+      const otherTfsSchedule = parseScheduleString(other.tfs_schedule);
+      const conflict = schedulesConflict(mthSchedule, otherTfsSchedule);
+      if (conflict.conflicts) {
+        conflictingEntities.push({
+          entityId: other.id || other.subject_id,
+          entityCode: other.code || other.subject_code,
+          schedule: 'MTH',
+          conflictingDays: conflict.conflictingDays,
+          room: mthRoom,
+        });
+      }
+    }
+
+    // Cross-type: entity's TFS room vs other's MTH room (handles non-standard day combos)
+    if (tfsRoom && !isOtherMthGym && roomsShareId(tfsRoom, other.mth_room_id || other.mth_room)) {
+      const otherMthSchedule = parseScheduleString(other.mth_schedule);
+      const conflict = schedulesConflict(tfsSchedule, otherMthSchedule);
       if (conflict.conflicts) {
         conflictingEntities.push({
           entityId: other.id || other.subject_id,

@@ -32,11 +32,14 @@ import {
   deleteCourseOffering,
   importCourseOfferingsCsv,
   fetchCourseOfferingById,
+  checkDuplicateCode,
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
+import { fetchDepartments } from '../services/departmentsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { isFormValid, getDisabledReason, getSchedulePairStatus } from '../utils/courseOfferingValidation';
 
 const PAGE_SIZE = 50;
 
@@ -78,6 +81,9 @@ export default function CourseOfferingView() {
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
+  const [departments, setDepartments] = useState([]);
+  const [duplicateCodeSuggestions, setDuplicateCodeSuggestions] = useState([]);
+  const [checkingDuplicateCode, setCheckingDuplicateCode] = useState(false);
   const colMenuRef = useRef(null);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
@@ -212,6 +218,28 @@ export default function CourseOfferingView() {
     };
   }, []);
 
+  // Load departments data
+  useEffect(() => {
+    let active = true;
+
+    async function loadDepartments() {
+      try {
+        const rows = await fetchDepartments();
+        if (active) {
+          setDepartments(Array.isArray(rows) ? rows : []);
+        }
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+        setDepartments([]);
+      }
+    }
+
+    loadDepartments();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Handle scrolling to offering when it appears (after page navigation)
   useEffect(() => {
     if (pendingScrollToOfferingId) {
@@ -262,11 +290,30 @@ export default function CourseOfferingView() {
     }));
   };
 
-  async function handleAddOffering() {
-    if (!editingData.code) {
-      setOfferingError('Course code is required');
+  async function handleCheckDuplicateCode(code) {
+    if (!code || code.trim() === '') {
+      setDuplicateCodeSuggestions([]);
       return;
     }
+
+    setCheckingDuplicateCode(true);
+    try {
+      const result = await checkDuplicateCode(code.trim());
+      setDuplicateCodeSuggestions(result.suggestions || []);
+    } catch (err) {
+      console.error('Failed to check duplicate code:', err);
+      setDuplicateCodeSuggestions([]);
+    } finally {
+      setCheckingDuplicateCode(false);
+    }
+  }
+
+  async function handleAddOffering() {
+    if (!isFormValid(editingData)) {
+      setOfferingError(getDisabledReason(editingData) || 'Please fill in all required fields');
+      return;
+    }
+
     try {
       setSavingOffering(true);
       setOfferingError(null);
@@ -290,6 +337,7 @@ export default function CourseOfferingView() {
       setSuccessMessage(`Created "${editingData.code}"`);
       setShowAddModal(false);
       setEditingData({});
+      setDuplicateCodeSuggestions([]);
       await loadInitialPage();
     } catch (err) {
       setOfferingError(err.message || 'Failed to create course offering');
@@ -696,8 +744,9 @@ export default function CourseOfferingView() {
       const q = notificationSearch.toLowerCase();
       filtered = filtered.filter((notif) => {
         const title = (notif.title || '').toLowerCase();
+        const description = (notif.description || '').toLowerCase();
         const code = (notif.code || '').toLowerCase();
-        return title.includes(q) || code.includes(q);
+        return title.includes(q) || description.includes(q) || code.includes(q);
       });
     }
 
@@ -774,6 +823,19 @@ export default function CourseOfferingView() {
           setOfferingError('Could not load offering for editing');
         })
         .finally(() => setFindingNotificationRow(false));
+    }
+  };
+
+  const handleForceRescan = async () => {
+    setNotificationsLoading(true);
+    try {
+      await rescanAllCourseOfferingNotifications(true);
+      const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
+      setNotifications(transformDbNotifications(refetched.rows || []));
+    } catch (err) {
+      console.error('Force rescan failed:', err);
+    } finally {
+      setNotificationsLoading(false);
     }
   };
 
@@ -1133,6 +1195,16 @@ export default function CourseOfferingView() {
               isRescanning={notificationsLoading}
               totalEntityCount={totalRows}
             />
+            <button
+              type="button"
+              onClick={handleForceRescan}
+              disabled={notificationsLoading}
+              title="Clear and re-detect all schedule conflicts and missing data"
+              className="btn-primary flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={notificationsLoading ? 'animate-spin' : ''} />
+              <span>Rescan</span>
+            </button>
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
               <BookMarked size={12} className="text-primary" />
               {totalRows}
@@ -1943,6 +2015,7 @@ export default function CourseOfferingView() {
                   setShowAddModal(false);
                   setEditingData({});
                   setOfferingError(null);
+                  setDuplicateCodeSuggestions([]);
                 }}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
               >
@@ -1957,41 +2030,243 @@ export default function CourseOfferingView() {
               </div>
             )}
 
+            {duplicateCodeSuggestions.length > 0 && (
+              <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                <p className="mb-2 text-sm font-semibold text-yellow-900">Similar course codes found:</p>
+                <div className="space-y-1 text-sm text-yellow-800">
+                  {duplicateCodeSuggestions.map((sugg) => (
+                    <div key={sugg.id} className="flex justify-between">
+                      <span>{sugg.code} - {sugg.descriptive_title || 'No title'} (Section {sugg.section || 'N/A'})</span>
+                      <span className="text-xs text-yellow-700">{sugg.units || 0} units</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-6">
-              {columnGroups.map((group) => (
-                <div key={group.title} className="space-y-4">
-                  <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
-                    {group.title}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {group.columns.map((col) => (
-                      <div key={col.key}>
-                        <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                          {col.label}
-                        </label>
-                        {col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                          renderRoomPicker(col.key)
-                        ) : (
-                          <input
-                            type={numericCols.has(col.key) ? 'number' : 'text'}
-                            value={editingData[col.key] ?? ''}
-                            onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-                            placeholder={`Enter ${col.label.toLowerCase()}`}
-                          />
-                        )}
-                      </div>
-                    ))}
+              {/* Basic Information Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                  Basic Information
+                </h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Course Code with duplicate detection */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Course Code *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingData.code ?? ''}
+                      onChange={(e) => {
+                        setEditingData({ ...editingData, code: e.target.value });
+                        handleCheckDuplicateCode(e.target.value);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Enter course code"
+                    />
+                  </div>
+
+                  {/* Course Number */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Course Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingData.course_no ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, course_no: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Enter course number"
+                    />
+                  </div>
+
+                  {/* Section */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Section *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingData.section ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, section: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Enter section"
+                    />
+                  </div>
+
+                  {/* Department Dropdown */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Department *
+                    </label>
+                    <select
+                      value={editingData.department_id ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                    >
+                      <option value="">Select department</option>
+                      {(departments || []).map((dept) => (
+                        <option key={dept.department_id} value={dept.department_id}>
+                          {dept.department_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Curriculum ID */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Curriculum ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingData.curr_id ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, curr_id: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Enter curriculum ID"
+                    />
+                  </div>
+
+                  {/* Descriptive Title */}
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Descriptive Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editingData.descriptive_title ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, descriptive_title: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Enter course title"
+                    />
                   </div>
                 </div>
-              ))}
+              </div>
 
-              <div className="flex gap-3 pt-6">
+              {/* Hours and Units Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                  Hours & Units
+                </h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Units
+                    </label>
+                    <input
+                      type="number"
+                      value={editingData.units ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, units: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lecture Hours
+                    </label>
+                    <input
+                      type="number"
+                      value={editingData.lec_hrs ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, lec_hrs: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lab Hours
+                    </label>
+                    <input
+                      type="number"
+                      value={editingData.lab_hrs ?? ''}
+                      onChange={(e) => setEditingData({ ...editingData, lab_hrs: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedules Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                  Schedules & Rooms (At least one required *)
+                </h4>
+
+                {/* MTH Schedule & Room */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h5 className="font-semibold text-on-surface">MTH Schedule & Room</h5>
+                    <span className={`text-sm font-semibold ${getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
+                      {getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).icon || '○'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                        Schedule (e.g., MWF 10:00-11:30 or MTH 14:00-15:30)
+                      </label>
+                      <input
+                        type="text"
+                        value={editingData.mth_schedule ?? ''}
+                        onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                        placeholder="e.g., MWF 10:00-11:30"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                        Room
+                      </label>
+                      {renderRoomPicker('mth_room_id')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* TFS Schedule & Room */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h5 className="font-semibold text-on-surface">TFS Schedule & Room (Optional)</h5>
+                    <span className={`text-sm font-semibold ${getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
+                      {getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).icon || '○'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                        Schedule (e.g., TTh 10:00-11:30 or TFS 14:00-15:30)
+                      </label>
+                      <input
+                        type="text"
+                        value={editingData.tfs_schedule ?? ''}
+                        onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                        placeholder="e.g., TTh 10:00-11:30"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                        Room
+                      </label>
+                      {renderRoomPicker('tfs_room_id')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => {
                     setShowAddModal(false);
                     setEditingData({});
                     setOfferingError(null);
+                    setDuplicateCodeSuggestions([]);
                   }}
                   className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                 >
@@ -1999,8 +2274,9 @@ export default function CourseOfferingView() {
                 </button>
                 <button
                   onClick={handleAddOffering}
-                  disabled={savingOffering}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  disabled={savingOffering || !isFormValid(editingData)}
+                  title={!isFormValid(editingData) ? getDisabledReason(editingData) : ''}
+                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {savingOffering ? 'Creating...' : 'Create Offering'}
                 </button>

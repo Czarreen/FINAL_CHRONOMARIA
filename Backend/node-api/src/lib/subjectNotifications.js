@@ -119,7 +119,16 @@ export async function upsertSubjectNotificationCache(subject) {
     throw new Error(deleteError.message);
   }
 
-  const rows = buildSubjectNotificationRows(subject);
+  // Fetch all subjects so conflict detection can compare against peers.
+  const { data: allSubjects, error: allFetchError } = await supabaseAdmin
+    .from('subjects')
+    .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room');
+
+  if (allFetchError) {
+    throw new Error(allFetchError.message);
+  }
+
+  const rows = buildSubjectNotificationRows(subject, allSubjects || []);
   if (rows.length === 0) {
     return { updated: 0, issues: [] };
   }
