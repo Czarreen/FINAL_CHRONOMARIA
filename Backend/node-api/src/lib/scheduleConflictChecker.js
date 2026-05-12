@@ -149,6 +149,39 @@ function isGymRoomValue(roomValue, gymRoomIds) {
   return isRoomGym(roomValue);
 }
 
+// Returns true when two offerings occupy exactly the same physical slot —
+// identical schedule strings AND at least one shared room ID.
+// Two offerings at the exact same time in the same room are the same physical class
+// (merged/cross-listed), regardless of code, course_no, title, dept, or curriculum.
+function isMergedSubject(entity, other) {
+  const norm = (s) => String(s || '').trim().toUpperCase();
+
+  const mthA = norm(entity.mth_schedule);
+  const mthB = norm(other.mth_schedule);
+  const tfsA = norm(entity.tfs_schedule);
+  const tfsB = norm(other.tfs_schedule);
+
+  // Must have at least one schedule on the entity side to compare
+  if (!mthA && !tfsA) return false;
+
+  // Schedules must match exactly (same days and same time window)
+  if (mthA !== mthB || tfsA !== tfsB) return false;
+
+  // Rooms must share at least one ID — use roomsShareId so slash-separated
+  // multi-room values like "42/43" are compared element-by-element.
+  const mthRoomEntity = entity.mth_room_id || entity.mth_room;
+  const mthRoomOther = other.mth_room_id || other.mth_room;
+  const tfsRoomEntity = entity.tfs_room_id || entity.tfs_room;
+  const tfsRoomOther = other.tfs_room_id || other.tfs_room;
+
+  // If entity has an MTH room, other must share at least one of those IDs
+  if (mthRoomEntity && !roomsShareId(mthRoomEntity, mthRoomOther)) return false;
+  // If entity has a TFS room, other must share at least one of those IDs
+  if (tfsRoomEntity && !roomsShareId(tfsRoomEntity, tfsRoomOther)) return false;
+
+  return true;
+}
+
 export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRoomIds = new Set()) {
   if (isEntityGym) {
     return [];
@@ -170,6 +203,10 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
     } else if (entity.subject_id !== undefined) {
       if (other.subject_id === entity.subject_id) continue;
     }
+
+    // Skip merged subjects — same class offered under different curricula/departments.
+    // They intentionally share the same room and schedule, so they are not real conflicts.
+    if (isMergedSubject(entity, other)) continue;
 
     // Skip gym rooms in the other entity (they can host multiple subjects simultaneously).
     // isGymRoomValue handles both ID-based (course offerings) and name-based (subjects) detection.

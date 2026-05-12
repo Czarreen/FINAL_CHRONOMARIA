@@ -567,8 +567,7 @@ export default function CourseOfferingView() {
     'Department': 'department_id',
     'Curriculum': 'curr_id',
     'Credit Units': 'units',
-    'Lecture Hours': ['lec_hrs', 'lab_hrs'],
-    'Lecture/Lab Hours': ['lec_hrs', 'lab_hrs'],
+    'Lecture Hours': 'lec_hrs',
     'Schedule': ['mth_schedule', 'tfs_schedule'],
     'Room Assignment': ['mth_room_id', 'tfs_room_id'],
     'MTH Room': 'mth_room_id',
@@ -970,7 +969,7 @@ export default function CourseOfferingView() {
               const roomIdStr = String(roomId);
               const isChecked = selectedValues.includes(roomIdStr);
               const conflicts = getConflictingOfferings(roomIdStr, scheduleType);
-              const conflictCount = conflicts.filter((o) => o.id !== editingId).length;
+              const conflictCount = conflicts.filter((o) => o.id !== editingId && !isMergedSubject(o, editingData)).length;
 
               return (
                 <div key={roomIdStr}>
@@ -1094,6 +1093,48 @@ export default function CourseOfferingView() {
         }
       },
     });
+  };
+
+  // Returns true when two offerings occupy the exact same physical slot —
+  // identical schedule strings AND at least one shared room ID.
+  // Two offerings at the exact same time in the same room are the same physical
+  // class (merged/cross-listed), regardless of code, title, dept, or curriculum.
+  const isMergedSubject = (offering, compareTo) => {
+    const norm = (s) => String(s || '').trim().toUpperCase();
+
+    const mthA = norm(offering.mth_schedule);
+    const mthB = norm(compareTo.mth_schedule);
+    const tfsA = norm(offering.tfs_schedule);
+    const tfsB = norm(compareTo.tfs_schedule);
+
+    // Must have at least one schedule to compare
+    if (!mthA && !tfsA) return false;
+
+    // Schedules must match exactly
+    if (mthA !== mthB || tfsA !== tfsB) return false;
+
+    // Room overlap helper — handles slash-separated strings and arrays
+    const toIds = (val) => {
+      if (Array.isArray(val)) return val.map(String).filter(Boolean);
+      return String(val || '').split('/').map((s) => s.trim()).filter(Boolean);
+    };
+    const shareRoom = (idsA, idsB) => {
+      if (!idsA.length || !idsB.length) return false;
+      const setB = new Set(idsB);
+      return idsA.some((id) => setB.has(id));
+    };
+
+    const mthRoomA = toIds(offering.mth_room_id);
+    const mthRoomB = toIds(compareTo.mth_room_id);
+    const tfsRoomA = toIds(offering.tfs_room_id);
+    const tfsRoomB = toIds(compareTo.tfs_room_id);
+
+    // If offering has an MTH room, compareTo must share at least one
+    if (mthRoomA.length && !shareRoom(mthRoomA, mthRoomB)) return false;
+    // If offering has a TFS room, compareTo must share at least one
+    if (tfsRoomA.length && !shareRoom(tfsRoomA, tfsRoomB)) return false;
+
+    return true;
   };
 
   const getConflictingOfferings = (roomId, scheduleType) => {

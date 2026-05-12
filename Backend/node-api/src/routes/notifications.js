@@ -73,7 +73,8 @@ function computeOfferingIssues(offering, allOfferings = [], gymRoomIds = new Set
     if (!mthSchedule && !tfsSchedule) {
       issues.push({ field_name: 'mth_schedule', severity: 'high', message: 'No schedule assigned', issue_type: 'missing' });
     } else if (!mthRoom && !tfsRoom) {
-      issues.push({ field_name: 'mth_room_id', severity: 'high', message: 'No classroom assigned for scheduled times', issue_type: 'missing' });
+      if (mthSchedule) issues.push({ field_name: 'mth_room_id', severity: 'high', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
+      if (tfsSchedule) issues.push({ field_name: 'tfs_room_id', severity: 'high', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
     } else {
       if (mthSchedule && !mthRoom) issues.push({ field_name: 'mth_room_id', severity: 'medium', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
       if (tfsSchedule && !tfsRoom) issues.push({ field_name: 'tfs_room_id', severity: 'medium', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
@@ -142,7 +143,7 @@ router.post('/course-offerings/sync', async (req, res) => {
 
     const { data: allOfferings, error: allFetchErr } = await supabaseAdmin
       .from('course_offerings')
-      .select('id, code, course_no, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+      .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
 
     if (allFetchErr) return res.status(500).json({ error: allFetchErr.message });
 
@@ -202,7 +203,7 @@ router.post('/course-offerings/sync', async (req, res) => {
     for (const affectedId of affectedIds) {
       const { data: affectedRows } = await supabaseAdmin
         .from('course_offerings')
-        .select('id, code, course_no, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
+        .select('id, code, course_no, descriptive_title, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
         .eq('id', affectedId)
         .limit(1);
 
