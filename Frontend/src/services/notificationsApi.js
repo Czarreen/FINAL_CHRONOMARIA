@@ -89,6 +89,19 @@ export async function rescanAllSubjectNotifications() {
   return res.json();
 }
 
+export async function syncSubjectNotifications(subjectId) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/subjects/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject_id: subjectId }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to sync subject notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchPersistedSubjectNotifications({ page = 1, limit = 200, unresolvedOnly = true } = {}) {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -154,6 +167,19 @@ export async function resolveFacultyNotification(id) {
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function syncFacultyNotifications(facultyId) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/faculty/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ faculty_id: facultyId }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to sync faculty notifications: ${res.status}`);
   }
   return res.json();
 }

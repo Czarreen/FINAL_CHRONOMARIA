@@ -23,8 +23,37 @@ function getIssueCategory(field) {
 // Fields that support inline quick-fix (simple text/number inputs)
 const INLINE_FIXABLE_FIELDS = new Set([
   'code', 'course_no', 'descriptive_title', 'units', 'lec_hrs',
-  'Course Code', 'Course Number', 'Course Title', 'Credit Units', 'Lecture Hours',
+  'subject_lec_hrs', 'subject_lab_hrs', 'department_id', 'curr_id',
+  'Course Code', 'Course Number', 'Course Title', 'Credit Units', 'Lecture Hours', 'Lab Hours', 'Department', 'Curriculum',
 ]);
+
+function getIssueFieldLabel(field) {
+  const labelMap = {
+    code: 'Course Code',
+    course_no: 'Course Number',
+    descriptive_title: 'Course Title',
+    units: 'Credit Units',
+    lec_hrs: 'Lecture Hours',
+    lab_hrs: 'Lab Hours',
+    subject_lec_hrs: 'Lecture Hours',
+    subject_lab_hrs: 'Lab Hours',
+    department_id: 'Department',
+    curr_id: 'Curriculum',
+    schedule: 'Schedule',
+    mth_schedule: 'MTH Schedule',
+    tfs_schedule: 'TFS Schedule',
+    mth_room: 'MTH Room',
+    tfs_room: 'TFS Room',
+    mth_room_id: 'MTH Room',
+    tfs_room_id: 'TFS Room',
+    subject_code: 'Subject Code',
+    subject_course_no: 'Course Number',
+    subject_descriptive_title: 'Subject Title',
+    subject_units: 'Subject Units',
+  };
+
+  return labelMap[field] || field || 'Field';
+}
 
 export default function NotificationButton({
   items = [],
@@ -419,7 +448,7 @@ export default function NotificationButton({
 
                                   {Array.isArray(item.missingFields) && item.missingFields.length > 0 && (
                                     <p className={`text-[10px] uppercase tracking-[0.14em] ${config.textBadge} opacity-75 mb-2`}>
-                                      Fields: {item.missingFields.join(', ')}
+                                      Fields: {item.missingFields.map(getIssueFieldLabel).join(', ')}
                                     </p>
                                   )}
 
@@ -449,7 +478,7 @@ export default function NotificationButton({
                                         onKeyDown={(e) => {
                                           if (e.key === 'Escape') { setInlineEditingId(null); setInlineValue(''); }
                                         }}
-                                        placeholder={`Enter ${singleIssue.field}...`}
+                                        placeholder={`Enter ${getIssueFieldLabel(singleIssue.field)}...`}
                                         className="flex-1 rounded border border-amber-300 bg-amber-50/50 px-2 py-1 text-xs outline-none focus:border-amber-500"
                                       />
                                       <button

@@ -4,7 +4,7 @@ import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, 
 import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications } from '../services/notificationsApi';
+import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 export default function SubjectsView({ authRefreshKey = 0 } = {}) {
@@ -177,6 +177,26 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     loadSubjectNotifications({ forceRescan: true });
   }, [authRefreshKey]);
 
+  const handleInlineSave = async ({ offeringId, field, value, rowId }) => {
+    // offeringId may be undefined for subjects notifications; prefer rowId
+    const subjectId = rowId || offeringId;
+    if (!subjectId) return;
+    const keyMap = {
+      'Course Code': 'subject_code', 'Course Number': 'subject_course_no', 'Course Title': 'subject_descriptive_title',
+      'Curriculum': 'curr_id', 'Credit Units': 'subject_units', 'Lecture Hours': 'subject_lec_hrs',
+      'code': 'subject_code', 'course_no': 'subject_course_no', 'descriptive_title': 'subject_descriptive_title',
+      'curr_id': 'curr_id', 'units': 'subject_units', 'lec_hrs': 'subject_lec_hrs',
+    };
+    const dbField = keyMap[field] || field;
+    try {
+      await updateSubject(subjectId, { [dbField]: value });
+        try { await syncSubjectNotifications(subjectId); } catch (_) {}
+      await loadSubjectNotifications({ forceRescan: false });
+    } catch (err) {
+      console.error('Inline save (subject) failed:', err);
+    }
+  };
+
   useEffect(() => {
     loadRoomLookup();
   }, []);
@@ -307,12 +327,13 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         const items = rows.map((r) => {
           const subj = subjectById[r.entity_id] || null;
           const field = r.field_name || null;
+          const isSubjectHoursIssue = field === 'subject_lec_hrs' && String(r.message || '').toLowerCase().includes('either lecture hours or lab hours');
           return {
             id: r.id,
             title: subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
             description: subj?.subject_code || null,
             severity: normalizeNotificationSeverity(r.severity),
-            missingFields: field ? [field] : [],
+            missingFields: isSubjectHoursIssue ? ['subject_lec_hrs', 'subject_lab_hrs'] : (field ? [field] : []),
             issues: [{ message: r.message, details: r.details, field }],
             rowId: r.entity_id,
             subject: subj,
@@ -679,6 +700,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
             title="Subject Notifications"
             emptyLabel="No subject issues"
             buttonLabel="Issues"
+            onItemInlineSave={handleInlineSave}
             onItemEdit={(item) => {
               const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
               const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];

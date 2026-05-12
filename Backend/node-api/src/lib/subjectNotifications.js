@@ -5,6 +5,10 @@ function normalizeSubjectText(value) {
   return value == null ? '' : String(value).trim();
 }
 
+function isEmptyValue(value) {
+  return value === null || value === undefined || String(value).trim() === '' || Number(value) === 0;
+}
+
 export function buildSubjectNotificationIssues(subject, allSubjects = []) {
   const issues = [];
 
@@ -13,7 +17,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'subject_code',
       issue_type: 'missing',
       severity: 'high',
-      message: 'Missing subject code',
+      message: 'Subject code is required',
     });
   }
 
@@ -22,7 +26,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'subject_descriptive_title',
       issue_type: 'missing',
       severity: 'high',
-      message: 'Missing descriptive title',
+      message: 'Subject title is missing',
     });
   }
 
@@ -31,7 +35,36 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'subject_units',
       issue_type: 'missing',
       severity: 'high',
-      message: 'Units not set or zero',
+      message: 'Subject units are not specified',
+    });
+  }
+
+  if (isEmptyValue(subject?.department_id)) {
+    issues.push({
+      field_name: 'department_id',
+      issue_type: 'missing',
+      severity: 'medium',
+      message: 'Department is not assigned',
+    });
+  }
+
+  if (isEmptyValue(subject?.curr_id)) {
+    issues.push({
+      field_name: 'curr_id',
+      issue_type: 'missing',
+      severity: 'medium',
+      message: 'Curriculum ID is missing',
+    });
+  }
+
+  const hasLectureHours = !isEmptyValue(subject?.subject_lec_hrs);
+  const hasLabHours = !isEmptyValue(subject?.subject_lab_hrs);
+  if (!hasLectureHours && !hasLabHours) {
+    issues.push({
+      field_name: 'subject_lec_hrs',
+      issue_type: 'missing',
+      severity: 'medium',
+      message: 'Either lecture hours or lab hours must be specified',
     });
   }
 
@@ -45,7 +78,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'schedule',
       issue_type: 'missing',
       severity: 'medium',
-      message: 'No schedule set (MTH/TFS)',
+      message: 'No schedule assigned',
     });
   }
 
@@ -54,7 +87,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'mth_room',
       issue_type: 'missing',
       severity: 'medium',
-      message: 'Missing room assignment for MTH schedule',
+      message: 'MTH schedule is missing room assignment',
     });
   }
 
@@ -63,7 +96,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
       field_name: 'tfs_room',
       issue_type: 'missing',
       severity: 'medium',
-      message: 'Missing room assignment for TFS schedule',
+      message: 'TFS schedule is missing room assignment',
     });
   }
 

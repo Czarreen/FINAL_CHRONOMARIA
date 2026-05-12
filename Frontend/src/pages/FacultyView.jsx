@@ -27,7 +27,7 @@ import {
 } from '../services/facultyApi.js';
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
-import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification } from '../services/notificationsApi.js';
+import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
 export default function FacultyView() {
@@ -149,6 +149,26 @@ export default function FacultyView() {
   useEffect(() => {
     loadFacultyNotifications();
   }, []);
+
+  const handleInlineSave = async ({ offeringId, field, value, facultyId }) => {
+    const id = facultyId || offeringId;
+    if (!id) return;
+    const keyMap = {
+      'Faculty Name': 'faculty_name',
+      'Faculty Email': 'faculty_email',
+      'Role': 'faculty_role',
+      'faculty_name': 'faculty_name',
+      'faculty_email': 'faculty_email',
+    };
+    const dbField = keyMap[field] || field;
+    try {
+      await updateFaculty(id, { [dbField]: value });
+      try { await syncFacultyNotifications(id); } catch (_) {}
+      await loadFacultyNotifications();
+    } catch (err) {
+      console.error('Inline save (faculty) failed:', err);
+    }
+  };
 
   // Handle scrolling to row when it appears (after page navigation)
   useEffect(() => {
@@ -576,6 +596,7 @@ export default function FacultyView() {
             onItemEdit={handleNotificationEdit}
             onItemJump={handleNotificationJump}
             onItemResolve={handleResolveNotification}
+            onItemInlineSave={handleInlineSave}
             severityFilter={notificationSeverityFilter}
             onSeverityFilterChange={setNotificationSeverityFilter}
             notificationSearch={notificationSearch}
