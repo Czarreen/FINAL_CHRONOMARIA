@@ -225,27 +225,79 @@ function buildSubjectIndex(subjects) {
   return index;
 }
 
+function normalizeDedupeText(value) {
+  return normalizeUpper(value).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeDedupeNumber(value) {
+  const num = toNumber(value);
+  if (num === null) return '';
+  return Number.isInteger(num) ? String(num) : String(num);
+}
+
+function buildMergedOfferingKey(subject) {
+  return [
+    normalizeDedupeText(subject.subject_code),
+    normalizeDedupeText(subject.subject_course_no),
+    normalizeDedupeText(subject.subject_descriptive_title),
+    normalizeDedupeText(subject.mth_schedule),
+    normalizeDedupeText(subject.tfs_schedule),
+    normalizeDedupeText(subject.mth_room),
+    normalizeDedupeText(subject.tfs_room),
+    normalizeDedupeNumber(subject.subject_units),
+    normalizeDedupeNumber(subject.subject_lec_hrs),
+    normalizeDedupeNumber(subject.subject_lab_hrs),
+  ].join('|');
+}
+
 function mapSubjectsToGaOfferings(subjects) {
-  return subjects.map((subject) => ({
-    id: Number(subject.subject_id),
-    curr_id: Number(subject.subject_id),
-    code: normalizeText(subject.subject_code) || null,
-    course_no: normalizeText(subject.subject_course_no) || null,
-    department_id: toNumber(subject.department_id),
-    section: normalizeText(subject.subject_section) || null,
-    descriptive_title: normalizeText(subject.subject_descriptive_title) || null,
-    units: toNumber(subject.subject_units),
-    lec_hrs: toNumber(subject.subject_lec_hrs),
-    lab_hrs: toNumber(subject.subject_lab_hrs),
-    mth_schedule: normalizeText(subject.mth_schedule) || null,
-    mth_room_id: normalizeText(subject.mth_room) || null,
-    tfs_schedule: normalizeText(subject.tfs_schedule) || null,
-    tfs_room_id: normalizeText(subject.tfs_room) || null,
-    merged: false,
-    department_name: subject.department_name || null,
-    source: 'subject',
-    source_subject_id: Number(subject.subject_id),
-  }));
+  const grouped = new Map();
+
+  for (const subject of subjects) {
+    const key = buildMergedOfferingKey(subject);
+    const bucket = grouped.get(key) || [];
+    bucket.push(subject);
+    grouped.set(key, bucket);
+  }
+
+  const offerings = [];
+  for (const rows of grouped.values()) {
+    const representative = rows[0];
+    const sourceSubjectIds = rows.map((row) => Number(row.subject_id)).filter((id) => Number.isFinite(id));
+    const sourceCurrIds = rows
+      .map((row) => toNumber(row.curr_id))
+      .filter((value) => value !== null);
+    const sourceDepartmentIds = rows
+      .map((row) => toNumber(row.department_id))
+      .filter((value) => value !== null);
+
+    offerings.push({
+      id: Number(representative.subject_id),
+      curr_id: toNumber(representative.curr_id) ?? Number(representative.subject_id),
+      code: normalizeText(representative.subject_code) || null,
+      course_no: normalizeText(representative.subject_course_no) || null,
+      department_id: toNumber(representative.department_id),
+      section: normalizeText(representative.subject_section) || null,
+      descriptive_title: normalizeText(representative.subject_descriptive_title) || null,
+      units: toNumber(representative.subject_units),
+      lec_hrs: toNumber(representative.subject_lec_hrs),
+      lab_hrs: toNumber(representative.subject_lab_hrs),
+      mth_schedule: normalizeText(representative.mth_schedule) || null,
+      mth_room_id: normalizeText(representative.mth_room) || null,
+      tfs_schedule: normalizeText(representative.tfs_schedule) || null,
+      tfs_room_id: normalizeText(representative.tfs_room) || null,
+      merged: rows.length > 1,
+      duplicate_count: rows.length,
+      source_subject_ids: sourceSubjectIds,
+      source_curr_ids: sourceCurrIds,
+      source_department_ids: sourceDepartmentIds,
+      department_name: representative.department_name || null,
+      source: 'subject',
+      source_subject_id: Number(representative.subject_id),
+    });
+  }
+
+  return offerings;
 }
 
 function buildPreflight(snapshot) {
@@ -439,7 +491,7 @@ async function fetchSnapshot() {
     query(`
       select s.subject_id, s.subject_code, s.subject_course_no, s.department_id, s.subject_section,
              s.subject_descriptive_title, s.subject_units, s.subject_lec_hrs, s.subject_lab_hrs,
-             s.subject_status, s.mth_schedule, s.tfs_schedule, s.mth_room, s.tfs_room,
+             s.subject_status, s.mth_schedule, s.tfs_schedule, s.mth_room, s.tfs_room, s.curr_id,
              d.department_name
       from public.subjects s
       left join public.departments d on d.department_id = s.department_id
