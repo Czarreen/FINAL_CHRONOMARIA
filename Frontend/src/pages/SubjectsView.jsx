@@ -36,6 +36,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     mth_room: '',
     tfs_room: '',
     subject_status: 'active',
+    curr_id: '',
   });
   const [savingSubject, setSavingSubject] = useState(false);
   const [subjectError, setSubjectError] = useState(null);
@@ -52,9 +53,11 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [notifSearch, setNotifSearch] = useState('');
 
   const columns = [
+    { key: 'curr_id', label: 'Curriculum ID' },
     { key: 'subject_code', label: 'Code' },
     { key: 'subject_course_no', label: 'Course No' },
     { key: 'subject_descriptive_title', label: 'Description' },
+    { key: 'department_info', label: 'Department' },
     { key: 'mth_schedule', label: 'MTH' },
     { key: 'tfs_schedule', label: 'TFS' },
     { key: 'room', label: 'Room' },
@@ -444,6 +447,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       subject_section: subject.subject_section || '',
       department_id: subject.department_id ?? '',
       subject_status: subject.subject_status || 'active',
+      curr_id: subject.curr_id ?? '',
     });
     setShowEditModal(true);
     setEditError(null);
@@ -521,6 +525,10 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
           return String(subject.subject_descriptive_title ?? '');
         case 'subject_units':
           return Number(subject.subject_units ?? 0);
+        case 'curr_id':
+          return Number(subject.curr_id ?? 0);
+        case 'department_info':
+          return String(subject.departments?.department_name ?? '');
         case 'mth_schedule':
           return String(subject.mth_schedule ?? '');
         case 'tfs_schedule':
@@ -586,6 +594,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         mth_room: '',
         tfs_room: '',
         subject_status: 'active',
+        curr_id: '',
       });
       if ((createdSubject?.subject_status || 'active') === 'active') {
         setActiveCount((currentCount) => currentCount + 1);
@@ -847,6 +856,12 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                             <p className="text-xs font-medium text-on-surface truncate">{subject.subject_descriptive_title || '—'}</p>
                           </div>
                         )}
+                        {col.key === 'curr_id' && (
+                          <span className="text-center text-xs font-medium text-on-surface block">{subject.curr_id || '—'}</span>
+                        )}
+                        {col.key === 'department_info' && (
+                          <span className="text-xs font-medium text-on-surface">{subject.departments?.department_name || '—'}</span>
+                        )}
                         {col.key === 'mth_schedule' && (
                           <span className="block text-xs text-on-surface-variant">{extractTimeRange(subject.mth_schedule)}</span>
                         )}
@@ -1023,6 +1038,19 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                   onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g., HCI-101"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Curriculum ID
+                </label>
+                <input
+                  type="number"
+                  value={newSubject.curr_id}
+                  onChange={(e) => setNewSubject({ ...newSubject, curr_id: e.target.value ? parseInt(e.target.value) : '' })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="e.g., 1"
                 />
               </div>
 
@@ -1227,6 +1255,20 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Curriculum ID
+                </label>
+                <input
+                  type="number"
+                  value={editingData.curr_id}
+                  onChange={(e) => setEditingData({ ...editingData, curr_id: e.target.value ? parseInt(e.target.value) : '' })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  placeholder="e.g., 1"
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('curr_id')}
                 />
               </div>
 

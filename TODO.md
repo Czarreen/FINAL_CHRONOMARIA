@@ -37,3 +37,11 @@
 - [x] Update delete handler to propagate delete effects to related subjects/rooms safely
 - [x] Add safe orphan-room pruning (only if not referenced elsewhere)
 - [ ] Run backend syntax/quick verification
+
+- [x] Update GA subject mapping to use subjects.curr_id with fallback to subject_id
+- [x] Verify faculty_loading persistence uses mapped offering.curr_id from subject-derived offerings
+- [x] Provide short recommendation text for team decision on duplicate-subject merge handling
+- [x] Add canonical normalization helpers and merge-key builder for subject deduplication
+- [x] Refactor subject-to-GA mapping to group duplicates and emit one representative offering
+- [x] Add merged/audit metadata for grouped rows (duplicate_count/source ids)
+- [x] Validate dedupe output is compatible with preflight and GA payload flow

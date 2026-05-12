@@ -148,14 +148,15 @@ CREATE TABLE public.subjects (
   department_id integer,
   subject_section text,
   subject_descriptive_title text,
-  subject_units integer,
-  subject_lec_hrs integer,
-  subject_lab_hrs integer,
+  subject_units real,
+  subject_lec_hrs real,
+  subject_lab_hrs real,
   subject_status text NOT NULL DEFAULT 'active'::text,
   mth_schedule text,
   tfs_schedule text,
   mth_room text,
   tfs_room text,
+  curr_id integer,
   CONSTRAINT subjects_pkey PRIMARY KEY (subject_id),
   CONSTRAINT subjects_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
 );
