@@ -6,6 +6,7 @@ import { AlertCircle, Bell, ChevronDown, ChevronRight, Maximize2, Minimize2, X, 
 function getIssueCategory(field) {
   if (!field) return 'Other';
   const f = field.toLowerCase();
+  if (f.includes('conflict')) return 'Schedule Conflict';
   if (f.includes('name')) return 'Missing Name';
   if (f.includes('type')) return 'Missing Type';
   if (f.includes('status')) return 'Missing Status';

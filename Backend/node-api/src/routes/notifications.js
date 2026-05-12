@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { buildSubjectNotificationIssues, buildSubjectNotificationRows, rescanAllSubjectNotifications } from '../lib/subjectNotifications.js';
+import { findConflictingSchedules, isRoomGym } from '../lib/scheduleConflictChecker.js';
 
 const router = Router();
 
@@ -55,7 +56,7 @@ router.patch('/course-offerings/:id/resolve', async (req, res) => {
 });
 
 // Shared helper: compute issue rows for a single offering object
-function computeOfferingIssues(offering) {
+function computeOfferingIssues(offering, allOfferings = []) {
   const isEmptyVal = (v) => v === null || v === undefined || String(v).trim() === '' || v === 0;
   const issues = [];
 
@@ -86,6 +87,22 @@ function computeOfferingIssues(offering) {
   if (isEmptyVal(offering.units)) issues.push({ field_name: 'units', severity: 'medium', message: 'Credit units are not specified', issue_type: 'missing' });
   if (isEmptyVal(offering.lec_hrs)) issues.push({ field_name: 'lec_hrs', severity: 'medium', message: 'Lecture hours are not specified', issue_type: 'missing' });
 
+  const isMthRoomGym = isRoomGym(offering.mth_room_id);
+  const isTfsRoomGym = isRoomGym(offering.tfs_room_id);
+
+  const conflicts = findConflictingSchedules(offering, allOfferings, false);
+  for (const conflict of conflicts) {
+    if ((conflict.schedule === 'MTH' && !isMthRoomGym) || (conflict.schedule === 'TFS' && !isTfsRoomGym)) {
+      issues.push({
+        field_name: 'schedule_conflict',
+        severity: 'high',
+        message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
+        issue_type: 'conflict',
+        conflicting_offering_id: conflict.entityId,
+      });
+    }
+  }
+
   // Escalate: 4+ issues with no critical → all become critical
   const hasCritical = issues.some((i) => i.severity === 'high');
   if (!hasCritical && issues.length >= 4) {
@@ -112,6 +129,12 @@ router.post('/course-offerings/sync', async (req, res) => {
     const offering = rows?.[0];
     if (!offering) return res.status(404).json({ error: 'Offering not found' });
 
+    const { data: allOfferings, error: allFetchErr } = await supabaseAdmin
+      .from('course_offerings')
+      .select('id, code, course_no, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
+
+    if (allFetchErr) return res.status(500).json({ error: allFetchErr.message });
+
     const { error: delErr } = await supabaseAdmin
       .from('data_quality_notifications')
       .delete()
@@ -121,7 +144,7 @@ router.post('/course-offerings/sync', async (req, res) => {
 
     if (delErr) return res.status(500).json({ error: delErr.message });
 
-    const issues = computeOfferingIssues(offering);
+    const issues = computeOfferingIssues(offering, allOfferings || []);
     if (issues.length === 0) return res.json({ synced: 0, issues: [] });
 
     const now = new Date().toISOString();
@@ -132,7 +155,7 @@ router.post('/course-offerings/sync', async (req, res) => {
       issue_type: issue.issue_type,
       severity: issue.severity,
       message: issue.message,
-      details: { offering_id: offeringId, code: offering.code },
+      details: { offering_id: offeringId, code: offering.code, conflicting_offering_id: issue.conflicting_offering_id || null },
       is_resolved: false,
       created_at: now,
       updated_at: now,
@@ -179,7 +202,7 @@ router.post('/course-offerings/rescan-all', async (req, res) => {
     const inserts = [];
 
     for (const offering of offerings || []) {
-      const issues = computeOfferingIssues(offering);
+      const issues = computeOfferingIssues(offering, offerings || []);
       for (const issue of issues) {
         inserts.push({
           entity_type: 'course_offering',
@@ -188,7 +211,7 @@ router.post('/course-offerings/rescan-all', async (req, res) => {
           issue_type: issue.issue_type,
           severity: issue.severity,
           message: issue.message,
-          details: { offering_id: offering.id, code: offering.code || null },
+          details: { offering_id: offering.id, code: offering.code || null, conflicting_offering_id: issue.conflicting_offering_id || null },
           is_resolved: false,
           created_at: now,
           updated_at: now,
@@ -630,7 +653,13 @@ router.post('/subjects/sync', async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: 'Subject not found' });
 
-    const rows = buildSubjectNotificationRows(data);
+    const { data: allSubjects, error: allError } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room');
+
+    if (allError) return res.status(500).json({ error: allError.message });
+
+    const rows = buildSubjectNotificationRows(data, allSubjects || []);
     await supabaseAdmin.from('subject_notifications').delete().eq('entity_id', subjectId);
 
     if (rows.length === 0) {
