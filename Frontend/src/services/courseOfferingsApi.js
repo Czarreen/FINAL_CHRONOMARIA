@@ -15,9 +15,10 @@ export async function fetchCourseOfferingsPage(page = 1, limit = 50, sortBy = 'i
   return fetchCourseOfferings({ page, limit, sortBy, sortOrder });
 }
 
-export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', sortBy = 'id', sortOrder = 'asc' } = {}) {
+export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', searchCol = '', sortBy = 'id', sortOrder = 'asc' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
+  if (search && searchCol && searchCol !== 'all') params.searchCol = String(searchCol);
   if (sortBy) params.sortBy = String(sortBy);
   if (sortOrder) params.sortOrder = String(sortOrder);
   const query = new URLSearchParams(params);
@@ -106,6 +107,14 @@ export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode 
   }
 
   return response.json();
+}
+
+export async function fetchCourseOfferingPageNumber(id, { sortBy = 'code', sortOrder = 'asc', pageSize = 50 } = {}) {
+  const params = new URLSearchParams({ sortBy, sortOrder, pageSize: String(pageSize) });
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}/page?${params.toString()}`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return typeof payload.page === 'number' ? payload.page : null;
 }
 
 export async function fetchCourseOfferingById(id) {

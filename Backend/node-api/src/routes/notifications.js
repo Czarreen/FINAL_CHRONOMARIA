@@ -772,7 +772,8 @@ router.get('/subjects/debug', async (_req, res) => {
   }
 });
 
-// Persisted subject notifications
+// Persisted subject notifications — enriched with subject data in a single batch query
+// This avoids the N+1 problem where the frontend had to call fetchSubjectById for each notification
 router.get('/subjects/persisted', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -792,10 +793,33 @@ router.get('/subjects/persisted', async (req, res) => {
       query = query.eq('is_resolved', true);
     }
 
-    const { data, error, count } = await query;
+    const { data: rows, error, count } = await query;
     if (error) return res.status(500).json({ error: error.message });
 
-    return res.json({ page, limit, total: count ?? 0, rows: data ?? [] });
+    const notifRows = rows ?? [];
+
+    // Batch-fetch subject info for all unique entity_ids in one query
+    const uniqueSubjectIds = [...new Set(notifRows.map((r) => r.entity_id).filter(Boolean))];
+    let subjectById = {};
+    if (uniqueSubjectIds.length > 0) {
+      const { data: subjects } = await supabaseAdmin
+        .from('subjects')
+        .select('subject_id, subject_code, subject_descriptive_title, subject_units, subject_lec_hrs, subject_lab_hrs, mth_schedule, tfs_schedule, mth_room, tfs_room, subject_status, curr_id, department_id')
+        .in('subject_id', uniqueSubjectIds);
+      for (const s of (subjects || [])) {
+        subjectById[s.subject_id] = s;
+      }
+    }
+
+    // Merge subject data into each notification row
+    const enrichedRows = notifRows.map((r) => ({
+      ...r,
+      subject: subjectById[r.entity_id] ?? null,
+      subject_code: subjectById[r.entity_id]?.subject_code ?? null,
+      subject_descriptive_title: subjectById[r.entity_id]?.subject_descriptive_title ?? null,
+    }));
+
+    return res.json({ page, limit, total: count ?? 0, rows: enrichedRows });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }

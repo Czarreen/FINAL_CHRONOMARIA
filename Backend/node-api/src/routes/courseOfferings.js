@@ -1029,6 +1029,23 @@ router.get('/', async (req, res) => {
     const validSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
     const validSortOrder = sortOrder === 'desc' ? 'desc' : 'asc';
 
+    // Search parameters
+    const search = String(req.query.search || '').trim();
+    const searchCol = String(req.query.searchCol || '').toLowerCase();
+
+    // Searchable columns (maps frontend key → DB column)
+    const searchableColumns = {
+      code: 'code',
+      course_no: 'course_no',
+      descriptive_title: 'descriptive_title',
+      section: 'section',
+      curr_id: 'curr_id',
+      mth_schedule: 'mth_schedule',
+      tfs_schedule: 'tfs_schedule',
+      mth_room_id: 'mth_room_id',
+      tfs_room_id: 'tfs_room_id',
+    };
+
     let query = supabaseAdmin
       .from('course_offerings')
       .select(
@@ -1037,6 +1054,19 @@ router.get('/', async (req, res) => {
       )
       .order(validSortBy, { ascending: validSortOrder === 'asc' })
       .range(from, to);
+
+    if (search) {
+      const dbCol = searchableColumns[searchCol];
+      if (dbCol) {
+        // Column-specific search
+        query = query.ilike(dbCol, `%${search}%`);
+      } else {
+        // Broad search across key text columns
+        query = query.or(
+          `code.ilike.%${search}%,course_no.ilike.%${search}%,descriptive_title.ilike.%${search}%,section.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%`
+        );
+      }
+    }
 
     const { data, error, count } = await query;
 
@@ -1054,6 +1084,45 @@ router.get('/', async (req, res) => {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
     });
+  }
+});
+
+// GET /api/course-offerings/:id/page — returns which page this offering falls on
+// Uses only the id column (lightweight) to avoid fetching full row data
+router.get('/:id/page', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid offering ID' });
+    }
+
+    const pageSize = Math.max(1, Number(req.query.pageSize || 50));
+    const sortBy = String(req.query.sortBy || 'code').toLowerCase();
+    const sortOrder = String(req.query.sortOrder || 'asc').toLowerCase();
+
+    const allowedSortColumns = [
+      'id', 'code', 'course_no', 'descriptive_title', 'units',
+      'lec_hrs', 'lab_hrs', 'curr_id', 'department_id', 'section',
+      'mth_schedule', 'tfs_schedule', 'merged',
+    ];
+    const validSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'code';
+    const ascending = sortOrder !== 'desc';
+
+    // Fetch only IDs in sorted order — much lighter than full rows
+    const { data: sortedIds, error } = await supabaseAdmin
+      .from('course_offerings')
+      .select('id')
+      .order(validSortBy, { ascending })
+      .order('id', { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const index = (sortedIds || []).findIndex((r) => r.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Offering not found' });
+
+    return res.json({ page: Math.ceil((index + 1) / pageSize) });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
