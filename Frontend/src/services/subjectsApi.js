@@ -22,6 +22,16 @@ export async function fetchSubjects({ page = 1, limit = 50, search = '', status 
   };
 }
 
+export async function fetchSubjectPageNumber(id, { search = '', status = '', limit = 50 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (search) params.set('search', search);
+  if (status) params.set('status', status);
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}/page?${params.toString()}`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return typeof payload.page === 'number' ? payload.page : null;
+}
+
 export async function fetchSubjectById(id) {
   const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`);
 

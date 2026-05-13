@@ -25,13 +25,13 @@ import {
   Lock,
 } from 'lucide-react';
 import {
-  fetchCourseOfferingsPage,
   fetchCourseOfferings,
   createCourseOffering,
   updateCourseOffering,
   deleteCourseOffering,
   importCourseOfferingsCsv,
   fetchCourseOfferingById,
+  fetchCourseOfferingPageNumber,
   checkDuplicateCode,
 } from '../services/courseOfferingsApi';
 import { fetchRooms } from '../services/roomsApi';
@@ -152,9 +152,20 @@ export default function CourseOfferingView() {
     return Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   }, [totalRows]);
 
+  // Debounced search text — prevents a request on every keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
-    if (filterText) return; // skip pagination load when searching
+    const tid = setTimeout(() => setDebouncedSearch(filterText), 300);
+    return () => clearTimeout(tid);
+  }, [filterText]);
 
+  // Reset to page 1 whenever the search query or column filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filterColumn]);
+
+  // Unified data-loading effect — handles both paginated browsing and server-side search
+  useEffect(() => {
     let active = true;
 
     async function loadOfferings() {
@@ -162,12 +173,14 @@ export default function CourseOfferingView() {
       setError('');
 
       try {
-        const { rows: data, total: count } = await fetchCourseOfferingsPage(
+        const { rows: data, total: count } = await fetchCourseOfferings({
           page,
-          PAGE_SIZE,
-          sortConfig.key,
-          sortConfig.direction
-        );
+          limit: PAGE_SIZE,
+          search: debouncedSearch,
+          searchCol: filterColumn !== 'all' ? filterColumn : '',
+          sortBy: sortConfig.key,
+          sortOrder: sortConfig.direction,
+        });
 
         if (!active) return;
         setOfferings(
@@ -195,7 +208,7 @@ export default function CourseOfferingView() {
     return () => {
       active = false;
     };
-  }, [page, refreshToken, sortConfig]);
+  }, [page, refreshToken, refreshTrigger, sortConfig, debouncedSearch, filterColumn]);
 
   // Load rooms data
   useEffect(() => {
@@ -250,18 +263,11 @@ export default function CourseOfferingView() {
 
   async function findOfferingPageNumber(offeringId) {
     try {
-      // Fetch all offerings with current sort/search to find the correct position
-      const { rows: allSortedOfferings } = await fetchCourseOfferings({
-        page: 1,
-        limit: 100000,
-        search: '',
+      return await fetchCourseOfferingPageNumber(offeringId, {
         sortBy: sortConfig.key,
         sortOrder: sortConfig.direction,
+        pageSize: PAGE_SIZE,
       });
-
-      const index = allSortedOfferings.findIndex((o) => o.id === offeringId);
-      if (index === -1) return null;
-      return Math.ceil((index + 1) / PAGE_SIZE);
     } catch (err) {
       console.error('Failed to find offering page number:', err);
       return null;
@@ -606,63 +612,9 @@ export default function CourseOfferingView() {
     return keys;
   }, [editingFromNotification, notificationMissingFields]);
 
-  useEffect(() => {
-    if (!filterText) {
-      setPage(1);
-      return;
-    }
-    let active = true;
-    const tid = setTimeout(async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000, search: filterText });
-        if (!active) return;
-        setOfferings(
-          rows.map((row) => ({
-            ...row,
-            department_name:
-              row.departments?.department_name ??
-              (row.department_id !== null && row.department_id !== undefined
-                ? `Department #${row.department_id}`
-                : null),
-          }))
-        );
-        setTotalRows(rows.length);
-        setPage(1);
-      } catch (err) {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : 'Failed to run global search.');
-        setOfferings([]);
-        setTotalRows(0);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 300);
 
-    return () => {
-      active = false;
-      clearTimeout(tid);
-    };
-  }, [filterText, refreshTrigger]);
-
-  const filteredOfferings = useMemo(() => {
-    if (!filterText) return offerings;
-    const q = filterText.toLowerCase();
-    return offerings.filter((row) => {
-      const check = (val) => (val === null || val === undefined) ? false : String(val).toLowerCase().includes(q);
-      if (filterColumn === 'all') {
-        return columns.some((c) => check(row[c.key]));
-      }
-      const col = columns.find((c) => c.key === filterColumn);
-      return col ? check(row[col.key]) : false;
-    });
-  }, [offerings, filterText, filterColumn]);
-
-  const displayedOfferings = useMemo(() => {
-    // Filtering happens on the client, sorting is done server-side
-    return Array.from(filteredOfferings);
-  }, [filteredOfferings]);
+  // Server-side search and sort are now active — offerings already contain only matching results
+  const displayedOfferings = offerings;
 
   const [notifications, setNotifications] = useState([]);
 
@@ -1063,10 +1015,12 @@ export default function CourseOfferingView() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedOfferings.size === offerings.length && offerings.length > 0) {
+    // Toggle selection for the currently displayed page only
+    const pageIds = (displayedOfferings || []).map((o) => o.id);
+    if (selectedOfferings.size === pageIds.length && pageIds.length > 0) {
       setSelectedOfferings(new Set());
     } else {
-      setSelectedOfferings(new Set(offerings.map((o) => o.id)));
+      setSelectedOfferings(new Set(pageIds));
     }
   };
 
@@ -1148,12 +1102,25 @@ export default function CourseOfferingView() {
     return true;
   };
 
+  // Pre-computed room→offerings map: avoids O(n) filter per room per render
+  const roomConflictMap = useMemo(() => {
+    const map = new Map();
+    for (const offering of offerings) {
+      for (const stype of ['mth', 'tfs']) {
+        const ids = resolveRoomIds(offering, stype);
+        for (const id of ids) {
+          const key = `${id}:${stype}`;
+          if (!map.has(key)) map.set(key, []);
+          map.get(key).push(offering);
+        }
+      }
+    }
+    return map;
+  }, [offerings]);
+
   const getConflictingOfferings = (roomId, scheduleType) => {
-    return offerings.filter((offering) => {
-      if (!roomId) return false;
-      const offeringRoomIds = resolveRoomIds(offering, scheduleType);
-      return offeringRoomIds.includes(Number(roomId));
-    });
+    if (!roomId) return [];
+    return roomConflictMap.get(`${roomId}:${scheduleType}`) || [];
   };
 
   const exportToCSV = async () => {
@@ -1168,21 +1135,27 @@ export default function CourseOfferingView() {
 
       let allOfferings = offerings;
 
-      if (!filterText) {
-        try {
-          const { rows } = await fetchCourseOfferings({ page: 1, limit: 100000 });
-          allOfferings = rows.map((row) => ({
-            ...row,
-            department_name:
-              row.departments?.department_name ??
-              (row.department_id !== null && row.department_id !== undefined
-                ? `Department #${row.department_id}`
-                : null),
-          }));
-        } catch (err) {
-          console.error('Failed to fetch all offerings for export:', err);
-          setUpdateError('Failed to fetch all offerings. Exporting current page only.');
-        }
+      try {
+        // Fetch all matching rows (respects current search + sort) for the export
+        const { rows } = await fetchCourseOfferings({
+          page: 1,
+          limit: 10000,
+          search: debouncedSearch,
+          searchCol: filterColumn !== 'all' ? filterColumn : '',
+          sortBy: sortConfig.key,
+          sortOrder: sortConfig.direction,
+        });
+        allOfferings = rows.map((row) => ({
+          ...row,
+          department_name:
+            row.departments?.department_name ??
+            (row.department_id !== null && row.department_id !== undefined
+              ? `Department #${row.department_id}`
+              : null),
+        }));
+      } catch (err) {
+        console.error('Failed to fetch all offerings for export:', err);
+        setUpdateError('Failed to fetch all offerings. Exporting current page only.');
       }
 
       const headers = Array.from(visibleColumns).map((key) => {
@@ -1547,8 +1520,8 @@ export default function CourseOfferingView() {
                   <th className="px-3 py-2 text-center w-10">
                     <input
                       type="checkbox"
-                      checked={offerings.length > 0 && selectedOfferings.size === offerings.length}
-                      indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < offerings.length ? true : undefined}
+                      checked={(displayedOfferings || []).length > 0 && selectedOfferings.size === (displayedOfferings || []).length}
+                      indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < (displayedOfferings || []).length ? true : undefined}
                       onChange={toggleSelectAll}
                       className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />

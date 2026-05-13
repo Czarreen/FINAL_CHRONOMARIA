@@ -137,6 +137,45 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/subjects/:id/page — returns which page this subject falls on
+// Fetches only subject_id column (lightweight) to compute position quickly
+router.get('/:id/page', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid subject ID' });
+    }
+
+    const pageSize = Math.max(1, Number(req.query.limit || 50));
+    const search = req.query.search?.trim() || '';
+    const status = req.query.status || '';
+
+    let query = supabaseAdmin
+      .from('subjects')
+      .select('subject_id')
+      .order('subject_code', { ascending: true });
+
+    if (search) {
+      query = query.or(
+        `subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%`
+      );
+    }
+    if (status) {
+      query = query.eq('subject_status', status);
+    }
+
+    const { data: sortedIds, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const index = (sortedIds || []).findIndex((r) => r.subject_id === id);
+    if (index === -1) return res.status(404).json({ error: 'Subject not found' });
+
+    return res.json({ page: Math.ceil((index + 1) / pageSize) });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 // GET single subject by ID
 router.get('/:id', async (req, res) => {
   try {
