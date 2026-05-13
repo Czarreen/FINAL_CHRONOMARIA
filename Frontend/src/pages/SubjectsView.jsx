@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
-import { fetchSubjects, fetchSubjectById, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
@@ -211,7 +211,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   }, [page, limit, search, statusFilter]);
 
   useEffect(() => {
-    loadSubjectNotifications({ forceRescan: true });
+    loadSubjectNotifications();
   }, [authRefreshKey]);
 
   const handleInlineSave = async ({ offeringId, field, value, rowId }) => {
@@ -372,44 +372,43 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   }
 
   async function loadSubjectNotifications({ forceRescan = false } = {}) {
+    setSubjectNotificationsLoading(true);
     try {
-      setSubjectNotificationsLoading(true);
       if (forceRescan) {
         await rescanAllSubjectNotifications();
       }
       // Prefer persisted notifications (allows resolving); fallback to computed live
       try {
-        const persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
-        const rows = Array.isArray(persisted.rows) ? persisted.rows : [];
+        let persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
+        let rows = Array.isArray(persisted.rows) ? persisted.rows : [];
 
-        const uniqueSubjectIds = [...new Set(rows.map((row) => Number(row.entity_id)).filter(Boolean))];
-        const subjectById = {};
+        // Auto-rescan if DB is empty and this is not already a forced rescan
+        if (rows.length === 0 && !forceRescan) {
+          await rescanAllSubjectNotifications();
+          persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
+          rows = Array.isArray(persisted.rows) ? persisted.rows : [];
+        }
 
-        await Promise.all(uniqueSubjectIds.map(async (id) => {
-          try {
-            subjectById[id] = await fetchSubjectById(id);
-          } catch (_) {
-            // fall back to any embedded row subject if the direct lookup fails
-          }
-        }));
-
-        // Backend now returns subject data embedded in each row (subject_code, subject_descriptive_title, subject)
-        // — no N+1 fetches needed
+        // Backend enriches each row with the full subject object — no per-row fetches needed
         const items = rows.map((r) => {
-          const dbSubject = subjectById[r.entity_id] || r.subject || null;
+          const dbSubject = r.subject || null;
           const field = r.field_name || null;
           const hasLectureHours = Number(dbSubject?.subject_lec_hrs ?? 0) > 0;
           const hasLabHours = Number(dbSubject?.subject_lab_hrs ?? 0) > 0;
-          const isSubjectHoursIssue = field === 'subject_lec_hrs' && String(r.message || '').toLowerCase().includes('either lecture hours or lab hours');
+
+          // Backend uses a single "either lecture hours or lab hours" message under field_name='subject_lec_hrs'.
+          // If one of the two is already filled, the editable field(s) should only include the missing side.
+          const msg = String(r.message || '');
+          const isSubjectHoursIssue =
+            (field === 'subject_lec_hrs' || field === 'subject_lecture_hours') &&
+            msg.toLowerCase().includes('either lecture hours or lab hours');
+
           const missingFields = isSubjectHoursIssue
             ? (!hasLectureHours && !hasLabHours
                 ? ['subject_lec_hrs', 'subject_lab_hrs']
-                : !hasLectureHours
-                  ? ['subject_lec_hrs']
-                  : !hasLabHours
-                    ? ['subject_lab_hrs']
-                    : [])
+                : [])
             : (field ? [field] : []);
+
 
           // Ignore stale hours notifications when the subject already has at least one hour value.
           if (isSubjectHoursIssue && missingFields.length === 0) {
@@ -805,14 +804,20 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
             {total} subjects
           </span>
           <button
-            onClick={async () => {
-              await loadSubjects();
-              await loadSubjectNotifications({ forceRescan: true });
-            }}
+            onClick={loadSubjects}
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
-            title="Reload subjects and sync status"
+            title="Reload subjects list"
           >
             <RotateCcw size={16} />
+          </button>
+          <button
+            onClick={() => loadSubjectNotifications({ forceRescan: true })}
+            disabled={subjectNotificationsLoading}
+            className="btn-primary flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-50"
+            title="Re-detect all subject issues"
+          >
+            <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
+            <span>Rescan</span>
           </button>
           <button
             ref={colButtonRef}
