@@ -168,6 +168,98 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
   const { setHighlight } = useRowHighlight();
 
+  // Helper: parse room IDs from slash-separated strings
+  const parseRoomIds = (roomValue) => {
+    if (!roomValue) return [];
+    return String(roomValue).split('/').map(r => r.trim()).filter(Boolean);
+  };
+
+  // Helper: check if two room ID lists share any common IDs
+  const shareRoom = (idsA, idsB) => {
+    if (!idsA.length || !idsB.length) return false;
+    const setB = new Set(idsB);
+    return idsA.some((id) => setB.has(id));
+  };
+
+  // Returns true when two subjects occupy the exact same physical slot —
+  // identical schedule strings AND at least one shared room ID.
+  // Two subjects at the exact same time in the same room are the same physical class
+  // (merged/cross-listed), regardless of code, title, dept, or curriculum.
+  const isMergedSubject = (subject, compareTo) => {
+    // Same course section: same curriculum + department + course_no → intentional room-share
+    if (subject.curr_id && compareTo.curr_id &&
+        String(subject.curr_id) === String(compareTo.curr_id) &&
+        String(subject.department_id) === String(compareTo.department_id) &&
+        String(subject.subject_course_no || '').trim().toUpperCase() === String(compareTo.subject_course_no || '').trim().toUpperCase()) {
+      return true;
+    }
+
+    const norm = (s) => String(s || '').trim().toUpperCase();
+
+    const mthA = norm(subject.mth_schedule);
+    const mthB = norm(compareTo.mth_schedule);
+    const tfsA = norm(subject.tfs_schedule);
+    const tfsB = norm(compareTo.tfs_schedule);
+
+    // Must have at least one schedule to compare
+    if (!mthA && !tfsA) return false;
+
+    // Schedules must match exactly
+    if (mthA !== mthB || tfsA !== tfsB) return false;
+
+    const mthRoomA = parseRoomIds(subject.mth_room);
+    const mthRoomB = parseRoomIds(compareTo.mth_room);
+    const tfsRoomA = parseRoomIds(subject.tfs_room);
+    const tfsRoomB = parseRoomIds(compareTo.tfs_room);
+
+    // If subject has an MTH room, compareTo must share at least one
+    if (mthRoomA.length && !shareRoom(mthRoomA, mthRoomB)) return false;
+    // If subject has a TFS room, compareTo must share at least one
+    if (tfsRoomA.length && !shareRoom(tfsRoomA, tfsRoomB)) return false;
+
+    return true;
+  };
+
+  // Returns list of subjects that conflict with the given subject
+  const getConflictingSubjects = (subject) => {
+    if (!subject || !subjects.length) return [];
+    
+    return subjects.filter((other) => {
+      if (other.subject_id === subject.subject_id) return false;
+      
+      // Skip merged subjects
+      if (isMergedSubject(subject, other)) return false;
+
+      const norm = (s) => String(s || '').trim().toUpperCase();
+      const subjectMthRoom = norm(subject.mth_room);
+      const subjectTfsRoom = norm(subject.tfs_room);
+      const otherMthRoom = norm(other.mth_room);
+      const otherTfsRoom = norm(other.tfs_room);
+
+      // Check for room conflicts
+      const mthRoomA = parseRoomIds(subject.mth_room);
+      const mthRoomB = parseRoomIds(other.mth_room);
+      const tfsRoomA = parseRoomIds(subject.tfs_room);
+      const tfsRoomB = parseRoomIds(other.tfs_room);
+
+      // Check MTH conflicts
+      if (mthRoomA.length && shareRoom(mthRoomA, mthRoomB)) {
+        const subjectMth = norm(subject.mth_schedule);
+        const otherMth = norm(other.mth_schedule);
+        if (subjectMth && otherMth && subjectMth === otherMth) return true;
+      }
+
+      // Check TFS conflicts
+      if (tfsRoomA.length && shareRoom(tfsRoomA, tfsRoomB)) {
+        const subjectTfs = norm(subject.tfs_schedule);
+        const otherTfs = norm(other.tfs_schedule);
+        if (subjectTfs && otherTfs && subjectTfs === otherTfs) return true;
+      }
+
+      return false;
+    });
+  };
+
   // Load subjects data
   useEffect(() => {
     loadSubjects();
