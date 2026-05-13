@@ -8,6 +8,7 @@ import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
 import notificationsRouter from './routes/notifications.js';
 import gaRouter from './routes/ga.js';
+import facultySubjectPreferencesRouter from './routes/facultySubjectPreferences.js';
 import usersRouter from './routes/users.js';
 import authRouter from './routes/auth.js';
 
@@ -33,6 +34,7 @@ app.use('/api/course-offerings/import-csv', (req, res, next) => {
 });
 
 app.use('/api/faculty', facultyRouter);
+app.use('/api/faculty', facultySubjectPreferencesRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);

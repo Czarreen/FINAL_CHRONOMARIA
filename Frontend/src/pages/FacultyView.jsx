@@ -16,6 +16,7 @@ import {
   Mail,
   RotateCcw,
   Settings,
+  Tag,
 } from 'lucide-react';
 import {
   fetchFaculty,
@@ -27,6 +28,7 @@ import {
 } from '../services/facultyApi.js';
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
+import FacultySubjectPreferencesModal from '../components/FacultySubjectPreferencesModal.jsx';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 
@@ -46,6 +48,8 @@ export default function FacultyView() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [preferenceFaculty, setPreferenceFaculty] = useState(null);
   const [savingFaculty, setSavingFaculty] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [facultyError, setFacultyError] = useState(null);
@@ -835,12 +839,24 @@ export default function FacultyView() {
                           <button
                             onClick={() => handleEditFaculty(member)}
                             className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-white hover:text-primary"
+                            title="Edit faculty"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
+                            onClick={() => {
+                              setPreferenceFaculty(member);
+                              setShowPreferencesModal(true);
+                            }}
+                            className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-white hover:text-primary"
+                            title="Manage subject preferences"
+                          >
+                            <Tag size={14} />
+                          </button>
+                          <button
                             onClick={() => openDeleteConfirm(member)}
                             className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
+                            title="Delete faculty"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1295,6 +1311,17 @@ export default function FacultyView() {
             </div>
           </div>
         </div>
+      )}
+
+      {showPreferencesModal && preferenceFaculty && (
+        <FacultySubjectPreferencesModal
+          faculty={preferenceFaculty}
+          onClose={() => {
+            setShowPreferencesModal(false);
+            setPreferenceFaculty(null);
+          }}
+          onRefresh={() => loadFaculty()}
+        />
       )}
     </div>
   );

@@ -257,7 +257,13 @@ def score_offering_difficulty(offering: Dict[str, Any], faculties: Sequence[Dict
     return 1000.0 - matches * 90.0 - (to_number(offering.get("units")) or 0.0) * 10.0
 
 
-def choose_best_faculty(offering: Dict[str, Any], faculties: Sequence[Dict[str, Any]], loads: Dict[int, float], subject_index: Dict[str, Dict[str, Any]], rng: random.Random) -> int:
+def choose_best_faculty(
+    offering: Dict[str, Any],
+    faculties: Sequence[Dict[str, Any]],
+    loads: Dict[int, float],
+    subject_index: Dict[str, Dict[str, Any]],
+    rng: random.Random,
+) -> int:
     matched_subject = subject_index.get(build_offering_key(offering))
     scored: List[Tuple[int, float]] = []
 
@@ -286,7 +292,12 @@ def choose_best_faculty(offering: Dict[str, Any], faculties: Sequence[Dict[str, 
     return scored[0][0]
 
 
-def build_initial_candidate(faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]], rng: random.Random) -> List[int]:
+def build_initial_candidate(
+    faculties: Sequence[Dict[str, Any]],
+    offerings: Sequence[Dict[str, Any]],
+    subject_index: Dict[str, Dict[str, Any]],
+    rng: random.Random,
+) -> List[int]:
     loads: Dict[int, float] = {}
     assignments = [0 for _ in offerings]
 
@@ -307,7 +318,14 @@ def build_initial_candidate(faculties: Sequence[Dict[str, Any]], offerings: Sequ
     return assignments
 
 
-def mutate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]], rng: random.Random, mutation_rate: float) -> List[int]:
+def mutate(
+    candidate: Sequence[int],
+    faculties: Sequence[Dict[str, Any]],
+    offerings: Sequence[Dict[str, Any]],
+    subject_index: Dict[str, Dict[str, Any]],
+    rng: random.Random,
+    mutation_rate: float,
+) -> List[int]:
     next_candidate = list(candidate)
     loads: Dict[int, float] = {}
 
@@ -336,7 +354,12 @@ def create_rng(seed: Any) -> random.Random:
     return random.Random(int(to_number(seed) or 1))
 
 
-def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def summarize_candidate(
+    candidate: Sequence[int],
+    faculties: Sequence[Dict[str, Any]],
+    offerings: Sequence[Dict[str, Any]],
+    subject_index: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
     assignments: List[Dict[str, Any]] = []
     for offering_index, faculty_index in enumerate(candidate):
         offering = offerings[offering_index]
