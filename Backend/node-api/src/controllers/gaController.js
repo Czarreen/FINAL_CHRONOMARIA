@@ -202,6 +202,33 @@ function overlaps(left, right) {
   return left.start < right.end && right.start < left.end;
 }
 
+function formatMinutesAsTime(totalMinutes) {
+  const hours24 = Math.floor(totalMinutes / 60);
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  const suffix = hours24 >= 12 ? 'PM' : 'AM';
+  let hours12 = hours24 % 12;
+  if (hours12 === 0) hours12 = 12;
+  return `${hours12}:${minutes} ${suffix}`;
+}
+
+function calculateDepartmentUnitNeeds(departmentId, gaOfferings) {
+  return gaOfferings
+    .filter((offering) => toNumber(offering.department_id) === departmentId)
+    .reduce((sum, offering) => sum + (toNumber(offering.units) || 0), 0);
+}
+
+function hasSufficientFaculty(departmentId, activeFacultyByDepartment, unitNeeds) {
+  const faculty = activeFacultyByDepartment.get(departmentId);
+  // No faculty at all
+  if (!faculty || faculty.length === 0) {
+    return false;
+  }
+  // Calculate total available capacity
+  const totalMaxUnits = faculty.reduce((sum, f) => sum + (toNumber(f.faculty_max_units) || 0), 0);
+  // Check if capacity is sufficient
+  return totalMaxUnits >= unitNeeds;
+}
+
 function buildOfferingKey(offering) {
   return [
     toNumber(offering.department_id) ?? '',
@@ -427,7 +454,16 @@ function buildPreflight(snapshot) {
       for (const day of block.days || []) {
         const roomKey = `${day}|${block.roomId}`;
         const entries = roomReservations.get(roomKey) || [];
-        entries.push({ offeringId: offering.id, start: block.start, end: block.end });
+        entries.push({
+          offeringId: offering.id,
+          offeringCode: offering.code || null,
+          offeringCourseNo: offering.course_no || null,
+          offeringSection: offering.section || null,
+          offeringCurrId: offering.curr_id || null,
+          offeringDeptName: offering.department_name || offering.department_id || null,
+          start: block.start,
+          end: block.end,
+        });
         roomReservations.set(roomKey, entries);
       }
     }
@@ -439,28 +475,101 @@ function buildPreflight(snapshot) {
       .filter((departmentId) => departmentId !== null)
   );
 
+  // CS and IT department IDs for fallback logic
+  const CS_DEPT = 11;
+  const IT_DEPT = 7;
+
+  // Calculate unit needs for each department
+  const deptUnitNeeds = new Map();
   for (const departmentId of departmentsWithOfferings) {
-    if (!activeFacultyByDepartment.has(departmentId)) {
-      issues.push({
-        type: 'cross_reference',
-        id: departmentId,
-        severity: 'high',
-        problem: `Department ${departmentId} has course offerings but no active faculty`,
-      });
+    const unitNeeds = calculateDepartmentUnitNeeds(departmentId, gaOfferings);
+    deptUnitNeeds.set(departmentId, unitNeeds);
+  }
+
+  // Process departments for cross-reference issues with CS/IT fallback logic
+  const processedDepartments = new Set();
+  for (const departmentId of departmentsWithOfferings) {
+    if (processedDepartments.has(departmentId)) continue;
+
+    const unitNeeds = deptUnitNeeds.get(departmentId) || 0;
+    const hasSufficient = hasSufficientFaculty(departmentId, activeFacultyByDepartment, unitNeeds);
+    const hasActiveFaculty = (activeFacultyByDepartment.get(departmentId) || []).length > 0;
+
+    // Check if this is CS or IT
+    const isCSorIT = departmentId === CS_DEPT || departmentId === IT_DEPT;
+    const otherDeptId = departmentId === CS_DEPT ? IT_DEPT : CS_DEPT;
+    const otherHasOfferings = departmentsWithOfferings.has(otherDeptId);
+
+    if (isCSorIT && otherHasOfferings) {
+      // Both CS and IT have offerings - use OR logic (bidirectional fallback)
+      const otherUnitNeeds = deptUnitNeeds.get(otherDeptId) || 0;
+      const otherHasSufficient = hasSufficientFaculty(otherDeptId, activeFacultyByDepartment, otherUnitNeeds);
+
+      // Only flag error if BOTH departments are insufficient
+      if (!hasSufficient && !otherHasSufficient) {
+        issues.push({
+          type: 'cross_reference',
+          id: departmentId,
+          severity: 'high',
+          problem: `Department ${departmentId} has course offerings but insufficient faculty (no fallback available)`,
+        });
+      }
+
+      // Mark both as processed to avoid duplicate checks
+      processedDepartments.add(departmentId);
+      processedDepartments.add(otherDeptId);
+    } else {
+      // Single department or non-CS/IT departments - regular check
+      if (!hasActiveFaculty) {
+        issues.push({
+          type: 'cross_reference',
+          id: departmentId,
+          severity: 'high',
+          problem: `Department ${departmentId} has course offerings but no active faculty`,
+        });
+      }
+      processedDepartments.add(departmentId);
     }
   }
 
   for (const [roomKey, entries] of roomReservations.entries()) {
     const ordered = [...entries].sort((left, right) => left.start - right.start);
+    let hasConflict = false;
+    let firstConflict = null;
     for (let index = 1; index < ordered.length; index += 1) {
       if (overlaps(ordered[index - 1], ordered[index])) {
-        issues.push({
-          type: 'room_conflict',
-          id: roomKey,
-          severity: 'high',
-          problem: `Room conflict detected for ${roomKey}`,
-        });
+        hasConflict = true;
+        firstConflict = {
+          left: ordered[index - 1],
+          right: ordered[index],
+        };
+        break;
       }
+    }
+
+    if (hasConflict) {
+      const left = firstConflict?.left;
+      const right = firstConflict?.right;
+      const timeRange = left && right
+        ? `${formatMinutesAsTime(Math.max(left.start, right.start))}-${formatMinutesAsTime(Math.min(left.end, right.end))}`
+        : null;
+      const leftLabel = left
+        ? `${left.offeringCode || ''} ${left.offeringCourseNo || ''}${left.offeringSection ? `-${left.offeringSection}` : ''}`.trim()
+        : null;
+      const rightLabel = right
+        ? `${right.offeringCode || ''} ${right.offeringCourseNo || ''}${right.offeringSection ? `-${right.offeringSection}` : ''}`.trim()
+        : null;
+      const leftMeta = left ? ` curr:${left.offeringCurrId || ''} dept:${left.offeringDeptName || ''}` : '';
+      const rightMeta = right ? ` curr:${right.offeringCurrId || ''} dept:${right.offeringDeptName || ''}` : '';
+      const details = left && right
+        ? ` (offerings ${leftLabel || left.offeringId}${leftMeta} and ${rightLabel || right.offeringId}${rightMeta}${timeRange ? ` overlap at ${timeRange}` : ''})`
+        : '';
+      issues.push({
+        type: 'room_conflict',
+        id: roomKey,
+        severity: 'high',
+        problem: `Room conflict detected for ${roomKey}${details}`,
+      });
     }
   }
 
