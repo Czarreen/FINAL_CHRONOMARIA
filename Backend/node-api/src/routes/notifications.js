@@ -776,7 +776,7 @@ router.get('/subjects/debug', async (_req, res) => {
 router.get('/subjects/persisted', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit || 50)));
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -825,7 +825,7 @@ router.post('/subjects/sync', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('subjects')
-      .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room')
+      .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no')
       .eq('subject_id', subjectId)
       .single();
 
@@ -834,7 +834,7 @@ router.post('/subjects/sync', async (req, res) => {
 
     const { data: allSubjects, error: allError } = await supabaseAdmin
       .from('subjects')
-      .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room');
+      .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no');
 
     if (allError) return res.status(500).json({ error: allError.message });
 

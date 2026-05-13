@@ -185,12 +185,16 @@ function isMergedSubject(entity, other) {
 // Returns true when two offerings are sections of the same course —
 // same curriculum, same department, and same course number.
 // Staggered lab sections intentionally share rooms at different times; this is not a conflict.
+// Supports both course offerings (course_no) and subjects (subject_course_no).
 function isSameCourseSection(entity, other) {
-  if (!entity.curr_id || !entity.department_id || !entity.course_no) return false;
+  if (!entity.curr_id || !entity.department_id) return false;
+  const courseNo = entity.course_no || entity.subject_course_no;
+  const otherCourseNo = other.course_no || other.subject_course_no;
+  if (!courseNo) return false;
   return (
     String(entity.curr_id) === String(other.curr_id) &&
     String(entity.department_id) === String(other.department_id) &&
-    String(entity.course_no || '').trim().toUpperCase() === String(other.course_no || '').trim().toUpperCase()
+    String(courseNo).trim().toUpperCase() === String(otherCourseNo || '').trim().toUpperCase()
   );
 }
 

@@ -168,97 +168,6 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
   const { setHighlight } = useRowHighlight();
 
-  // Helper: parse room IDs from slash-separated strings
-  const parseRoomIds = (roomValue) => {
-    if (!roomValue) return [];
-    return String(roomValue).split('/').map(r => r.trim()).filter(Boolean);
-  };
-
-  // Helper: check if two room ID lists share any common IDs
-  const shareRoom = (idsA, idsB) => {
-    if (!idsA.length || !idsB.length) return false;
-    const setB = new Set(idsB);
-    return idsA.some((id) => setB.has(id));
-  };
-
-  // Returns true when two subjects occupy the exact same physical slot —
-  // identical schedule strings AND at least one shared room ID.
-  // Two subjects at the exact same time in the same room are the same physical class
-  // (merged/cross-listed), regardless of code, title, dept, or curriculum.
-  const isMergedSubject = (subject, compareTo) => {
-    // Same course section: same curriculum + department + course_no → intentional room-share
-    if (subject.curr_id && compareTo.curr_id &&
-        String(subject.curr_id) === String(compareTo.curr_id) &&
-        String(subject.department_id) === String(compareTo.department_id) &&
-        String(subject.subject_course_no || '').trim().toUpperCase() === String(compareTo.subject_course_no || '').trim().toUpperCase()) {
-      return true;
-    }
-
-    const norm = (s) => String(s || '').trim().toUpperCase();
-
-    const mthA = norm(subject.mth_schedule);
-    const mthB = norm(compareTo.mth_schedule);
-    const tfsA = norm(subject.tfs_schedule);
-    const tfsB = norm(compareTo.tfs_schedule);
-
-    // Must have at least one schedule to compare
-    if (!mthA && !tfsA) return false;
-
-    // Schedules must match exactly
-    if (mthA !== mthB || tfsA !== tfsB) return false;
-
-    const mthRoomA = parseRoomIds(subject.mth_room);
-    const mthRoomB = parseRoomIds(compareTo.mth_room);
-    const tfsRoomA = parseRoomIds(subject.tfs_room);
-    const tfsRoomB = parseRoomIds(compareTo.tfs_room);
-
-    // If subject has an MTH room, compareTo must share at least one
-    if (mthRoomA.length && !shareRoom(mthRoomA, mthRoomB)) return false;
-    // If subject has a TFS room, compareTo must share at least one
-    if (tfsRoomA.length && !shareRoom(tfsRoomA, tfsRoomB)) return false;
-
-    return true;
-  };
-
-  // Returns list of subjects that conflict with the given subject
-  const getConflictingSubjects = (subject) => {
-    if (!subject || !subjects.length) return [];
-    
-    return subjects.filter((other) => {
-      if (other.subject_id === subject.subject_id) return false;
-      
-      // Skip merged subjects
-      if (isMergedSubject(subject, other)) return false;
-
-      const norm = (s) => String(s || '').trim().toUpperCase();
-      const subjectMthRoom = norm(subject.mth_room);
-      const subjectTfsRoom = norm(subject.tfs_room);
-      const otherMthRoom = norm(other.mth_room);
-      const otherTfsRoom = norm(other.tfs_room);
-
-      // Check for room conflicts
-      const mthRoomA = parseRoomIds(subject.mth_room);
-      const mthRoomB = parseRoomIds(other.mth_room);
-      const tfsRoomA = parseRoomIds(subject.tfs_room);
-      const tfsRoomB = parseRoomIds(other.tfs_room);
-
-      // Check MTH conflicts
-      if (mthRoomA.length && shareRoom(mthRoomA, mthRoomB)) {
-        const subjectMth = norm(subject.mth_schedule);
-        const otherMth = norm(other.mth_schedule);
-        if (subjectMth && otherMth && subjectMth === otherMth) return true;
-      }
-
-      // Check TFS conflicts
-      if (tfsRoomA.length && shareRoom(tfsRoomA, tfsRoomB)) {
-        const subjectTfs = norm(subject.tfs_schedule);
-        const otherTfs = norm(other.tfs_schedule);
-        if (subjectTfs && otherTfs && subjectTfs === otherTfs) return true;
-      }
-
-      return false;
-    });
-  };
 
   // Load subjects data
   useEffect(() => {
@@ -292,6 +201,22 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   useEffect(() => {
     loadRoomLookup();
   }, []);
+
+  // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
+  const conflictSubjectMap = useMemo(() => {
+    const map = new Map();
+    for (const item of subjectNotifications) {
+      const id = Number(item.rowId);
+      if (!id) continue;
+      const conflictCount = (item.issues || []).filter(
+        (issue) => issue.field === 'schedule_conflict' || issue.field_name === 'schedule_conflict'
+      ).length;
+      if (conflictCount > 0) {
+        map.set(id, { hasScheduleConflict: true, conflictingCount: conflictCount });
+      }
+    }
+    return map;
+  }, [subjectNotifications]);
 
   // Auto-toggle subject_status based on open notification issues
   // Runs on initial load, refresh, and whenever notifications or subjects change.
@@ -772,10 +697,19 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
   function getSubjectIssueState(subjectId) {
     const id = Number(subjectId);
-    const hasOpenIssues = subjectNotifications.some(
+    const hasNotificationIssues = subjectNotifications.some(
       (item) => Number(item.rowId) === id
     );
-    return { hasOpenIssues };
+    const conflictState = conflictSubjectMap.get(id);
+    const hasScheduleConflict = Boolean(conflictState?.hasScheduleConflict);
+    const conflictingCount = Number(conflictState?.conflictingCount || 0);
+
+    return {
+      hasOpenIssues: hasNotificationIssues || hasScheduleConflict,
+      hasNotificationIssues,
+      hasScheduleConflict,
+      conflictingCount,
+    };
   }
 
   return (
@@ -953,14 +887,23 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20">
-                {sortedSubjects.map((subject, index) => (
-                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                {sortedSubjects.map((subject, index) => {
+                  const issueState = getSubjectIssueState(subject.subject_id);
+                  return (
+                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${issueState.hasScheduleConflict ? 'bg-red-50/70' : index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     {columns.map(col => visibleColumns.has(col.key) && (
                       <td key={col.key} className="px-4 py-2">
                         {col.key === 'subject_code' && (
-                          <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                            {subject.subject_code || 'N/A'}
-                          </span>
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                              {subject.subject_code || 'N/A'}
+                            </span>
+                            {issueState.hasScheduleConflict && (
+                              <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
+                              </span>
+                            )}
+                          </div>
                         )}
                         {col.key === 'subject_course_no' && (
                           <span className="text-xs font-medium text-on-surface">{subject.subject_course_no || '—'}</span>
@@ -1037,7 +980,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>
