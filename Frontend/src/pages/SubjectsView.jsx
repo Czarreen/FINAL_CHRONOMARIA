@@ -400,16 +400,20 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
           const field = r.field_name || null;
           const hasLectureHours = Number(dbSubject?.subject_lec_hrs ?? 0) > 0;
           const hasLabHours = Number(dbSubject?.subject_lab_hrs ?? 0) > 0;
-          const isSubjectHoursIssue = field === 'subject_lec_hrs' && String(r.message || '').toLowerCase().includes('either lecture hours or lab hours');
+
+          // Backend uses a single "either lecture hours or lab hours" message under field_name='subject_lec_hrs'.
+          // If one of the two is already filled, the editable field(s) should only include the missing side.
+          const msg = String(r.message || '');
+          const isSubjectHoursIssue =
+            (field === 'subject_lec_hrs' || field === 'subject_lecture_hours') &&
+            msg.toLowerCase().includes('either lecture hours or lab hours');
+
           const missingFields = isSubjectHoursIssue
             ? (!hasLectureHours && !hasLabHours
                 ? ['subject_lec_hrs', 'subject_lab_hrs']
-                : !hasLectureHours
-                  ? ['subject_lec_hrs']
-                  : !hasLabHours
-                    ? ['subject_lab_hrs']
-                    : [])
+                : [])
             : (field ? [field] : []);
+
 
           // Ignore stale hours notifications when the subject already has at least one hour value.
           if (isSubjectHoursIssue && missingFields.length === 0) {
