@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
-import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchSubjects, fetchSubjectById, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
@@ -382,24 +382,52 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         const persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
         const rows = Array.isArray(persisted.rows) ? persisted.rows : [];
 
+        const uniqueSubjectIds = [...new Set(rows.map((row) => Number(row.entity_id)).filter(Boolean))];
+        const subjectById = {};
+
+        await Promise.all(uniqueSubjectIds.map(async (id) => {
+          try {
+            subjectById[id] = await fetchSubjectById(id);
+          } catch (_) {
+            // fall back to any embedded row subject if the direct lookup fails
+          }
+        }));
+
         // Backend now returns subject data embedded in each row (subject_code, subject_descriptive_title, subject)
         // — no N+1 fetches needed
         const items = rows.map((r) => {
-          const subj = r.subject || null;
+          const dbSubject = subjectById[r.entity_id] || r.subject || null;
           const field = r.field_name || null;
+          const hasLectureHours = Number(dbSubject?.subject_lec_hrs ?? 0) > 0;
+          const hasLabHours = Number(dbSubject?.subject_lab_hrs ?? 0) > 0;
           const isSubjectHoursIssue = field === 'subject_lec_hrs' && String(r.message || '').toLowerCase().includes('either lecture hours or lab hours');
+          const missingFields = isSubjectHoursIssue
+            ? (!hasLectureHours && !hasLabHours
+                ? ['subject_lec_hrs', 'subject_lab_hrs']
+                : !hasLectureHours
+                  ? ['subject_lec_hrs']
+                  : !hasLabHours
+                    ? ['subject_lab_hrs']
+                    : [])
+            : (field ? [field] : []);
+
+          // Ignore stale hours notifications when the subject already has at least one hour value.
+          if (isSubjectHoursIssue && missingFields.length === 0) {
+            return null;
+          }
+
           return {
             id: r.id,
-            title: r.subject_descriptive_title || subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
-            description: r.subject_code || subj?.subject_code || null,
+            title: r.subject_descriptive_title || dbSubject?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
+            description: r.subject_code || dbSubject?.subject_code || null,
             severity: normalizeNotificationSeverity(r.severity),
-            missingFields: isSubjectHoursIssue ? ['subject_lec_hrs', 'subject_lab_hrs'] : (field ? [field] : []),
+            missingFields,
             issues: [{ message: r.message, details: r.details, field }],
             rowId: r.entity_id,
-            subject: subj,
+            subject: dbSubject,
             raw: r,
           };
-        });
+        }).filter(Boolean);
 
         setSubjectNotifications(items);
       } catch (err) {
