@@ -1606,7 +1606,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Course offering not found' });
     }
 
-    let subjectDelete = { action: 'skipped', reason: 'No subject code.' };
+    let subjectDelete = { action: 'skipped', reason: 'No subject match found.' };
     let roomPrune = { action: 'skipped' };
 
     const subjectCode = normalizeCell(target?.code);
@@ -1634,6 +1634,58 @@ router.delete('/:id', async (req, res) => {
         subjectDelete = {
           action: 'failed',
           error: subjectErr instanceof Error ? subjectErr.message : 'Unknown subject delete error',
+        };
+      }
+    } else {
+      const subjectCourseNo = normalizeCell(target?.course_no);
+      const subjectTitle = normalizeCell(target?.descriptive_title);
+      const subjectSection = normalizeCell(target?.section);
+      const subjectCurrId = Number(target?.curr_id);
+      const subjectDepartmentId = target?.department_id ?? null;
+
+      const canFallbackDelete =
+        subjectCourseNo &&
+        subjectTitle &&
+        subjectSection &&
+        Number.isFinite(subjectCurrId) &&
+        subjectDepartmentId !== null &&
+        subjectDepartmentId !== undefined;
+
+      if (canFallbackDelete) {
+        try {
+          const { data: deletedSubjects, error: subjectDeleteError } = await supabaseAdmin
+            .from('subjects')
+            .delete()
+            .ilike('subject_course_no', subjectCourseNo)
+            .ilike('subject_descriptive_title', subjectTitle)
+            .eq('curr_id', subjectCurrId)
+            .eq('department_id', subjectDepartmentId)
+            .ilike('subject_section', subjectSection)
+            .select('subject_id,subject_code,subject_course_no');
+
+          if (subjectDeleteError) {
+            subjectDelete = {
+              action: 'failed',
+              error: subjectDeleteError.message,
+            };
+          } else {
+            subjectDelete = {
+              action: 'deleted',
+              count: deletedSubjects?.length ?? 0,
+              rows: deletedSubjects ?? [],
+              matchedBy: 'course_no+title+curr+department+section',
+            };
+          }
+        } catch (subjectErr) {
+          subjectDelete = {
+            action: 'failed',
+            error: subjectErr instanceof Error ? subjectErr.message : 'Unknown subject delete error',
+          };
+        }
+      } else {
+        subjectDelete = {
+          action: 'skipped',
+          reason: 'Missing subject code and fallback match fields.',
         };
       }
     }
