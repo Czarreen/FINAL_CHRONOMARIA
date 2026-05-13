@@ -211,6 +211,44 @@ function formatMinutesAsTime(totalMinutes) {
   return `${hours12}:${minutes} ${suffix}`;
 }
 
+function areMergedOfferings(leftOffering, rightOffering) {
+  if (!leftOffering || !rightOffering) return false;
+  // Two offerings are merged if they have identical schedules and rooms (same physical class, different curricula)
+  const normMthLeft = normalizeUpper(leftOffering.mth_schedule || '');
+  const normMthRight = normalizeUpper(rightOffering.mth_schedule || '');
+  const normTfsLeft = normalizeUpper(leftOffering.tfs_schedule || '');
+  const normTfsRight = normalizeUpper(rightOffering.tfs_schedule || '');
+  
+  const mthRoomLeft = normalizeText(leftOffering.mth_room_id || '');
+  const mthRoomRight = normalizeText(rightOffering.mth_room_id || '');
+  const tfsRoomLeft = normalizeText(leftOffering.tfs_room_id || '');
+  const tfsRoomRight = normalizeText(rightOffering.tfs_room_id || '');
+  
+  // Must have exactly the same schedule structure (both must have the same set of schedules)
+  const leftHasMth = !!normMthLeft;
+  const rightHasMth = !!normMthRight;
+  const leftHasTfs = !!normTfsLeft;
+  const rightHasTfs = !!normTfsRight;
+  
+  // If schedule structure differs, they're not merged
+  if ((leftHasMth !== rightHasMth) || (leftHasTfs !== rightHasTfs)) {
+    return false;
+  }
+  
+  // If both offerings have an MTH schedule, they must match exactly (days + time)
+  if (leftHasMth && rightHasMth && (normMthLeft !== normMthRight || mthRoomLeft !== mthRoomRight)) {
+    return false;
+  }
+  
+  // If both offerings have a TFS schedule, they must match exactly (days + time)
+  if (leftHasTfs && rightHasTfs && (normTfsLeft !== normTfsRight || tfsRoomLeft !== tfsRoomRight)) {
+    return false;
+  }
+  
+  // If we got here, they have matching schedules and rooms (and the same structure)
+  return leftHasMth || leftHasTfs;
+}
+
 function calculateDepartmentUnitNeeds(departmentId, gaOfferings) {
   return gaOfferings
     .filter((offering) => toNumber(offering.department_id) === departmentId)
@@ -463,6 +501,7 @@ function buildPreflight(snapshot) {
           offeringDeptName: offering.department_name || offering.department_id || null,
           start: block.start,
           end: block.end,
+          offering: offering,
         });
         roomReservations.set(roomKey, entries);
       }
@@ -538,6 +577,12 @@ function buildPreflight(snapshot) {
     let firstConflict = null;
     for (let index = 1; index < ordered.length; index += 1) {
       if (overlaps(ordered[index - 1], ordered[index])) {
+        // Check if the overlapping offerings are merged subjects (same schedule/room, different curricula)
+        // If merged, they're the same physical class and not a real conflict
+        if (areMergedOfferings(ordered[index - 1].offering, ordered[index].offering)) {
+          // Skip this conflict - they're the same class
+          continue;
+        }
         hasConflict = true;
         firstConflict = {
           left: ordered[index - 1],
