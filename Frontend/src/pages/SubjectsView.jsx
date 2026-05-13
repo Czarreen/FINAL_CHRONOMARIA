@@ -909,7 +909,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       {/* Subjects Table */}
       {!loading && !error && subjects.length > 0 && (
 <div className="bg-white/90 rounded-xl border border-white/60 overflow-hidden flex-1 flex flex-col mt-1 min-h-0">
-          <div className="overflow-auto flex-1">
+          <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
             <table className="min-w-full w-full text-left text-xs">
               <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
