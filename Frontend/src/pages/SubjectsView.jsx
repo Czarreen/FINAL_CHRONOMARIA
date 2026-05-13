@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
-import { fetchSubjects, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
@@ -119,6 +119,42 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     });
   }
 
+  // Selection state for bulk actions (checkboxes)
+  const [selectedSubjects, setSelectedSubjects] = useState(new Set());
+
+  const toggleSelectSubject = (subjectId) => {
+    setSelectedSubjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(subjectId)) next.delete(subjectId);
+      else next.add(subjectId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllSubjects = () => {
+    if (selectedSubjects.size === sortedSubjects.length && sortedSubjects.length > 0) {
+      setSelectedSubjects(new Set());
+    } else {
+      setSelectedSubjects(new Set(sortedSubjects.map((s) => s.subject_id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedSubjects.size === 0) return;
+    if (!window.confirm(`Delete ${selectedSubjects.size} subject(s)? This cannot be undone.`)) return;
+    try {
+      setUpdateError(null);
+      const ids = Array.from(selectedSubjects);
+      const deletePromises = ids.map((id) => deleteSubject(id));
+      await Promise.all(deletePromises);
+      setSelectedSubjects(new Set());
+      await loadSubjects();
+      await loadSubjectNotifications();
+    } catch (err) {
+      setUpdateError(err.message || 'Failed to delete subjects');
+    }
+  };
+
   function normalizeNotificationSeverity(severity) {
     if (severity === 'high') return 'critical';
     if (severity === 'critical' || severity === 'medium' || severity === 'low') return severity;
@@ -168,6 +204,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
   const { setHighlight } = useRowHighlight();
 
+
   // Load subjects data
   useEffect(() => {
     loadSubjects();
@@ -200,6 +237,22 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   useEffect(() => {
     loadRoomLookup();
   }, []);
+
+  // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
+  const conflictSubjectMap = useMemo(() => {
+    const map = new Map();
+    for (const item of subjectNotifications) {
+      const id = Number(item.rowId);
+      if (!id) continue;
+      const conflictCount = (item.issues || []).filter(
+        (issue) => issue.field === 'schedule_conflict' || issue.field_name === 'schedule_conflict'
+      ).length;
+      if (conflictCount > 0) {
+        map.set(id, { hasScheduleConflict: true, conflictingCount: conflictCount });
+      }
+    }
+    return map;
+  }, [subjectNotifications]);
 
   // Auto-toggle subject_status based on open notification issues
   // Runs on initial load, refresh, and whenever notifications or subjects change.
@@ -251,7 +304,24 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     runBatched();
   }, [subjectNotifications, subjects, subjectNotificationsLoading]);
 
-  async function loadRoomLookup() {
+  async function loadRoomLookup({ forceRefresh = false } = {}) {
+    // Use sessionStorage cache to avoid re-fetching rooms on every mount
+    const CACHE_KEY = 'chronomaria_room_lookup';
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            setRoomNameById(parsed);
+            return;
+          }
+        }
+      } catch (_) {
+        // ignore parse errors
+      }
+    }
+
     try {
       const nextLookup = {};
       const pageSize = 200;
@@ -275,6 +345,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       }
 
       setRoomNameById(nextLookup);
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup)); } catch (_) {}
     } catch {
       setRoomNameById({});
     }
@@ -311,27 +382,16 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         const persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
         const rows = Array.isArray(persisted.rows) ? persisted.rows : [];
 
-        // Enrich with subject data for better display and action wiring
-        const uniqueIds = Array.from(new Set(rows.map((r) => r.entity_id).filter(Boolean))).slice(0, 500);
-        const subjectById = {};
-        await Promise.all(uniqueIds.map(async (id) => {
-          try {
-            const s = await fetchSubjectById(id);
-            subjectById[id] = s;
-          } catch (_) {
-            // ignore missing subjects
-          }
-        }));
-
-        // Map persisted rows into the NotificationButton item shape
+        // Backend now returns subject data embedded in each row (subject_code, subject_descriptive_title, subject)
+        // — no N+1 fetches needed
         const items = rows.map((r) => {
-          const subj = subjectById[r.entity_id] || null;
+          const subj = r.subject || null;
           const field = r.field_name || null;
           const isSubjectHoursIssue = field === 'subject_lec_hrs' && String(r.message || '').toLowerCase().includes('either lecture hours or lab hours');
           return {
             id: r.id,
-            title: subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
-            description: subj?.subject_code || null,
+            title: r.subject_descriptive_title || subj?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
+            description: r.subject_code || subj?.subject_code || null,
             severity: normalizeNotificationSeverity(r.severity),
             missingFields: isSubjectHoursIssue ? ['subject_lec_hrs', 'subject_lab_hrs'] : (field ? [field] : []),
             issues: [{ message: r.message, details: r.details, field }],
@@ -377,34 +437,17 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       return;
     }
 
+    // Use the page-lookup endpoint instead of iterating up to 200 pages
     (async () => {
       try {
-        const maxSearchPages = 200;
-        for (let candidatePage = 1; candidatePage <= maxSearchPages; candidatePage += 1) {
-          const result = await fetchSubjects({
-            page: candidatePage,
-            limit,
-            search,
-            status: statusFilter,
-          });
-
-          const rows = Array.isArray(result.rows) ? result.rows : [];
-          if (rows.some((row) => Number(row.subject_id) === numericId)) {
-            if (candidatePage !== page) {
-              setPage(candidatePage);
-            }
-
-            window.setTimeout(() => {
-              setHighlight(subjectId, 'SubjectsView');
-            }, 150);
-
-            break;
-          }
-
-          if (rows.length < limit) {
-            break;
-          }
+        const targetPage = await fetchSubjectPageNumber(numericId, { search, status: statusFilter, limit });
+        if (!targetPage) return;
+        if (targetPage !== page) {
+          setPage(targetPage);
         }
+        window.setTimeout(() => {
+          setHighlight(subjectId, 'SubjectsView');
+        }, 150);
       } catch (_) {
         // ignore fallback failures
       }
@@ -678,12 +721,25 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     return mthRoom || tfsRoom || '—';
   }
 
+  // Pre-computed set of subject IDs that have notifications — avoids O(n) .some() per row
+  const notificationSubjectIds = useMemo(
+    () => new Set(subjectNotifications.map((item) => Number(item.rowId)).filter(Boolean)),
+    [subjectNotifications]
+  );
+
   function getSubjectIssueState(subjectId) {
     const id = Number(subjectId);
-    const hasOpenIssues = subjectNotifications.some(
-      (item) => Number(item.rowId) === id
-    );
-    return { hasOpenIssues };
+    const hasNotificationIssues = notificationSubjectIds.has(id);
+    const conflictState = conflictSubjectMap.get(id);
+    const hasScheduleConflict = Boolean(conflictState?.hasScheduleConflict);
+    const conflictingCount = Number(conflictState?.conflictingCount || 0);
+
+    return {
+      hasOpenIssues: hasNotificationIssues || hasScheduleConflict,
+      hasNotificationIssues,
+      hasScheduleConflict,
+      conflictingCount,
+    };
   }
 
   return (
@@ -775,6 +831,14 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
             <PlusCircle size={16} />
             <span>Add</span>
           </button>
+          {selectedSubjects.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              className="ml-2 rounded-lg bg-red-100 text-red-700 px-3 py-1.5 text-sm font-semibold hover:bg-red-200"
+            >
+              Delete Selected ({selectedSubjects.size})
+            </button>
+          )}
         </div>
       </div>
 
@@ -845,10 +909,18 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       {/* Subjects Table */}
       {!loading && !error && subjects.length > 0 && (
 <div className="bg-white/90 rounded-xl border border-white/60 overflow-hidden flex-1 flex flex-col mt-1 min-h-0">
-          <div className="overflow-auto flex-1">
+          <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
             <table className="min-w-full w-full text-left text-xs">
               <thead>
-<tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
+                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
+                  <th className="px-4 py-2 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedSubjects.size > 0 && selectedSubjects.size === sortedSubjects.length}
+                      onChange={toggleSelectAllSubjects}
+                      aria-label="Select all subjects"
+                    />
+                  </th>
                   {columns.map(col => visibleColumns.has(col.key) && (
                     <th key={col.key} className="px-4 py-2 text-left">
                       <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
@@ -861,14 +933,31 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20">
-                {sortedSubjects.map((subject, index) => (
-                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                {sortedSubjects.map((subject, index) => {
+                  const issueState = getSubjectIssueState(subject.subject_id);
+                  return (
+                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${issueState.hasScheduleConflict ? 'bg-red-50/70' : index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubjects.has(subject.subject_id)}
+                        onChange={() => toggleSelectSubject(subject.subject_id)}
+                        aria-label={`Select subject ${subject.subject_code || subject.subject_id}`}
+                      />
+                    </td>
                     {columns.map(col => visibleColumns.has(col.key) && (
                       <td key={col.key} className="px-4 py-2">
                         {col.key === 'subject_code' && (
-                          <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                            {subject.subject_code || 'N/A'}
-                          </span>
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                              {subject.subject_code || 'N/A'}
+                            </span>
+                            {issueState.hasScheduleConflict && (
+                              <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
+                              </span>
+                            )}
+                          </div>
                         )}
                         {col.key === 'subject_course_no' && (
                           <span className="text-xs font-medium text-on-surface">{subject.subject_course_no || '—'}</span>
@@ -945,7 +1034,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>

@@ -155,7 +155,7 @@ export async function upsertSubjectNotificationCache(subject) {
   // Fetch all subjects so conflict detection can compare against peers.
   const { data: allSubjects, error: allFetchError } = await supabaseAdmin
     .from('subjects')
-    .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room');
+    .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no');
 
   if (allFetchError) {
     throw new Error(allFetchError.message);
@@ -189,7 +189,7 @@ export async function upsertSubjectNotificationCache(subject) {
 export async function rescanAllSubjectNotifications() {
   const { data: subjects, error: fetchError } = await supabaseAdmin
     .from('subjects')
-    .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room')
+    .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no')
     .order('subject_id', { ascending: true });
 
   if (fetchError) {
