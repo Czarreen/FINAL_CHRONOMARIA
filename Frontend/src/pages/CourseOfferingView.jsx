@@ -965,29 +965,9 @@ export default function CourseOfferingView() {
 
   const getRoomName = (roomId) => {
     if (roomId === null || roomId === undefined || roomId === '') return '—';
-
     const idNum = Number(roomId);
     if (isNaN(idNum)) return `Room ${roomId}`;
-
-    // Look up by room_id (integer)
-    const room = rooms.find((r) => {
-      if (!r) return false;
-      // Try matching by room_id as number
-      if (r.room_id !== undefined && r.room_id !== null) {
-        if (Number(r.room_id) === idNum) return true;
-      }
-      // Try matching by id as number (fallback)
-      if (r.id !== undefined && r.id !== null) {
-        if (Number(r.id) === idNum) return true;
-      }
-      return false;
-    });
-
-    if (room) {
-      return room.room_name || room.name || `Room ${roomId}`;
-    }
-
-    return `Room ${roomId}`;
+    return roomById.get(idNum) ?? `Room ${roomId}`;
   };
 
   const toggleColumnVisibility = (columnKey) => {
@@ -1101,6 +1081,18 @@ export default function CourseOfferingView() {
 
     return true;
   };
+
+  // Pre-computed room id→name map: avoids O(n) linear scan per getRoomName call
+  const roomById = useMemo(() => {
+    const map = new Map();
+    for (const r of rooms) {
+      if (!r) continue;
+      const name = r.room_name || r.name;
+      if (r.room_id != null) map.set(Number(r.room_id), name || `Room ${r.room_id}`);
+      else if (r.id != null) map.set(Number(r.id), name || `Room ${r.id}`);
+    }
+    return map;
+  }, [rooms]);
 
   // Pre-computed room→offerings map: avoids O(n) filter per room per render
   const roomConflictMap = useMemo(() => {
