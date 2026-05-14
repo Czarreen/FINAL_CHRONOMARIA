@@ -12,17 +12,31 @@ router.get('/', async (req, res) => {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     const search = req.query.search?.trim() || '';
+    const searchField = req.query.searchField || 'all';
     const status = req.query.status || '';
 
     let query = supabaseAdmin
       .from('subjects')
       .select('*, departments(department_id, department_name)', { count: 'exact' });
 
-// Apply search filter (search in all text columns)
+    // Apply search filter based on searchField
     if (search) {
-      query = query.or(
-        `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
-      );
+      const fieldMap = {
+        subject_code: `subject_code.ilike.%${search}%`,
+        subject_course_no: `subject_course_no.ilike.%${search}%`,
+        subject_descriptive_title: `subject_descriptive_title.ilike.%${search}%`,
+        curr_id: `curr_id.ilike.%${search}%`,
+      };
+
+      if (fieldMap[searchField]) {
+        // Search specific field
+        query = query.filter(searchField, 'ilike', `%${search}%`);
+      } else {
+        // Search all text columns (when searchField is 'all' or unrecognized)
+        query = query.or(
+          `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%,curr_id.ilike.%${search}%`
+        );
+      }
     }
 
     // Apply status filter

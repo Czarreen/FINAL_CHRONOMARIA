@@ -205,11 +205,25 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
 
   const { setHighlight } = useRowHighlight();
 
+  // Debounced search: update search state when searchInput changes
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1); // Reset to page 1 when search changes
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchInput]);
+
+  const handleSearchNow = useCallback(() => {
+    setSearch(searchInput);
+    setPage(1);
+  }, [searchInput]);
 
   // Load subjects data
   useEffect(() => {
     loadSubjects();
-  }, [page, limit, search, statusFilter, subjectMutationKey]);
+  }, [page, limit, search, searchField, statusFilter, subjectMutationKey]);
 
   useEffect(() => {
     loadSubjectNotifications();
@@ -469,7 +483,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     // Use the page-lookup endpoint instead of iterating up to 200 pages
     (async () => {
       try {
-        const targetPage = await fetchSubjectPageNumber(numericId, { search, status: statusFilter, limit });
+        const targetPage = await fetchSubjectPageNumber(numericId, { search, searchField, status: statusFilter, limit });
         if (!targetPage) return;
         if (targetPage !== page) {
           setPage(targetPage);
@@ -859,6 +873,14 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     };
   }
 
+  const searchFieldLabel = {
+    all: 'subjects',
+    subject_code: 'code',
+    subject_course_no: 'course no',
+    subject_descriptive_title: 'title',
+    curr_id: 'curriculum ID',
+  };
+
   return (
 <div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-right-4 duration-500">
       {/* Header with Title, Description, and Action Buttons */}
@@ -984,12 +1006,20 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
               <option value="curr_id">Curriculum ID</option>
             </select>
             <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <button
+                type="button"
+                onClick={handleSearchNow}
+                className="absolute left-0 top-0 flex h-full w-8 items-center justify-center text-on-surface-variant transition-colors hover:text-primary"
+                title="Search"
+              >
+                <Search size={14} />
+              </button>
               <input
                 type="text"
-                placeholder={`Search ${searchField === 'all' ? 'subjects' : searchField.replace('_', ' ')}...`}
+                placeholder={`Search ${searchFieldLabel[searchField] ?? searchField.replace(/_/g, ' ')}...`}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearchNow(); }}
                 className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
               />
               {searchInput && (
