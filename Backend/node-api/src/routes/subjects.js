@@ -33,8 +33,9 @@ router.get('/', async (req, res) => {
         query = query.filter(searchField, 'ilike', `%${search}%`);
       } else {
         // Search all text columns (when searchField is 'all' or unrecognized)
+        // Note: curr_id is excluded because it's an integer; use specific field search for curr_id lookups
         query = query.or(
-          `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%,curr_id.ilike.%${search}%`
+          `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
         );
       }
     }
