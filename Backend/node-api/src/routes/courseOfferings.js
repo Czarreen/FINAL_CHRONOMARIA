@@ -1806,22 +1806,26 @@ router.delete('/:id', async (req, res) => {
 
       const canFallbackDelete =
         subjectCourseNo &&
-        subjectTitle &&
         subjectSection &&
-        Number.isFinite(subjectCurrId) &&
-        subjectDepartmentId !== null &&
-        subjectDepartmentId !== undefined;
+        Number.isFinite(subjectCurrId);
 
       if (canFallbackDelete) {
         try {
-          const { data: deletedSubjects, error: subjectDeleteError } = await supabaseAdmin
+          let deleteQuery = supabaseAdmin
             .from('subjects')
             .delete()
             .ilike('subject_course_no', subjectCourseNo)
-            .ilike('subject_descriptive_title', subjectTitle)
             .eq('curr_id', subjectCurrId)
-            .eq('department_id', subjectDepartmentId)
-            .ilike('subject_section', subjectSection)
+            .ilike('subject_section', subjectSection);
+
+          if (subjectTitle) {
+            deleteQuery = deleteQuery.ilike('subject_descriptive_title', subjectTitle);
+          }
+          if (subjectDepartmentId !== null && subjectDepartmentId !== undefined) {
+            deleteQuery = deleteQuery.eq('department_id', subjectDepartmentId);
+          }
+
+          const { data: deletedSubjects, error: subjectDeleteError } = await deleteQuery
             .select('subject_id,subject_code,subject_course_no');
 
           if (subjectDeleteError) {
@@ -1834,7 +1838,7 @@ router.delete('/:id', async (req, res) => {
               action: 'deleted',
               count: deletedSubjects?.length ?? 0,
               rows: deletedSubjects ?? [],
-              matchedBy: 'course_no+title+curr+department+section',
+              matchedBy: 'course_no+curr+section',
             };
           }
         } catch (subjectErr) {
@@ -1846,7 +1850,7 @@ router.delete('/:id', async (req, res) => {
       } else {
         subjectDelete = {
           action: 'skipped',
-          reason: 'Missing subject code and fallback match fields.',
+          reason: 'Missing subject code and insufficient fallback fields (need course_no, curr_id, section).',
         };
       }
     }

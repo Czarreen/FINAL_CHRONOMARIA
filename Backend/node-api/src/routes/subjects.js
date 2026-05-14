@@ -18,10 +18,10 @@ router.get('/', async (req, res) => {
       .from('subjects')
       .select('*, departments(department_id, department_name)', { count: 'exact' });
 
-// Apply search filter (search in code, title, schedule, and rooms)
+// Apply search filter (search in all text columns)
     if (search) {
       query = query.or(
-        `subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%`
+        `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
       );
     }
 
@@ -156,9 +156,9 @@ router.get('/:id/page', async (req, res) => {
       .select('subject_id')
       .order('subject_code', { ascending: true });
 
-    if (search) {
+if (search) {
       query = query.or(
-        `subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%`
+        `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
       );
     }
     if (status) {
