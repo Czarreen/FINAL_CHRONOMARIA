@@ -347,6 +347,7 @@ function mapSubjectsToGaOfferings(subjects) {
       units: toNumber(representative.subject_units),
       lec_hrs: toNumber(representative.subject_lec_hrs),
       lab_hrs: toNumber(representative.subject_lab_hrs),
+      is_general: Boolean(representative.is_general),
       mth_schedule: normalizeText(representative.mth_schedule) || null,
       mth_room_id: normalizeText(representative.mth_room) || null,
       tfs_schedule: normalizeText(representative.tfs_schedule) || null,
@@ -370,6 +371,8 @@ function buildPreflight(snapshot) {
   const roomLookup = buildRoomLookup(snapshot.rooms);
   const roomReservations = new Map();
   const activeFacultyByDepartment = new Map();
+  const allOfferings = Array.isArray(snapshot.offerings) ? snapshot.offerings : [];
+  const assignableOfferings = allOfferings.filter((offering) => !Boolean(offering.is_general));
 
   for (const faculty of snapshot.faculty) {
     const missing = REQUIRED_FACULTY_FIELDS.filter((field) => isEmptyValue(faculty[field]));
@@ -418,9 +421,7 @@ function buildPreflight(snapshot) {
     }
   }
 
-  const gaOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
-
-  for (const offering of gaOfferings) {
+  for (const offering of allOfferings) {
     const missing = REQUIRED_OFFERING_FIELDS.filter((field) => isEmptyValue(offering[field]));
     if (missing.length > 0) {
       for (const field of missing) {
@@ -509,7 +510,7 @@ function buildPreflight(snapshot) {
   }
 
   const departmentsWithOfferings = new Set(
-    gaOfferings
+    assignableOfferings
       .map((offering) => toNumber(offering.department_id))
       .filter((departmentId) => departmentId !== null)
   );
@@ -521,7 +522,7 @@ function buildPreflight(snapshot) {
   // Calculate unit needs for each department
   const deptUnitNeeds = new Map();
   for (const departmentId of departmentsWithOfferings) {
-    const unitNeeds = calculateDepartmentUnitNeeds(departmentId, gaOfferings);
+    const unitNeeds = calculateDepartmentUnitNeeds(departmentId, assignableOfferings);
     deptUnitNeeds.set(departmentId, unitNeeds);
   }
 
@@ -657,7 +658,7 @@ async function fetchSnapshot() {
     query(`
       select s.subject_id, s.subject_code, s.subject_course_no, s.department_id, s.subject_section,
              s.subject_descriptive_title, s.subject_units, s.subject_lec_hrs, s.subject_lab_hrs,
-             s.subject_status, s.mth_schedule, s.tfs_schedule, s.mth_room, s.tfs_room, s.curr_id,
+             s.is_general, s.subject_status, s.mth_schedule, s.tfs_schedule, s.mth_room, s.tfs_room, s.curr_id,
              d.department_name
       from public.subjects s
       left join public.departments d on d.department_id = s.department_id
@@ -731,19 +732,25 @@ async function callPythonOptimizer(payload) {
 }
 
 async function persistFacultyLoading(assignments, snapshot) {
-  if (!Array.isArray(assignments) || assignments.length === 0) {
-    return { persisted: 0 };
+  const roomLookup = buildRoomLookup(snapshot.rooms);
+  const assignmentByOfferingId = new Map();
+
+  for (const assignment of Array.isArray(assignments) ? assignments : []) {
+    const offeringId = Number(assignment?.offering?.id);
+    if (Number.isFinite(offeringId)) {
+      assignmentByOfferingId.set(offeringId, assignment);
+    }
   }
 
-  const rows = assignments.map((assignment, index) => {
-    const offering = assignment.offering;
-    const mthRoom = resolveRoomReference(offering.mth_room_id, buildRoomLookup(snapshot.rooms));
-    const tfsRoom = resolveRoomReference(offering.tfs_room_id, buildRoomLookup(snapshot.rooms));
+  const rows = (Array.isArray(snapshot.offerings) ? snapshot.offerings : []).map((offering, index) => {
+    const assignment = assignmentByOfferingId.get(Number(offering.id));
+    const mthRoom = resolveRoomReference(offering.mth_room_id, roomLookup);
+    const tfsRoom = resolveRoomReference(offering.tfs_room_id, roomLookup);
 
     return {
       facloading_id: index + 1,
       curr_id: toNumber(offering.curr_id),
-      faculty_id: toNumber(assignment.faculty.faculty_id),
+      faculty_id: offering.is_general ? null : toNumber(assignment?.faculty?.faculty_id),
       code: normalizeText(offering.code) || null,
       course_no: normalizeText(offering.course_no) || null,
       department_id: toNumber(offering.department_id),
@@ -759,6 +766,10 @@ async function persistFacultyLoading(assignments, snapshot) {
       merged: toBoolean(offering.merged),
     };
   });
+
+  if (rows.length === 0) {
+    return { persisted: 0 };
+  }
 
   await withPgClient(async (client) => {
     const columns = [
@@ -846,10 +857,12 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     dry_run: Boolean(dryRun || constraints.dry_run),
   };
 
+  const assignableOfferings = subjectDrivenOfferings.filter((offering) => !Boolean(offering.is_general));
+
   const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
     faculty: snapshot.faculty,
-    offerings: subjectDrivenOfferings,
+    offerings: assignableOfferings,
     rooms: snapshot.rooms,
     subjects: snapshot.subjects,
     constraints: normalizedConstraints,

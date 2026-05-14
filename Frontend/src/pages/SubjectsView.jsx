@@ -18,6 +18,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [updatingGeneral, setUpdatingGeneral] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
   const [roomNameById, setRoomNameById] = useState({});
@@ -31,6 +32,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     subject_units: 3,
     subject_lec_hrs: 3,
     subject_lab_hrs: 0,
+    is_general: false,
     mth_schedule: '',
     tfs_schedule: '',
     mth_room: '',
@@ -63,6 +65,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     { key: 'room', label: 'Room' },
     { key: 'subject_units', label: 'Units' },
     { key: 'subject_lec_lab', label: 'Lec/Lab' },
+    { key: 'is_general', label: 'General' },
     { key: 'subject_status', label: 'Status' },
   ];
 
@@ -518,6 +521,29 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
   }
 
+  async function handleGeneralToggle(subjectId, currentValue) {
+    const newValue = !Boolean(currentValue);
+    try {
+      setUpdatingGeneral(subjectId);
+      setUpdateError(null);
+      const updated = await updateSubject(subjectId, { is_general: newValue });
+      setSubjects(subjects.map((s) =>
+        s.subject_id === subjectId
+          ? { ...s, ...updated }
+          : s
+      ));
+    } catch (err) {
+      if (String(err.message || '').includes('404')) {
+        await loadSubjects();
+        setUpdateError('That subject was removed. The list has been refreshed.');
+        return;
+      }
+      setUpdateError(err.message || 'Failed to update general flag');
+    } finally {
+      setUpdatingGeneral(null);
+    }
+  }
+
   async function handleEditSubject(subject, { fromNotification = false, missingFields = [] } = {}) {
     setEditingSubject({
       ...subject,
@@ -531,6 +557,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       subject_units: subject.subject_units || 0,
       subject_lec_hrs: subject.subject_lec_hrs || 0,
       subject_lab_hrs: subject.subject_lab_hrs || 0,
+      is_general: Boolean(subject.is_general),
       mth_schedule: subject.mth_schedule || '',
       tfs_schedule: subject.tfs_schedule || '',
       mth_room: subject.mth_room || subject.mth_room_id || '',
@@ -632,6 +659,8 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
           return extractRoomSummary(subject);
         case 'subject_lec_lab':
           return [Number(subject.subject_lec_hrs ?? 0), Number(subject.subject_lab_hrs ?? 0)];
+        case 'is_general':
+          return subject.is_general ? 1 : 0;
         case 'subject_status':
           return String(subject.subject_status ?? '');
         default:
@@ -680,6 +709,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         subject_units: 3,
         subject_lec_hrs: 3,
         subject_lab_hrs: 0,
+        is_general: false,
         mth_schedule: '',
         tfs_schedule: '',
         mth_room: '',
@@ -1021,6 +1051,33 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                         {col.key === 'subject_lec_lab' && (
                           <span className="text-center text-xs font-medium text-on-surface-variant">{subject.subject_lec_hrs || 0}h / {subject.subject_lab_hrs || 0}h</span>
                         )}
+                        {col.key === 'is_general' && (
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => handleGeneralToggle(subject.subject_id, subject.is_general)}
+                              disabled={updatingGeneral === subject.subject_id}
+                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
+                                subject.is_general
+                                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              } disabled:opacity-50`}
+                            >
+                              {updatingGeneral === subject.subject_id ? (
+                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                              ) : subject.is_general ? (
+                                <>
+                                  <Check size={12} />
+                                  General
+                                </>
+                              ) : (
+                                <>
+                                  <X size={12} />
+                                  In scope
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                         {col.key === 'subject_status' && (
                           <div className="flex justify-center">
                             <button
@@ -1313,6 +1370,20 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  General / In scope
+                </label>
+                <select
+                  value={newSubject.is_general ? 'true' : 'false'}
+                  onChange={(e) => setNewSubject({ ...newSubject, is_general: e.target.value === 'true' })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="false">In scope</option>
+                  <option value="true">General</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                   Status
                 </label>
                 <select
@@ -1532,6 +1603,20 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  General / In scope
+                </label>
+                <select
+                  value={editingData.is_general ? 'true' : 'false'}
+                  onChange={(e) => setEditingData({ ...editingData, is_general: e.target.value === 'true' })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="false">In scope</option>
+                  <option value="true">General</option>
+                </select>
               </div>
 
               <div>

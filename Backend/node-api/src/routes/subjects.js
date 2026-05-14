@@ -87,6 +87,7 @@ router.post('/', async (req, res) => {
       'subject_units',
       'subject_lec_hrs',
       'subject_lab_hrs',
+      'is_general',
       'mth_schedule',
       'tfs_schedule',
       'mth_room',
@@ -215,7 +216,7 @@ router.patch('/:id', async (req, res) => {
     const updates = req.body;
 
     // Only allow certain fields to be updated
-    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status', 'curr_id'];
+    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'is_general', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status', 'curr_id'];
     const sanitizedUpdates = {};
 
     if ('mth_room_id' in updates && !('mth_room' in updates)) {
