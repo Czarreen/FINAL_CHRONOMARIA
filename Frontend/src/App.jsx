@@ -19,6 +19,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [authRefreshKey, setAuthRefreshKey] = useState(0);
+  const [subjectMutationKey, setSubjectMutationKey] = useState(0);
 
   const handleOpenSettings = () => {
     setCurrentView('settings');
@@ -57,11 +58,11 @@ export default function App() {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
       case 'faculty': return <FacultyView />;
-      case 'subjects': return <SubjectsView authRefreshKey={authRefreshKey} />;
+      case 'subjects': return <SubjectsView authRefreshKey={authRefreshKey} subjectMutationKey={subjectMutationKey} />;
       case 'rooms': return <RoomsView authRefreshKey={authRefreshKey} />;
       case 'schedule': return <ScheduleView />;
       case 'faculty-loading': return <FacultyLoadingView />;
-      case 'course-offering': return <CourseOfferingView />;
+      case 'course-offering': return <CourseOfferingView onSubjectMutated={() => setSubjectMutationKey((k) => k + 1)} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={setCurrentUser} />;
       default: return <DashboardView />;
     }
