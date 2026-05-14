@@ -757,29 +757,79 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     return match ? match[0].replace(/\s+/g, '') : '';
   }
 
-  function resolveRoomDisplayValue(value) {
-    const normalized = String(value ?? '').trim();
-    if (!normalized) {
+  function getRoomName(roomId) {
+    if (roomId === null || roomId === undefined || roomId === '') {
       return '';
     }
 
-    const tokens = normalized
+    let token = String(roomId).trim();
+    if (!token) {
+      return '';
+    }
+
+    token = token.replace(/^(?:room|rm)\s*/i, '').trim();
+    if (!token) {
+      return '';
+    }
+
+    const lookup = roomNameById[token] || roomNameById[String(Number(token))];
+    return lookup || token;
+  }
+
+  function parseRoomTokens(value) {
+    if (value === null || value === undefined || value === '') {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => parseRoomTokens(item));
+    }
+
+    if (typeof value === 'object') {
+      if (value.room_id || value.id) {
+        return [String(value.room_id ?? value.id)];
+      }
+      return [String(value)];
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+      return [];
+    }
+
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(raw);
+        return parseRoomTokens(parsed);
+      } catch (_) {
+        // fall back to token parsing below
+      }
+    }
+
+    return raw
+      .replace(/^[\[\]"]+|[\[\]"]+$/g, '')
       .split(/\s*[,/]\s*/)
       .map((token) => token.trim())
+      .filter(Boolean)
+      .map((token) => token.replace(/^(?:room|rm)\s*/i, '').trim())
       .filter(Boolean);
+  }
 
+  function resolveRoomDisplayValue(value) {
+    const tokens = parseRoomTokens(value);
     if (tokens.length === 0) {
       return '';
     }
 
-    return tokens
-      .map((token) => roomNameById[token] || token)
+    return Array.from(new Set(tokens))
+      .map(getRoomName)
+      .filter(Boolean)
       .join(' / ');
   }
 
   function extractRoomSummary(subject) {
-    const mthRoom = resolveRoomDisplayValue(subject.mth_room ?? subject.mth_room_id ?? '');
-    const tfsRoom = resolveRoomDisplayValue(subject.tfs_room ?? subject.tfs_room_id ?? '');
+    const mthRoom = subject.mth_room_name || resolveRoomDisplayValue(subject.mth_room ?? subject.mth_room_id ?? '');
+    const tfsRoom = subject.tfs_room_name || resolveRoomDisplayValue(subject.tfs_room ?? subject.tfs_room_id ?? '');
 
     if (mthRoom && tfsRoom && mthRoom !== tfsRoom) {
       return `MTH: ${mthRoom} | TFS: ${tfsRoom}`;

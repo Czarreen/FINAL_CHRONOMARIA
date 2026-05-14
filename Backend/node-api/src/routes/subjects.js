@@ -49,12 +49,55 @@ router.get('/', async (req, res) => {
       console.error('Error fetching active count:', activeCountError);
     }
 
+    // Enrich each subject row with resolved room names from the rooms table.
+    // subjects.mth_room / tfs_room store numeric room IDs as text (e.g. "5" or "5/10").
+    const rows = data ?? [];
+    const splitRoomIds = (val) => {
+      if (!val) return [];
+      return String(val)
+        .replace(/^[\[\]"]+|[\[\]"]+$/g, '')
+        .split(/\s*[,/]\s*/)
+        .map((t) => t.replace(/^(?:room|rm)\s*/i, '').trim())
+        .filter((t) => /^\d+$/.test(t))
+        .map(Number);
+    };
+
+    const roomIdSet = new Set();
+    for (const s of rows) {
+      splitRoomIds(s.mth_room).forEach((id) => roomIdSet.add(id));
+      splitRoomIds(s.tfs_room).forEach((id) => roomIdSet.add(id));
+    }
+
+    let roomNameMap = {};
+    if (roomIdSet.size > 0) {
+      const { data: roomRows } = await supabaseAdmin
+        .from('rooms')
+        .select('room_id, room_name')
+        .in('room_id', [...roomIdSet]);
+      for (const r of roomRows ?? []) {
+        roomNameMap[r.room_id] = r.room_name;
+      }
+    }
+
+    const resolveRoom = (val) => {
+      const ids = splitRoomIds(val);
+      if (!ids.length) return null;
+      const names = [...new Set(ids)].map((id) => roomNameMap[id]).filter(Boolean);
+      return names.length ? names.join(' / ') : null;
+    };
+
+    const enrichedRows = rows.map((s) => ({
+      ...s,
+      mth_room_name: resolveRoom(s.mth_room),
+      tfs_room_name: resolveRoom(s.tfs_room),
+    }));
+
     return res.json({
       page,
       limit,
       total: count ?? 0,
       activeCount: activeCount ?? 0,
-      rows: data ?? [],
+      rows: enrichedRows,
     });
   } catch (err) {
     console.error('Server error:', err);
