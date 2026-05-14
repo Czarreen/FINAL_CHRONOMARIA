@@ -460,8 +460,19 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     faculties = list(payload.get("faculty", []))
     offerings = list(payload.get("offerings", []))
-    subjects = list(payload.get("subjects", []))
-    subject_index = build_subject_index(subjects)
+    all_subjects = list(payload.get("subjects", []))
+    # Only consider subjects explicitly marked ACTIVE for assignment
+    active_subjects = [s for s in all_subjects if normalize_upper(s.get("subject_status")) == "ACTIVE"]
+    inactive_subjects_list = [
+        {
+            "code": s.get("subject_code"),
+            "title": s.get("subject_descriptive_title"),
+            "curr_id": s.get("curr_id"),
+        }
+        for s in all_subjects
+        if normalize_upper(s.get("subject_status")) != "ACTIVE"
+    ]
+    subject_index = build_subject_index(active_subjects)
     rng = random.Random(seed)
 
     if not faculties or not offerings:
@@ -482,6 +493,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "unassigned_subjects": [],
                 "explainability": [],
                 "conflicts": [],
+                "inactive_subjects": inactive_subjects_list,
             },
             "run_id": payload.get("run_id") or "empty",
         }
@@ -541,6 +553,8 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         "random_seed": seed,
         "dry_run": bool(constraints.get("dry_run")),
     }
+    # Attach list of inactive/skipped subjects for visibility in the GA report
+    result.setdefault("report", {})["inactive_subjects"] = inactive_subjects_list
     return result
 
 
