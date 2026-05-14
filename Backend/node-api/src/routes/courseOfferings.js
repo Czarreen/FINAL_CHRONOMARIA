@@ -960,6 +960,49 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
   return { payload, errors, warnings };
 }
 
+async function preloadSubjectLookups() {
+  const { data, error } = await supabaseAdmin
+    .from('subjects')
+    .select('subject_id, subject_code, subject_section, department_id, subject_status');
+
+  if (error) throw new Error(`Preload subjects failed: ${error.message}`);
+
+  const byExact = new Map();
+  const byCodeSection = new Map();
+  const byCodeDept = new Map();
+  const byCode = new Map();
+
+  for (const row of data ?? []) {
+    const code = String(row.subject_code ?? '').trim();
+    const section = String(row.subject_section ?? '').trim();
+    const deptId = row.department_id;
+    const entry = { subject_id: row.subject_id, subject_status: row.subject_status };
+
+    if (code && section && deptId != null) byExact.set(`${code}|${section}|${deptId}`, entry);
+    if (code && section) byCodeSection.set(`${code}|${section}`, entry);
+    if (code && deptId != null) byCodeDept.set(`${code}|${deptId}`, entry);
+    if (code) byCode.set(code, entry);
+  }
+
+  return { byExact, byCodeSection, byCodeDept, byCode };
+}
+
+function lookupSubjectInMaps(subjectCode, subjectSection, departmentId, maps) {
+  if (subjectSection && departmentId != null) {
+    const hit = maps.byExact.get(`${subjectCode}|${subjectSection}|${departmentId}`);
+    if (hit) return hit;
+  }
+  if (subjectSection) {
+    const hit = maps.byCodeSection.get(`${subjectCode}|${subjectSection}`);
+    if (hit) return hit;
+  }
+  if (departmentId != null) {
+    const hit = maps.byCodeDept.get(`${subjectCode}|${departmentId}`);
+    if (hit) return hit;
+  }
+  return maps.byCode.get(subjectCode) ?? null;
+}
+
 // GET /api/course-offerings/check-code/:code - Check for duplicate course codes
 router.get('/check-code/:code', async (req, res) => {
   try {
@@ -1272,6 +1315,36 @@ router.post('/import-csv', async (req, res) => {
     // In replace mode the rooms table was just cleared so all CSV rooms are treated as new.
     const roomLookup = await preloadRooms(dataRows, mapping);
 
+    // Preload existing offerings into a Map for O(1) insert-vs-update decisions.
+    // In replace mode the table was just cleared so the map stays empty (all rows are inserts).
+    // Key: "curr_id|course_no|section|department_id" → offering id
+    const existingOfferingMap = new Map();
+    if (!replaceMode) {
+      const { data: existingOfferings, error: ofFetchErr } = await supabaseAdmin
+        .from('course_offerings')
+        .select('id, curr_id, course_no, section, department_id');
+
+      if (ofFetchErr) {
+        return res.status(500).json({ error: `Preload offerings failed: ${ofFetchErr.message}` });
+      }
+
+      for (const row of existingOfferings ?? []) {
+        const key = `${row.curr_id}|${String(row.course_no ?? '').trim()}|${String(row.section ?? '').trim()}|${row.department_id}`;
+        existingOfferingMap.set(key, row.id);
+      }
+    }
+
+    // Preload existing subjects into Maps for in-memory 4-level fallback lookup.
+    // In replace mode subjects were just cleared, so all syncs will be inserts.
+    let subjectMaps = null;
+    if (!replaceMode) {
+      subjectMaps = await preloadSubjectLookups();
+    }
+
+    // Collect validated rows into insert/update buckets — no DB queries in this loop.
+    const toInsert = []; // { rowNumber, payload }
+    const toUpdate = []; // { rowNumber, payload, id }
+
     for (let index = 0; index < dataRows.length; index += 1) {
       const rowCells = dataRows[index];
       const rowNumber = index + 2;
@@ -1311,85 +1384,173 @@ router.post('/import-csv', async (req, res) => {
         continue;
       }
 
-      const { data: existingRows, error: existingError } = await supabaseAdmin
-        .from('course_offerings')
-        .select('id')
-        .eq('curr_id', payload.curr_id)
-        .eq('course_no', payload.course_no)
-        .eq('section', payload.section)
-        .eq('department_id', payload.department_id)
-        .limit(1);
+      const offeringKey = `${payload.curr_id}|${String(payload.course_no ?? '').trim()}|${String(payload.section ?? '').trim()}|${payload.department_id}`;
+      const existingId = existingOfferingMap.get(offeringKey);
 
-      if (existingError) {
-        summary.failedRows += 1;
-        summary.errors.push({
-          row: rowNumber,
-          messages: [`Lookup failed: ${existingError.message}`],
+      if (existingId != null) {
+        toUpdate.push({ rowNumber, payload, id: existingId });
+      } else {
+        toInsert.push({ rowNumber, payload });
+        // Mark as pending insert so duplicate rows in the same CSV are detected and skipped
+        existingOfferingMap.set(offeringKey, -1);
+      }
+    }
+
+    // Track successfully processed offerings for subject sync
+    const successfulOfferings = []; // { rowNumber, payload }
+
+    // Batch insert new offerings in chunks of 500
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+      const chunk = toInsert.slice(i, i + CHUNK_SIZE);
+      const { error: insertError } = await supabaseAdmin
+        .from('course_offerings')
+        .insert(chunk.map((r) => r.payload));
+
+      if (insertError) {
+        for (const r of chunk) {
+          summary.failedRows += 1;
+          summary.errors.push({
+            row: r.rowNumber,
+            messages: [`Insert failed: ${insertError.message}`],
+          });
+        }
+      } else {
+        summary.insertedRows += chunk.length;
+        summary.processedRows += chunk.length;
+        for (const r of chunk) {
+          successfulOfferings.push({ rowNumber: r.rowNumber, payload: r.payload });
+        }
+      }
+    }
+
+    // Parallel update existing offerings in batches of 50
+    const UPDATE_CONCURRENCY = 50;
+    for (let i = 0; i < toUpdate.length; i += UPDATE_CONCURRENCY) {
+      const chunk = toUpdate.slice(i, i + UPDATE_CONCURRENCY);
+      const results = await Promise.allSettled(
+        chunk.map(({ id, payload }) =>
+          supabaseAdmin.from('course_offerings').update(payload).eq('id', id)
+        )
+      );
+
+      for (let j = 0; j < chunk.length; j += 1) {
+        const r = chunk[j];
+        const result = results[j];
+        const errMsg = result.status === 'rejected'
+          ? (result.reason?.message ?? 'Unknown error')
+          : (result.value?.error?.message ?? null);
+
+        if (errMsg) {
+          summary.failedRows += 1;
+          summary.errors.push({
+            row: r.rowNumber,
+            id: r.id,
+            messages: [`Update failed: ${errMsg}`],
+          });
+        } else {
+          summary.updatedRows += 1;
+          summary.processedRows += 1;
+          successfulOfferings.push({ rowNumber: r.rowNumber, payload: r.payload });
+        }
+      }
+    }
+
+    // Batch subject sync using preloaded maps.
+    // Deduplicate by subject key so the same logical subject is only written once
+    // (last row with that key wins, matching the original sequential update behaviour).
+    const pendingSubjectKeys = new Map(); // pendingKey → index in subjectInserts
+    const subjectToInsert = []; // { pendingKey, subjectPayload }
+    const subjectToUpdate = []; // { subject_id, subject_status, subjectPayload }
+
+    for (const { payload } of successfulOfferings) {
+      const subjectCode = normalizeCell(payload.code);
+      if (!subjectCode) continue;
+
+      const subjectPayload = buildSubjectPayloadFromCourseOffering(payload);
+      const section = normalizeCell(payload.section) ?? '';
+      const deptId = payload.department_id;
+
+      const existing = subjectMaps
+        ? lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps)
+        : null;
+
+      if (existing) {
+        subjectToUpdate.push({
+          subject_id: existing.subject_id,
+          subject_status: existing.subject_status,
+          subjectPayload,
         });
         continue;
       }
 
-      if (existingRows && existingRows.length > 0) {
-        const targetId = existingRows[0].id;
-        const { error: updateError } = await supabaseAdmin
-          .from('course_offerings')
-          .update(payload)
-          .eq('id', targetId);
-
-        if (updateError) {
-          summary.failedRows += 1;
-          summary.errors.push({
-            row: rowNumber,
-            id: targetId,
-            messages: [`Update failed: ${updateError.message}`],
-          });
-          continue;
-        }
-
-        summary.updatedRows += 1;
-        summary.processedRows += 1;
-
-        try {
-          await syncSubjectFromCourseOffering(payload);
-          summary.syncedSubjectRows += 1;
-        } catch (syncError) {
-          summary.failedSubjectSyncRows += 1;
-          summary.warnings.push({
-            row: rowNumber,
-            id: targetId,
-            messages: [
-              `Subject sync failed after update: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`,
-            ],
-          });
-        }
+      // Check if this subject is already queued for insert by a previous row in this CSV
+      const pendingKey = `${subjectCode}|${section}|${deptId ?? ''}`;
+      if (pendingSubjectKeys.has(pendingKey)) {
+        // Last row wins — overwrite the payload in the existing insert entry
+        const existingIdx = pendingSubjectKeys.get(pendingKey);
+        subjectToInsert[existingIdx].subjectPayload = subjectPayload;
       } else {
-        const { error: insertError } = await supabaseAdmin
-          .from('course_offerings')
-          .insert(payload);
+        pendingSubjectKeys.set(pendingKey, subjectToInsert.length);
+        subjectToInsert.push({ pendingKey, subjectPayload });
+      }
+    }
 
-        if (insertError) {
-          summary.failedRows += 1;
-          summary.errors.push({
-            row: rowNumber,
-            messages: [`Insert failed: ${insertError.message}`],
-          });
-          continue;
+    // Batch insert new subjects
+    for (let i = 0; i < subjectToInsert.length; i += CHUNK_SIZE) {
+      const chunk = subjectToInsert.slice(i, i + CHUNK_SIZE);
+      const { data: insertedSubjects, error: subjectInsertError } = await supabaseAdmin
+        .from('subjects')
+        .insert(chunk.map((e) => ({ ...e.subjectPayload, subject_status: 'active' })))
+        .select('subject_id, subject_code, subject_section, department_id');
+
+      if (subjectInsertError) {
+        summary.failedSubjectSyncRows += chunk.length;
+        summary.warnings.push({
+          messages: [`Subject sync batch insert failed: ${subjectInsertError.message}`],
+        });
+      } else {
+        summary.syncedSubjectRows += chunk.length;
+        // Update in-memory maps so later lookup calls in this same import find newly inserted subjects
+        if (subjectMaps && insertedSubjects) {
+          for (const row of insertedSubjects) {
+            const code = String(row.subject_code ?? '').trim();
+            const sec = String(row.subject_section ?? '').trim();
+            const dept = row.department_id;
+            const entry = { subject_id: row.subject_id, subject_status: 'active' };
+            if (code && sec && dept != null) subjectMaps.byExact.set(`${code}|${sec}|${dept}`, entry);
+            if (code && sec) subjectMaps.byCodeSection.set(`${code}|${sec}`, entry);
+            if (code && dept != null) subjectMaps.byCodeDept.set(`${code}|${dept}`, entry);
+            if (code) subjectMaps.byCode.set(code, entry);
+          }
         }
+      }
+    }
 
-        summary.insertedRows += 1;
-        summary.processedRows += 1;
+    // Parallel update existing subjects in batches of 50
+    for (let i = 0; i < subjectToUpdate.length; i += UPDATE_CONCURRENCY) {
+      const chunk = subjectToUpdate.slice(i, i + UPDATE_CONCURRENCY);
+      const results = await Promise.allSettled(
+        chunk.map(({ subject_id, subject_status, subjectPayload }) =>
+          supabaseAdmin
+            .from('subjects')
+            .update({ ...subjectPayload, subject_status: subject_status || 'active' })
+            .eq('subject_id', subject_id)
+        )
+      );
 
-        try {
-          await syncSubjectFromCourseOffering(payload);
-          summary.syncedSubjectRows += 1;
-        } catch (syncError) {
+      for (const result of results) {
+        const errMsg = result.status === 'rejected'
+          ? (result.reason?.message ?? 'Unknown error')
+          : (result.value?.error?.message ?? null);
+
+        if (errMsg) {
           summary.failedSubjectSyncRows += 1;
           summary.warnings.push({
-            row: rowNumber,
-            messages: [
-              `Subject sync failed after insert: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`,
-            ],
+            messages: [`Subject sync update failed: ${errMsg}`],
           });
+        } else {
+          summary.syncedSubjectRows += 1;
         }
       }
     }
@@ -1706,5 +1867,14 @@ router.delete('/:id', async (req, res) => {
     });
   }
 });
+
+export {
+  parseCsv,
+  buildHeaderMapping,
+  isHeaderRowCandidate,
+  shouldSkipNonDataRow,
+  normalizeHeader,
+  normalizeCell,
+};
 
 export default router;
