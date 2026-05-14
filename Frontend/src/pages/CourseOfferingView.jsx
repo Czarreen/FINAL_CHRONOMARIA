@@ -40,10 +40,11 @@ import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { isFormValid, getDisabledReason, getSchedulePairStatus } from '../utils/courseOfferingValidation';
+import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 
 const PAGE_SIZE = 50;
 
-export default function CourseOfferingView() {
+export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [offerings, setOfferings] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
   const [page, setPage] = useState(1);
@@ -450,8 +451,12 @@ export default function CourseOfferingView() {
       onConfirm: async () => {
         try {
           setUpdateError(null);
-          await deleteCourseOffering(offering.id);
+          const result = await deleteCourseOffering(offering.id);
           setSuccessMessage(`Deleted "${offering.code}"`);
+          if (result?.subjectDelete?.action === 'skipped') {
+            setUpdateError('Warning: linked subject record could not be removed automatically.');
+          }
+          onSubjectMutated?.();
           await loadInitialPage();
         } catch (err) {
           if (String(err.message || '').includes('404')) {
@@ -630,7 +635,7 @@ export default function CourseOfferingView() {
           entity_id: row.entity_id,
           title: row.details?.code ? `${row.details.code}` : `Offering #${row.entity_id}`,
           description: row.message,
-          severity: row.severity === 'high' ? 'critical' : (row.severity || 'medium'),
+          severity: normalizeNotificationSeverity(row.severity),
           issues: [],
           missingFields: [],
           dbIds: [],
@@ -645,7 +650,7 @@ export default function CourseOfferingView() {
       byOffering[key].missingFields.push(displayFieldName);
       byOffering[key].dbIds.push(row.id);
       // Escalate severity if any issue is high/critical
-      if (row.severity === 'high' || row.severity === 'critical') {
+      if (normalizeNotificationSeverity(row.severity) === 'critical') {
         byOffering[key].severity = 'critical';
       }
     });

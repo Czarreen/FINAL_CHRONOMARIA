@@ -6,8 +6,9 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 
-export default function SubjectsView({ authRefreshKey = 0 } = {}) {
+export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,6 +50,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [editingData, setEditingData] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [subjectNotifications, setSubjectNotifications] = useState([]);
   const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
@@ -158,12 +160,6 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
   };
 
-  function normalizeNotificationSeverity(severity) {
-    if (severity === 'high') return 'critical';
-    if (severity === 'critical' || severity === 'medium' || severity === 'low') return severity;
-    return 'medium';
-  }
-
   const visibleSubjectNotifications = useMemo(() => {
     const searchTerm = String(notifSearch || '').trim().toLowerCase();
 
@@ -211,11 +207,11 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   // Load subjects data
   useEffect(() => {
     loadSubjects();
-  }, [page, limit, search, statusFilter]);
+  }, [page, limit, search, statusFilter, subjectMutationKey]);
 
   useEffect(() => {
     loadSubjectNotifications();
-  }, [authRefreshKey]);
+  }, [authRefreshKey, subjectMutationKey]);
 
   const handleInlineSave = async ({ offeringId, field, value, rowId }) => {
     // offeringId may be undefined for subjects notifications; prefer rowId
@@ -603,23 +599,34 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
   }
 
-  async function handleDeleteSubject(subject) {
-    try {
-      setUpdateError(null);
-      await deleteSubject(subject.subject_id);
-      if (subject.subject_status === 'active') {
-        setActiveCount((currentCount) => Math.max(0, currentCount - 1));
-      }
-      await loadSubjects();
-      await loadSubjectNotifications();
-    } catch (err) {
-      if (String(err.message || '').includes('404')) {
-        await loadSubjects();
-        setUpdateError('That subject was already removed. The list has been refreshed.');
-        return;
-      }
-      setUpdateError(err.message || 'Failed to delete subject');
-    }
+  function handleDeleteSubject(subject) {
+    setConfirmDialog({
+      title: 'Delete subject?',
+      message: `Delete "${subject.subject_code} - ${subject.subject_descriptive_title}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setUpdateError(null);
+          await deleteSubject(subject.subject_id);
+          if (subject.subject_status === 'active') {
+            setActiveCount((c) => Math.max(0, c - 1));
+          }
+          await loadSubjects();
+          await loadSubjectNotifications();
+        } catch (err) {
+          if (String(err.message || '').includes('404')) {
+            await loadSubjects();
+            setUpdateError('That subject was already removed. The list has been refreshed.');
+            return;
+          }
+          setUpdateError(err.message || 'Failed to delete subject');
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   }
 
   function handleSort(columnKey) {
@@ -1648,6 +1655,46 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                   {savingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div
+                className={`mt-0.5 rounded-full p-2 ${confirmDialog.tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'}`}
+              >
+                <AlertCircle size={18} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-on-surface">{confirmDialog.title}</h3>
+                <p className="text-sm text-on-surface-variant">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+              >
+                {confirmDialog.cancelLabel || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  if (typeof action === 'function') action();
+                  else setConfirmDialog(null);
+                }}
+                className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition-colors ${
+                  confirmDialog.tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'
+                }`}
+              >
+                {confirmDialog.confirmLabel || 'Confirm'}
+              </button>
             </div>
           </div>
         </div>
