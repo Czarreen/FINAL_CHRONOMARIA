@@ -43,7 +43,8 @@ export default function FacultySubjectPreferencesModal({ faculty, onClose, onRef
   async function loadAllSubjects() {
     try {
       const data = await fetchSubjects({ limit: 1000 });
-      setAllSubjects(data.rows || []);
+      const departmentFiltered = data.rows?.filter(s => s.department_id === faculty.department_id) || [];
+      setAllSubjects(departmentFiltered);
     } catch (err) {
       console.error('Failed to load subjects:', err);
       setAllSubjects([]);
@@ -120,9 +121,9 @@ export default function FacultySubjectPreferencesModal({ faculty, onClose, onRef
   };
 
   const priorityLabel = {
-    1: 'High Expertise',
-    2: 'Capable',
-    3: 'Fallback',
+    1: 'Preferred',
+    2: 'Qualified',
+    3: 'Available',
   };
 
   return (
@@ -179,9 +180,9 @@ export default function FacultySubjectPreferencesModal({ faculty, onClose, onRef
                 disabled={adding}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
-                <option value="1">High (1)</option>
-                <option value="2">Capable (2)</option>
-                <option value="3">Fallback (3)</option>
+                <option value="1">Preferred (1)</option>
+                <option value="2">Qualified (2)</option>
+                <option value="3">Available (3)</option>
               </select>
               <button
                 onClick={handleAddPreference}
@@ -267,15 +268,15 @@ export default function FacultySubjectPreferencesModal({ faculty, onClose, onRef
             <div className="grid grid-cols-3 gap-1">
               <div className="flex items-center gap-1">
                 <div className="h-2 w-2 rounded-full bg-red-500"></div>
-                <span>1 = High</span>
+                <span>1 = Preferred</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="h-2 w-2 rounded-full bg-amber-500"></div>
-                <span>2 = Capable</span>
+                <span>2 = Qualified</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                <span>3 = Fallback</span>
+                <span>3 = Available</span>
               </div>
             </div>
           </div>
