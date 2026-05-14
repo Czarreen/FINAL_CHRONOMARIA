@@ -441,9 +441,11 @@ export default function CourseOfferingView() {
   }
 
   async function handleDeleteOffering(offering) {
+    const displayCode = offering.code || '(no code)';
+    const displayTitle = offering.descriptive_title || '(no title)';
     setConfirmDialog({
       title: 'Delete offering?',
-      message: `Delete "${offering.code} - ${offering.descriptive_title}"? This cannot be undone.`,
+      message: `Delete "${displayCode} - ${displayTitle}"? This cannot be undone.`,
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       tone: 'danger',
@@ -451,7 +453,7 @@ export default function CourseOfferingView() {
         try {
           setUpdateError(null);
           await deleteCourseOffering(offering.id);
-          setSuccessMessage(`Deleted "${offering.code}"`);
+          setSuccessMessage(`Deleted "${displayCode}"`);
           await loadInitialPage();
         } catch (err) {
           if (String(err.message || '').includes('404')) {
@@ -1416,21 +1418,7 @@ export default function CourseOfferingView() {
       <div className="glass-panel space-y-2 p-3">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           {/* Search Input */}
-          <div className="relative flex-1 xl:max-w-xs">
-            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={filterText}
-              onChange={(e) => {
-                setFilterText(e.target.value);
-              }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-8 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
-            />
-          </div>
-
-          {/* Column Filter and Reset */}
-          <div className="flex flex-wrap gap-1 xl:justify-end">
+          <div className="flex gap-2 flex-1 xl:max-w-xs">
             <select
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
@@ -1441,6 +1429,31 @@ export default function CourseOfferingView() {
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                type="text"
+                placeholder={`Search ${filterColumn === 'all' ? 'all columns' : columns.find(c => c.key === filterColumn)?.label || filterColumn}...`}
+                value={filterText}
+                onChange={(e) => {
+                  setFilterText(e.target.value);
+                }}
+                className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-8 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              />
+              {filterText && (
+                <button
+                  onClick={() => setFilterText('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Reset Button */}
+          <div className="flex flex-wrap gap-1 xl:justify-end">
             <button
               onClick={() => { setFilterText(''); setFilterColumn('all'); setSortConfig({ key: 'code', direction: 'asc' }); }}
               className="rounded-lg border border-white/60 bg-white px-2 py-1.5 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50"

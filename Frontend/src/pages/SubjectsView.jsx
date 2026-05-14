@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
@@ -16,6 +16,8 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [activeCount, setActiveCount] = useState(0);
   const [limit, setLimit] = useState(50);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [statusFilter, setStatusFilter] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [updatingGeneral, setUpdatingGeneral] = useState(null);
@@ -211,7 +213,22 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   // Load subjects data
   useEffect(() => {
     loadSubjects();
-  }, [page, limit, search, statusFilter]);
+  }, [page, limit, search, searchField, statusFilter]);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1); // Reset to first page when search changes
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset page when search field changes
+  useEffect(() => {
+    setPage(1);
+  }, [searchField]);
 
   useEffect(() => {
     loadSubjectNotifications();
@@ -362,6 +379,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         page,
         limit,
         search,
+        searchField,
         status: statusFilter,
       });
       setSubjects(data.rows);
@@ -808,47 +826,50 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
           <p className="text-xs text-on-surface-variant truncate">Manage subjects, credit units, and classifications.</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
-          <NotificationButton
-            items={visibleSubjectNotifications}
-            title="Subject Notifications"
-            emptyLabel="No subject issues"
-            buttonLabel="Issues"
-            onItemInlineSave={handleInlineSave}
-            onItemEdit={(item) => {
-              const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
-              const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
-              if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
-            }}
-            onItemJump={(item) => {
-              const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
-              if (rowId) scrollToSubjectRowById(rowId);
-            }}
-            onItemResolve={(item) => handleResolveNotification(item)}
-            severityFilter={notifSeverityFilter}
-            onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
-            notificationSearch={notifSearch}
-            onNotificationSearchChange={(v) => setNotifSearch(v)}
-            notificationStats={subjectNotificationStats}
-          />
-          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
-            {total} subjects
-          </span>
-          <button
-            onClick={loadSubjects}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
-            title="Reload subjects list"
-          >
-            <RotateCcw size={16} />
-          </button>
-          <button
-            onClick={() => loadSubjectNotifications({ forceRescan: true })}
-            disabled={subjectNotificationsLoading}
-            className="btn-primary flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-50"
-            title="Re-detect all subject issues"
-          >
-            <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
-            <span>Rescan</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationButton
+              items={visibleSubjectNotifications}
+              title="Subject Notifications"
+              emptyLabel="No subject issues"
+              buttonLabel="Issues"
+              onItemInlineSave={handleInlineSave}
+              onItemEdit={(item) => {
+                const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
+                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+              }}
+              onItemJump={(item) => {
+                const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
+                if (rowId) scrollToSubjectRowById(rowId);
+              }}
+              onItemResolve={(item) => handleResolveNotification(item)}
+              severityFilter={notifSeverityFilter}
+              onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
+              notificationSearch={notifSearch}
+              onNotificationSearchChange={(v) => setNotifSearch(v)}
+              notificationStats={subjectNotificationStats}
+            />
+            <button
+              onClick={() => loadSubjectNotifications({ forceRescan: true })}
+              disabled={subjectNotificationsLoading}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0 disabled:opacity-50"
+              title="Re-detect all subject issues"
+            >
+              <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+              {total} subjects
+            </span>
+            <button
+              onClick={loadSubjects}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
+              title="Reload subjects list"
+            >
+              <RotateCcw size={16} />
+            </button>
+          </div>
           <button
             ref={colButtonRef}
             className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
@@ -908,18 +929,37 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       {/* Search and Filter Bar */}
 <div className="bg-white/90 rounded-xl border border-white/60 space-y-2 p-3 flex-shrink-0 mt-1">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 md:max-w-md">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              type="text"
-              placeholder="Search subjects..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
-            />
+          <div className="flex gap-2 flex-1 md:max-w-md">
+            <select
+              value={searchField}
+              onChange={(e) => setSearchField(e.target.value)}
+              className="rounded-lg border border-white/30 bg-white/50 px-3 py-1.5 text-xs text-on-surface outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+            >
+              <option value="all">All Fields</option>
+              <option value="subject_code">Code</option>
+              <option value="subject_course_no">Course No</option>
+              <option value="subject_descriptive_title">Title</option>
+              <option value="curr_id">Curriculum ID</option>
+            </select>
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                type="text"
+                placeholder={`Search ${searchField === 'all' ? 'subjects' : searchField.replace('_', ' ')}...`}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              />
+              {searchInput && (
+                <button
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-1">
