@@ -89,6 +89,17 @@ BEGIN
         VALUES('course_offering', p_offering_id, 'subject_id', 'missing', 'high', 'Subject not assigned', jsonb_build_object('offering_id', p_offering_id), now(), now());
     END IF;
 
+    -- Check missing curriculum ID
+    DECLARE
+        v_curr_id TEXT;
+    BEGIN
+        SELECT curr_id::text FROM public.course_offerings WHERE id = p_offering_id INTO v_curr_id;
+        IF (v_curr_id IS NULL OR trim(coalesce(v_curr_id, '')) = '') THEN
+            INSERT INTO public.data_quality_notifications(entity_type, entity_id, field_name, issue_type, severity, message, details, created_at, updated_at)
+            VALUES('course_offering', p_offering_id, 'curr_id', 'missing', 'medium', 'Curriculum ID is missing', jsonb_build_object('offering_id', p_offering_id), now(), now());
+        END IF;
+    END;
+
     -- 3b) Check room assignments. Support both legacy single-field and junction tables.
     -- Determine mth junction table and FK column dynamically to avoid schema differences
     DECLARE

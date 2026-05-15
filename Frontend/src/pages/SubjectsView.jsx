@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
@@ -6,8 +6,9 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 
-export default function SubjectsView({ authRefreshKey = 0 } = {}) {
+export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +17,8 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [activeCount, setActiveCount] = useState(0);
   const [limit, setLimit] = useState(50);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [statusFilter, setStatusFilter] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [updatingGeneral, setUpdatingGeneral] = useState(null);
@@ -49,6 +52,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
   const [editingData, setEditingData] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [subjectNotifications, setSubjectNotifications] = useState([]);
   const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
@@ -158,12 +162,6 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
   };
 
-  function normalizeNotificationSeverity(severity) {
-    if (severity === 'high') return 'critical';
-    if (severity === 'critical' || severity === 'medium' || severity === 'low') return severity;
-    return 'medium';
-  }
-
   const visibleSubjectNotifications = useMemo(() => {
     const searchTerm = String(notifSearch || '').trim().toLowerCase();
 
@@ -207,15 +205,29 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
 
   const { setHighlight } = useRowHighlight();
 
+  // Debounced search: update search state when searchInput changes
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1); // Reset to page 1 when search changes
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchInput]);
+
+  const handleSearchNow = useCallback(() => {
+    setSearch(searchInput);
+    setPage(1);
+  }, [searchInput]);
 
   // Load subjects data
   useEffect(() => {
     loadSubjects();
-  }, [page, limit, search, statusFilter]);
+  }, [page, limit, search, searchField, statusFilter, subjectMutationKey]);
 
   useEffect(() => {
     loadSubjectNotifications();
-  }, [authRefreshKey]);
+  }, [authRefreshKey, subjectMutationKey]);
 
   const handleInlineSave = async ({ offeringId, field, value, rowId }) => {
     // offeringId may be undefined for subjects notifications; prefer rowId
@@ -362,6 +374,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
         page,
         limit,
         search,
+        searchField,
         status: statusFilter,
       });
       setSubjects(data.rows);
@@ -470,7 +483,7 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     // Use the page-lookup endpoint instead of iterating up to 200 pages
     (async () => {
       try {
-        const targetPage = await fetchSubjectPageNumber(numericId, { search, status: statusFilter, limit });
+        const targetPage = await fetchSubjectPageNumber(numericId, { search, searchField, status: statusFilter, limit });
         if (!targetPage) return;
         if (targetPage !== page) {
           setPage(targetPage);
@@ -603,23 +616,34 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     }
   }
 
-  async function handleDeleteSubject(subject) {
-    try {
-      setUpdateError(null);
-      await deleteSubject(subject.subject_id);
-      if (subject.subject_status === 'active') {
-        setActiveCount((currentCount) => Math.max(0, currentCount - 1));
-      }
-      await loadSubjects();
-      await loadSubjectNotifications();
-    } catch (err) {
-      if (String(err.message || '').includes('404')) {
-        await loadSubjects();
-        setUpdateError('That subject was already removed. The list has been refreshed.');
-        return;
-      }
-      setUpdateError(err.message || 'Failed to delete subject');
-    }
+  function handleDeleteSubject(subject) {
+    setConfirmDialog({
+      title: 'Delete subject?',
+      message: `Delete "${subject.subject_code} - ${subject.subject_descriptive_title}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setUpdateError(null);
+          await deleteSubject(subject.subject_id);
+          if (subject.subject_status === 'active') {
+            setActiveCount((c) => Math.max(0, c - 1));
+          }
+          await loadSubjects();
+          await loadSubjectNotifications();
+        } catch (err) {
+          if (String(err.message || '').includes('404')) {
+            await loadSubjects();
+            setUpdateError('That subject was already removed. The list has been refreshed.');
+            return;
+          }
+          setUpdateError(err.message || 'Failed to delete subject');
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   }
 
   function handleSort(columnKey) {
@@ -747,29 +771,79 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     return match ? match[0].replace(/\s+/g, '') : '';
   }
 
-  function resolveRoomDisplayValue(value) {
-    const normalized = String(value ?? '').trim();
-    if (!normalized) {
+  function getRoomName(roomId) {
+    if (roomId === null || roomId === undefined || roomId === '') {
       return '';
     }
 
-    const tokens = normalized
+    let token = String(roomId).trim();
+    if (!token) {
+      return '';
+    }
+
+    token = token.replace(/^(?:room|rm)\s*/i, '').trim();
+    if (!token) {
+      return '';
+    }
+
+    const lookup = roomNameById[token] || roomNameById[String(Number(token))];
+    return lookup || token;
+  }
+
+  function parseRoomTokens(value) {
+    if (value === null || value === undefined || value === '') {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => parseRoomTokens(item));
+    }
+
+    if (typeof value === 'object') {
+      if (value.room_id || value.id) {
+        return [String(value.room_id ?? value.id)];
+      }
+      return [String(value)];
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+      return [];
+    }
+
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(raw);
+        return parseRoomTokens(parsed);
+      } catch (_) {
+        // fall back to token parsing below
+      }
+    }
+
+    return raw
+      .replace(/^[\[\]"]+|[\[\]"]+$/g, '')
       .split(/\s*[,/]\s*/)
       .map((token) => token.trim())
+      .filter(Boolean)
+      .map((token) => token.replace(/^(?:room|rm)\s*/i, '').trim())
       .filter(Boolean);
+  }
 
+  function resolveRoomDisplayValue(value) {
+    const tokens = parseRoomTokens(value);
     if (tokens.length === 0) {
       return '';
     }
 
-    return tokens
-      .map((token) => roomNameById[token] || token)
+    return Array.from(new Set(tokens))
+      .map(getRoomName)
+      .filter(Boolean)
       .join(' / ');
   }
 
   function extractRoomSummary(subject) {
-    const mthRoom = resolveRoomDisplayValue(subject.mth_room ?? subject.mth_room_id ?? '');
-    const tfsRoom = resolveRoomDisplayValue(subject.tfs_room ?? subject.tfs_room_id ?? '');
+    const mthRoom = subject.mth_room_name || resolveRoomDisplayValue(subject.mth_room ?? subject.mth_room_id ?? '');
+    const tfsRoom = subject.tfs_room_name || resolveRoomDisplayValue(subject.tfs_room ?? subject.tfs_room_id ?? '');
 
     if (mthRoom && tfsRoom && mthRoom !== tfsRoom) {
       return `MTH: ${mthRoom} | TFS: ${tfsRoom}`;
@@ -799,6 +873,14 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
     };
   }
 
+  const searchFieldLabel = {
+    all: 'subjects',
+    subject_code: 'code',
+    subject_course_no: 'course no',
+    subject_descriptive_title: 'title',
+    curr_id: 'curriculum ID',
+  };
+
   return (
 <div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-right-4 duration-500">
       {/* Header with Title, Description, and Action Buttons */}
@@ -808,47 +890,50 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
           <p className="text-xs text-on-surface-variant truncate">Manage subjects, credit units, and classifications.</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
-          <NotificationButton
-            items={visibleSubjectNotifications}
-            title="Subject Notifications"
-            emptyLabel="No subject issues"
-            buttonLabel="Issues"
-            onItemInlineSave={handleInlineSave}
-            onItemEdit={(item) => {
-              const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
-              const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
-              if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
-            }}
-            onItemJump={(item) => {
-              const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
-              if (rowId) scrollToSubjectRowById(rowId);
-            }}
-            onItemResolve={(item) => handleResolveNotification(item)}
-            severityFilter={notifSeverityFilter}
-            onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
-            notificationSearch={notifSearch}
-            onNotificationSearchChange={(v) => setNotifSearch(v)}
-            notificationStats={subjectNotificationStats}
-          />
-          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
-            {total} subjects
-          </span>
-          <button
-            onClick={loadSubjects}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
-            title="Reload subjects list"
-          >
-            <RotateCcw size={16} />
-          </button>
-          <button
-            onClick={() => loadSubjectNotifications({ forceRescan: true })}
-            disabled={subjectNotificationsLoading}
-            className="btn-primary flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-50"
-            title="Re-detect all subject issues"
-          >
-            <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
-            <span>Rescan</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationButton
+              items={visibleSubjectNotifications}
+              title="Subject Notifications"
+              emptyLabel="No subject issues"
+              buttonLabel="Issues"
+              onItemInlineSave={handleInlineSave}
+              onItemEdit={(item) => {
+                const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
+                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+              }}
+              onItemJump={(item) => {
+                const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
+                if (rowId) scrollToSubjectRowById(rowId);
+              }}
+              onItemResolve={(item) => handleResolveNotification(item)}
+              severityFilter={notifSeverityFilter}
+              onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
+              notificationSearch={notifSearch}
+              onNotificationSearchChange={(v) => setNotifSearch(v)}
+              notificationStats={subjectNotificationStats}
+            />
+            <button
+              onClick={() => loadSubjectNotifications({ forceRescan: true })}
+              disabled={subjectNotificationsLoading}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0 disabled:opacity-50"
+              title="Re-detect all subject issues"
+            >
+              <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+              {total} subjects
+            </span>
+            <button
+              onClick={loadSubjects}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
+              title="Reload subjects list"
+            >
+              <RotateCcw size={16} />
+            </button>
+          </div>
           <button
             ref={colButtonRef}
             className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
@@ -908,18 +993,45 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
       {/* Search and Filter Bar */}
 <div className="bg-white/90 rounded-xl border border-white/60 space-y-2 p-3 flex-shrink-0 mt-1">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 md:max-w-md">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              type="text"
-              placeholder="Search subjects..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
-            />
+          <div className="flex gap-2 flex-1 md:max-w-md">
+            <select
+              value={searchField}
+              onChange={(e) => setSearchField(e.target.value)}
+              className="rounded-lg border border-white/30 bg-white/50 px-3 py-1.5 text-xs text-on-surface outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+            >
+              <option value="all">All Fields</option>
+              <option value="subject_code">Code</option>
+              <option value="subject_course_no">Course No</option>
+              <option value="subject_descriptive_title">Title</option>
+              <option value="curr_id">Curriculum ID</option>
+            </select>
+            <div className="relative flex-1">
+              <button
+                type="button"
+                onClick={handleSearchNow}
+                className="absolute left-0 top-0 flex h-full w-8 items-center justify-center text-on-surface-variant transition-colors hover:text-primary"
+                title="Search"
+              >
+                <Search size={14} />
+              </button>
+              <input
+                type="text"
+                placeholder={`Search ${searchFieldLabel[searchField] ?? searchField.replace(/_/g, ' ')}...`}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearchNow(); }}
+                className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              />
+              {searchInput && (
+                <button
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-1">
@@ -1648,6 +1760,46 @@ export default function SubjectsView({ authRefreshKey = 0 } = {}) {
                   {savingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div
+                className={`mt-0.5 rounded-full p-2 ${confirmDialog.tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'}`}
+              >
+                <AlertCircle size={18} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-on-surface">{confirmDialog.title}</h3>
+                <p className="text-sm text-on-surface-variant">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+              >
+                {confirmDialog.cancelLabel || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  if (typeof action === 'function') action();
+                  else setConfirmDialog(null);
+                }}
+                className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition-colors ${
+                  confirmDialog.tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'
+                }`}
+              >
+                {confirmDialog.confirmLabel || 'Confirm'}
+              </button>
             </div>
           </div>
         </div>

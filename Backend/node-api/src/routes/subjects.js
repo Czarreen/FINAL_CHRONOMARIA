@@ -12,17 +12,32 @@ router.get('/', async (req, res) => {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     const search = req.query.search?.trim() || '';
+    const searchField = req.query.searchField || 'all';
     const status = req.query.status || '';
 
     let query = supabaseAdmin
       .from('subjects')
       .select('*, departments(department_id, department_name)', { count: 'exact' });
 
-// Apply search filter (search in all text columns)
+    // Apply search filter based on searchField
     if (search) {
-      query = query.or(
-        `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
-      );
+      const fieldMap = {
+        subject_code: `subject_code.ilike.%${search}%`,
+        subject_course_no: `subject_course_no.ilike.%${search}%`,
+        subject_descriptive_title: `subject_descriptive_title.ilike.%${search}%`,
+        curr_id: `curr_id.ilike.%${search}%`,
+      };
+
+      if (fieldMap[searchField]) {
+        // Search specific field
+        query = query.filter(searchField, 'ilike', `%${search}%`);
+      } else {
+        // Search all text columns (when searchField is 'all' or unrecognized)
+        // Note: curr_id is excluded because it's an integer; use specific field search for curr_id lookups
+        query = query.or(
+          `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
+        );
+      }
     }
 
     // Apply status filter
@@ -49,12 +64,55 @@ router.get('/', async (req, res) => {
       console.error('Error fetching active count:', activeCountError);
     }
 
+    // Enrich each subject row with resolved room names from the rooms table.
+    // subjects.mth_room / tfs_room store numeric room IDs as text (e.g. "5" or "5/10").
+    const rows = data ?? [];
+    const splitRoomIds = (val) => {
+      if (!val) return [];
+      return String(val)
+        .replace(/^[\[\]"]+|[\[\]"]+$/g, '')
+        .split(/\s*[,/]\s*/)
+        .map((t) => t.replace(/^(?:room|rm)\s*/i, '').trim())
+        .filter((t) => /^\d+$/.test(t))
+        .map(Number);
+    };
+
+    const roomIdSet = new Set();
+    for (const s of rows) {
+      splitRoomIds(s.mth_room).forEach((id) => roomIdSet.add(id));
+      splitRoomIds(s.tfs_room).forEach((id) => roomIdSet.add(id));
+    }
+
+    let roomNameMap = {};
+    if (roomIdSet.size > 0) {
+      const { data: roomRows } = await supabaseAdmin
+        .from('rooms')
+        .select('room_id, room_name')
+        .in('room_id', [...roomIdSet]);
+      for (const r of roomRows ?? []) {
+        roomNameMap[r.room_id] = r.room_name;
+      }
+    }
+
+    const resolveRoom = (val) => {
+      const ids = splitRoomIds(val);
+      if (!ids.length) return null;
+      const names = [...new Set(ids)].map((id) => roomNameMap[id]).filter(Boolean);
+      return names.length ? names.join(' / ') : null;
+    };
+
+    const enrichedRows = rows.map((s) => ({
+      ...s,
+      mth_room_name: resolveRoom(s.mth_room),
+      tfs_room_name: resolveRoom(s.tfs_room),
+    }));
+
     return res.json({
       page,
       limit,
       total: count ?? 0,
       activeCount: activeCount ?? 0,
-      rows: data ?? [],
+      rows: enrichedRows,
     });
   } catch (err) {
     console.error('Server error:', err);

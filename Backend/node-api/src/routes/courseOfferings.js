@@ -1334,13 +1334,6 @@ router.post('/import-csv', async (req, res) => {
       }
     }
 
-    // Preload existing subjects into Maps for in-memory 4-level fallback lookup.
-    // In replace mode subjects were just cleared, so all syncs will be inserts.
-    let subjectMaps = null;
-    if (!replaceMode) {
-      subjectMaps = await preloadSubjectLookups();
-    }
-
     // Collect validated rows into insert/update buckets — no DB queries in this loop.
     const toInsert = []; // { rowNumber, payload }
     const toUpdate = []; // { rowNumber, payload, id }
@@ -1456,6 +1449,15 @@ router.post('/import-csv', async (req, res) => {
       }
     }
 
+    // Preload subjects immediately before the sync phase so the map reflects the
+    // true DB state after all offering inserts/updates are complete.
+    // In replace mode: if the delete was clean the map is empty → all syncs are inserts.
+    // If any subjects survived the delete, the 4-level fallback routes them to UPDATE
+    // instead of a duplicate INSERT, preventing stale rows from being duplicated.
+    // In non-replace mode: map has all pre-existing subjects at this point in time,
+    // including any that were updated or created during the offering insert phase.
+    const subjectMaps = await preloadSubjectLookups();
+
     // Batch subject sync using preloaded maps.
     // Deduplicate by subject key so the same logical subject is only written once
     // (last row with that key wins, matching the original sequential update behaviour).
@@ -1471,9 +1473,7 @@ router.post('/import-csv', async (req, res) => {
       const section = normalizeCell(payload.section) ?? '';
       const deptId = payload.department_id;
 
-      const existing = subjectMaps
-        ? lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps)
-        : null;
+      const existing = lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps);
 
       if (existing) {
         subjectToUpdate.push({
@@ -1512,7 +1512,7 @@ router.post('/import-csv', async (req, res) => {
       } else {
         summary.syncedSubjectRows += chunk.length;
         // Update in-memory maps so later lookup calls in this same import find newly inserted subjects
-        if (subjectMaps && insertedSubjects) {
+        if (insertedSubjects) {
           for (const row of insertedSubjects) {
             const code = String(row.subject_code ?? '').trim();
             const sec = String(row.subject_section ?? '').trim();
@@ -1806,22 +1806,26 @@ router.delete('/:id', async (req, res) => {
 
       const canFallbackDelete =
         subjectCourseNo &&
-        subjectTitle &&
         subjectSection &&
-        Number.isFinite(subjectCurrId) &&
-        subjectDepartmentId !== null &&
-        subjectDepartmentId !== undefined;
+        Number.isFinite(subjectCurrId);
 
       if (canFallbackDelete) {
         try {
-          const { data: deletedSubjects, error: subjectDeleteError } = await supabaseAdmin
+          let deleteQuery = supabaseAdmin
             .from('subjects')
             .delete()
             .ilike('subject_course_no', subjectCourseNo)
-            .ilike('subject_descriptive_title', subjectTitle)
             .eq('curr_id', subjectCurrId)
-            .eq('department_id', subjectDepartmentId)
-            .ilike('subject_section', subjectSection)
+            .ilike('subject_section', subjectSection);
+
+          if (subjectTitle) {
+            deleteQuery = deleteQuery.ilike('subject_descriptive_title', subjectTitle);
+          }
+          if (subjectDepartmentId !== null && subjectDepartmentId !== undefined) {
+            deleteQuery = deleteQuery.eq('department_id', subjectDepartmentId);
+          }
+
+          const { data: deletedSubjects, error: subjectDeleteError } = await deleteQuery
             .select('subject_id,subject_code,subject_course_no');
 
           if (subjectDeleteError) {
@@ -1834,7 +1838,7 @@ router.delete('/:id', async (req, res) => {
               action: 'deleted',
               count: deletedSubjects?.length ?? 0,
               rows: deletedSubjects ?? [],
-              matchedBy: 'course_no+title+curr+department+section',
+              matchedBy: 'course_no+curr+section',
             };
           }
         } catch (subjectErr) {
@@ -1846,7 +1850,7 @@ router.delete('/:id', async (req, res) => {
       } else {
         subjectDelete = {
           action: 'skipped',
-          reason: 'Missing subject code and fallback match fields.',
+          reason: 'Missing subject code and insufficient fallback fields (need course_no, curr_id, section).',
         };
       }
     }
