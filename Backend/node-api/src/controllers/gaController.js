@@ -211,6 +211,107 @@ function formatMinutesAsTime(totalMinutes) {
   return `${hours12}:${minutes} ${suffix}`;
 }
 
+function buildDepartmentLookup(departments) {
+  const lookup = new Map();
+
+  for (const department of Array.isArray(departments) ? departments : []) {
+    const departmentId = toNumber(department.department_id);
+    if (departmentId === null) continue;
+    lookup.set(departmentId, normalizeText(department.department_name) || `Department ${departmentId}`);
+  }
+
+  return lookup;
+}
+
+function describeDepartment(departmentId, lookup) {
+  const numericDepartmentId = toNumber(departmentId);
+  if (numericDepartmentId === null) return 'Unassigned department';
+  return lookup.get(numericDepartmentId) || `Department ${numericDepartmentId}`;
+}
+
+function describeFaculty(faculty) {
+  if (!faculty) return 'Unassigned faculty';
+  return normalizeText(faculty.faculty_name) || `Faculty ${faculty.faculty_id ?? ''}`.trim();
+}
+
+function describeOffering(offering) {
+  if (!offering) return 'Offering';
+  const code = normalizeText(offering.code);
+  const courseNo = normalizeText(offering.course_no);
+  const title = normalizeText(offering.descriptive_title);
+  const shortLabel = [code, courseNo].filter(Boolean).join(' ');
+  return shortLabel || title || `Offering ${offering.id ?? ''}`.trim();
+}
+
+function describeRoom(room) {
+  if (!room) return 'Room';
+  return normalizeText(room.room_name) || `Room ${room.room_id ?? ''}`.trim();
+}
+
+function describeRoomKey(roomKey, roomLookup) {
+  const roomToken = String(roomKey || '').split('|')[1] || '';
+  const roomId = toNumber(roomToken);
+  if (roomId !== null && roomLookup.byId.has(roomId)) {
+    return describeRoom(roomLookup.byId.get(roomId));
+  }
+  return roomToken || roomKey;
+}
+
+function buildFacultyLoadingDisplayRows(snapshot, assignments, preflight) {
+  const assignmentByOfferingId = new Map();
+  for (const assignment of Array.isArray(assignments) ? assignments : []) {
+    const offeringId = Number(assignment?.offering?.id);
+    if (Number.isFinite(offeringId)) {
+      assignmentByOfferingId.set(offeringId, assignment);
+    }
+  }
+
+  const problematicByOfferingId = new Map();
+  for (const item of Array.isArray(preflight?.problematic_offerings) ? preflight.problematic_offerings : []) {
+    const offeringId = Number(item?.id);
+    if (Number.isFinite(offeringId)) {
+      problematicByOfferingId.set(offeringId, item);
+    }
+  }
+
+  const rows = [];
+  for (const offering of Array.isArray(snapshot?.offerings) ? snapshot.offerings : []) {
+    const offeringId = Number(offering?.id);
+    const assignment = assignmentByOfferingId.get(offeringId);
+    const problematic = problematicByOfferingId.get(offeringId);
+    const isGeneral = Boolean(offering?.is_general);
+    const assignedFaculty = assignment?.faculty || null;
+
+    rows.push({
+      id: offeringId,
+      curr_id: offering.curr_id ?? null,
+      department_id: offering.department_id ?? null,
+      department_name: normalizeText(offering.department_name) || null,
+      section: offering.section ?? null,
+      code: offering.code ?? null,
+      course_no: offering.course_no ?? null,
+      descriptive_title: offering.descriptive_title ?? null,
+      units: offering.units ?? null,
+      lec_hrs: offering.lec_hrs ?? null,
+      lab_hrs: offering.lab_hrs ?? null,
+      mth_schedule: offering.mth_schedule ?? null,
+      tfs_schedule: offering.tfs_schedule ?? null,
+      merged: Boolean(offering.merged),
+      faculty_id: assignedFaculty ? assignedFaculty.faculty_id ?? null : null,
+      faculty_name: assignedFaculty ? normalizeText(assignedFaculty.faculty_name) || null : null,
+      faculty_role: assignedFaculty ? normalizeText(assignedFaculty.faculty_role) || null : null,
+      load_status: assignment ? 'loaded' : isGeneral ? 'general' : problematic ? 'needs_attention' : 'unassigned',
+      issue_reasons: problematic?.reasons || [],
+      is_general: isGeneral,
+      source: 'subject',
+      source_subject_id: offering.source_subject_id ?? null,
+      display_label: describeOffering(offering),
+    });
+  }
+
+  return rows;
+}
+
 function areMergedOfferings(leftOffering, rightOffering) {
   if (!leftOffering || !rightOffering) return false;
   // Two offerings are merged if they have identical schedules and rooms (same physical class, different curricula)
@@ -315,7 +416,41 @@ function buildMergedOfferingKey(subject) {
   ].join('|');
 }
 
-function mapSubjectsToGaOfferings(subjects) {
+function buildDbMergeKeyFromSubject(subject) {
+  return [
+    normalizeDedupeText(subject.subject_code),
+    normalizeDedupeText(subject.subject_course_no),
+    normalizeDedupeText(subject.subject_section),
+    normalizeDedupeText(subject.subject_descriptive_title),
+    normalizeDedupeText(subject.mth_schedule),
+    normalizeDedupeText(subject.tfs_schedule),
+    normalizeDedupeNumber(subject.subject_units),
+    normalizeDedupeNumber(subject.subject_lec_hrs),
+    normalizeDedupeNumber(subject.subject_lab_hrs),
+  ].join('|');
+}
+
+function buildDbMergeKeyFromOffering(offering) {
+  return [
+    normalizeDedupeText(offering.code),
+    normalizeDedupeText(offering.course_no),
+    normalizeDedupeText(offering.section),
+    normalizeDedupeText(offering.descriptive_title),
+    normalizeDedupeText(offering.mth_schedule),
+    normalizeDedupeText(offering.tfs_schedule),
+    normalizeDedupeNumber(offering.units),
+    normalizeDedupeNumber(offering.lec_hrs),
+    normalizeDedupeNumber(offering.lab_hrs),
+  ].join('|');
+}
+
+function mapSubjectsToGaOfferings(subjects, courseOfferings = []) {
+  const mergedKeysFromDb = new Set(
+    (Array.isArray(courseOfferings) ? courseOfferings : [])
+      .filter((offering) => toBoolean(offering?.merged))
+      .map((offering) => buildDbMergeKeyFromOffering(offering))
+  );
+
   const grouped = new Map();
 
   for (const subject of subjects) {
@@ -352,7 +487,7 @@ function mapSubjectsToGaOfferings(subjects) {
       mth_room_id: normalizeText(representative.mth_room) || null,
       tfs_schedule: normalizeText(representative.tfs_schedule) || null,
       tfs_room_id: normalizeText(representative.tfs_room) || null,
-      merged: rows.length > 1,
+      merged: rows.length > 1 || mergedKeysFromDb.has(buildDbMergeKeyFromSubject(representative)),
       duplicate_count: rows.length,
       source_subject_ids: sourceSubjectIds,
       source_curr_ids: sourceCurrIds,
@@ -368,11 +503,16 @@ function mapSubjectsToGaOfferings(subjects) {
 
 function buildPreflight(snapshot) {
   const issues = [];
+  const departmentLookup = buildDepartmentLookup(snapshot.departments);
   const roomLookup = buildRoomLookup(snapshot.rooms);
   const roomReservations = new Map();
   const activeFacultyByDepartment = new Map();
   const allOfferings = Array.isArray(snapshot.offerings) ? snapshot.offerings : [];
   const assignableOfferings = allOfferings.filter((offering) => !Boolean(offering.is_general));
+  
+  // New: Track assignable vs problematic offerings for partial loading
+  const assignableOfferingsList = [];
+  const problematicOfferingsMap = new Map(); // offeringId -> reason
 
   for (const faculty of snapshot.faculty) {
     const missing = REQUIRED_FACULTY_FIELDS.filter((field) => isEmptyValue(faculty[field]));
@@ -384,6 +524,8 @@ function buildPreflight(snapshot) {
           field,
           severity: field === 'faculty_name' || field === 'department_id' || field === 'faculty_max_units' ? 'high' : 'medium',
           problem: `Missing ${field.replace(/_/g, ' ')}`,
+          entity_label: describeFaculty(faculty),
+          department_name: describeDepartment(faculty.department_id, departmentLookup),
         });
       }
     }
@@ -395,6 +537,8 @@ function buildPreflight(snapshot) {
         field: 'faculty_status',
         severity: 'low',
         problem: `Faculty status is ${normalizeText(faculty.faculty_status) || 'unspecified'}`,
+        entity_label: describeFaculty(faculty),
+        department_name: describeDepartment(faculty.department_id, departmentLookup),
       });
     } else {
       const departmentId = toNumber(faculty.department_id);
@@ -416,6 +560,7 @@ function buildPreflight(snapshot) {
           field,
           severity: field === 'room_name' ? 'high' : 'medium',
           problem: `Missing ${field.replace(/_/g, ' ')}`,
+          entity_label: describeRoom(room),
         });
       }
     }
@@ -431,6 +576,9 @@ function buildPreflight(snapshot) {
           field,
           severity: ['department_id', 'units', 'lec_hrs', 'descriptive_title'].includes(field) ? 'high' : 'medium',
           problem: `Missing ${field.replace(/_/g, ' ')} in subject-derived workload`,
+          entity_label: describeOffering(offering),
+          department_name: describeDepartment(offering.department_id, departmentLookup),
+          is_general: Boolean(offering.is_general),
         });
       }
     }
@@ -444,6 +592,9 @@ function buildPreflight(snapshot) {
         field: 'hours',
         severity: 'high',
         problem: 'Missing lecture/lab hours in subject-derived workload (fill at least one)',
+        entity_label: describeOffering(offering),
+        department_name: describeDepartment(offering.department_id, departmentLookup),
+        is_general: Boolean(offering.is_general),
       });
     }
 
@@ -459,6 +610,9 @@ function buildPreflight(snapshot) {
         field: 'mth_room_id',
         severity: 'high',
         problem: 'MTH schedule is missing a resolvable room',
+        entity_label: describeOffering(offering),
+        department_name: describeDepartment(offering.department_id, departmentLookup),
+        room_label: hasMthSchedule ? normalizeText(offering.mth_room_id) || null : null,
       });
     }
 
@@ -469,6 +623,9 @@ function buildPreflight(snapshot) {
         field: 'tfs_room_id',
         severity: 'high',
         problem: 'TFS schedule is missing a resolvable room',
+        entity_label: describeOffering(offering),
+        department_name: describeDepartment(offering.department_id, departmentLookup),
+        room_label: hasTfsSchedule ? normalizeText(offering.tfs_room_id) || null : null,
       });
     }
 
@@ -479,6 +636,9 @@ function buildPreflight(snapshot) {
         field: 'schedule',
         severity: 'high',
         problem: 'Subject has no schedule assigned',
+        entity_label: describeOffering(offering),
+        department_name: describeDepartment(offering.department_id, departmentLookup),
+        is_general: Boolean(offering.is_general),
       });
     }
 
@@ -499,7 +659,7 @@ function buildPreflight(snapshot) {
           offeringCourseNo: offering.course_no || null,
           offeringSection: offering.section || null,
           offeringCurrId: offering.curr_id || null,
-          offeringDeptName: offering.department_name || offering.department_id || null,
+          offeringDeptName: normalizeText(offering.department_name) || describeDepartment(offering.department_id, departmentLookup),
           start: block.start,
           end: block.end,
           offering: offering,
@@ -551,7 +711,8 @@ function buildPreflight(snapshot) {
           type: 'cross_reference',
           id: departmentId,
           severity: 'high',
-          problem: `Department ${departmentId} has course offerings but insufficient faculty (no fallback available)`,
+          problem: `${describeDepartment(departmentId, departmentLookup)} has course offerings but insufficient faculty (no fallback available)`,
+          entity_label: describeDepartment(departmentId, departmentLookup),
         });
       }
 
@@ -565,7 +726,8 @@ function buildPreflight(snapshot) {
           type: 'cross_reference',
           id: departmentId,
           severity: 'high',
-          problem: `Department ${departmentId} has course offerings but no active faculty`,
+          problem: `${describeDepartment(departmentId, departmentLookup)} has course offerings but no active faculty`,
+          entity_label: describeDepartment(departmentId, departmentLookup),
         });
       }
       processedDepartments.add(departmentId);
@@ -614,26 +776,104 @@ function buildPreflight(snapshot) {
         type: 'room_conflict',
         id: roomKey,
         severity: 'high',
-        problem: `Room conflict detected for ${roomKey}${details}`,
+        problem: `Room conflict detected for ${describeRoomKey(roomKey, roomLookup)}${details}`,
+        entity_label: describeRoomKey(roomKey, roomLookup),
+        room_label: describeRoomKey(roomKey, roomLookup),
       });
     }
   }
 
+// New: Categorize offerings based on issues found
+  const offeringIssuesMap = new Map(); // offeringId -> array of issue reasons
+  for (const issue of issues) {
+    if (issue.type === 'subject' || issue.type === 'room_conflict') {
+      const offeringId = issue.id;
+      const existing = offeringIssuesMap.get(offeringId) || [];
+      existing.push(issue.problem);
+      offeringIssuesMap.set(offeringId, existing);
+    }
+  }
+  
+  // For room_conflict issues, also mark both conflicting offerings
+  for (const issue of issues) {
+    if (issue.type === 'room_conflict') {
+      // Extract offering IDs from room_conflict details if available
+      const match = issue.problem.match(/offerings (\d+)/);
+      if (match) {
+        const oid = Number(match[1]);
+        const existing = offeringIssuesMap.get(oid) || [];
+        existing.push(issue.problem);
+        offeringIssuesMap.set(oid, existing);
+      }
+    }
+  }
+  
+  // Categorize each assignable offering
+  for (const offering of assignableOfferings) {
+    const offeringIssues = offeringIssuesMap.get(offering.id) || [];
+    if (offeringIssues.length === 0) {
+      assignableOfferingsList.push(offering);
+    } else {
+      problematicOfferingsMap.set(offering.id, {
+        offering,
+        reasons: offeringIssues,
+      });
+    }
+  }
+
+  const hasHighSeverityIssues = issues.some((issue) => issue.severity === 'high');
+  const status = hasHighSeverityIssues
+    ? assignableOfferingsList.length > 0
+      ? 'partial'
+      : 'blocked'
+    : 'ok';
+  
   return {
-    status: issues.some((issue) => issue.severity === 'high') ? 'blocked' : 'ok',
+    status,
     faculty_count: snapshot.faculty.length,
     offering_count: snapshot.offerings.length,
     room_count: snapshot.rooms.length,
     subject_count: snapshot.subjects.length,
     issues,
-    suggested_next_step: issues.some((issue) => issue.severity === 'high')
-      ? 'Resolve the listed issues in Faculty, Subjects, or Rooms before running GA.'
+    general_count: allOfferings.filter((offering) => Boolean(offering.is_general)).length,
+    general_offerings: allOfferings
+      .filter((offering) => Boolean(offering.is_general))
+      .map((offering) => ({
+        id: offering.id,
+        code: offering.code,
+        course_no: offering.course_no,
+        section: offering.section,
+        department_id: offering.department_id,
+        department_name: normalizeText(offering.department_name) || describeDepartment(offering.department_id, departmentLookup),
+        descriptive_title: offering.descriptive_title,
+        is_general: true,
+      })),
+    // New: Categorization for partial loading
+    assignable_count: assignableOfferingsList.length,
+    problematic_count: problematicOfferingsMap.size,
+    assignable_offerings: assignableOfferingsList,
+    problematic_offerings: Array.from(problematicOfferingsMap.values()).map((item) => ({
+      id: item.offering.id,
+      code: item.offering.code,
+      course_no: item.offering.course_no,
+      section: item.offering.section,
+      department_id: item.offering.department_id,
+      department_name: normalizeText(item.offering.department_name) || describeDepartment(item.offering.department_id, departmentLookup),
+      descriptive_title: item.offering.descriptive_title,
+      is_general: Boolean(item.offering.is_general),
+      reasons: item.reasons,
+    })),
+    suggested_next_step: hasHighSeverityIssues
+      ? assignableOfferingsList.length > 0
+        ? 'GA can proceed with assignable offerings. Review problematic_offerings and general_offerings for issues that need attention.'
+        : 'GA is blocked because no assignable offerings are available. Resolve the listed issues first.'
       : 'Data is ready for GA execution.',
+    partial_loading_enabled: true,
   };
 }
 
 async function fetchSnapshot() {
-  const [facultyResp, offeringResp, roomResp, subjectResp] = await Promise.all([
+  const [facultyResp, offeringResp, roomResp, subjectResp, departmentResp] = await Promise.all([
     query(`
       select f.faculty_id, f.faculty_name, f.department_id, f.faculty_email, f.faculty_specialization,
              f.faculty_max_units, f.faculty_role, f.faculty_status,
@@ -664,6 +904,11 @@ async function fetchSnapshot() {
       left join public.departments d on d.department_id = s.department_id
       order by s.subject_id asc
     `),
+    query(`
+      select department_id, department_name
+      from public.departments
+      order by department_id asc
+    `),
   ]);
 
   return {
@@ -671,6 +916,7 @@ async function fetchSnapshot() {
     offerings: offeringResp.rows,
     rooms: roomResp.rows,
     subjects: subjectResp.rows,
+    departments: departmentResp.rows,
   };
 }
 
@@ -837,12 +1083,20 @@ async function persistFacultyLoading(assignments, snapshot) {
 
 async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = {}) {
   const snapshot = await fetchSnapshot();
-  const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
+  const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects, snapshot.offerings);
   const subjectDrivenSnapshot = { ...snapshot, offerings: subjectDrivenOfferings };
   const preFlight = buildPreflight(subjectDrivenSnapshot);
 
-  if (preFlight.status === 'blocked') {
-    const error = new Error('Data quality issues prevent GA execution');
+  // New: Use assignable_offerings from preflight for partial loading instead of blocking
+  const preflightAssignable = preFlight.assignable_offerings || [];
+  const preflightProblematic = preFlight.problematic_offerings || [];
+  
+  // Filter to non-general offerings from assignable list
+  const validOfferings = preflightAssignable.filter((o) => !Boolean(o.is_general));
+
+  // If no valid offerings, still throw error
+  if (validOfferings.length === 0 && preflightAssignable.length === 0) {
+    const error = new Error('No assignable offerings available for GA execution');
     error.statusCode = 400;
     error.preFlight = preFlight;
     throw error;
@@ -857,7 +1111,8 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     dry_run: Boolean(dryRun || constraints.dry_run),
   };
 
-  const assignableOfferings = subjectDrivenOfferings.filter((offering) => !Boolean(offering.is_general));
+  // Use validOfferings from preflight categorization
+  const assignableOfferings = validOfferings;
 
   const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
@@ -882,13 +1137,22 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     mergedResult.persistence = { persisted: 0, dry_run: true };
   }
 
+  const generatedRows = buildFacultyLoadingDisplayRows(subjectDrivenSnapshot, optimizerResult.assignments || [], preFlight);
+  mergedResult.report = {
+    ...(mergedResult.report || {}),
+    generated_rows: generatedRows,
+    assignable_offerings: preFlight.assignable_offerings || [],
+    problematic_offerings: preFlight.problematic_offerings || [],
+    general_offerings: preFlight.general_offerings || [],
+  };
+
   return mergedResult;
 }
 
 export async function getGaPreFlight(_req, res) {
   try {
     const snapshot = await fetchSnapshot();
-    const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects);
+    const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects, snapshot.offerings);
     const subjectDrivenSnapshot = { ...snapshot, offerings: subjectDrivenOfferings };
     return res.json(buildPreflight(subjectDrivenSnapshot));
   } catch (error) {

@@ -440,8 +440,11 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
                 soft_penalty += 22.0
                 conflicts.append({"type": "department_mismatch", "faculty_id": faculty_id, "offering_id": offering.get("id"), "problem": "Faculty department does not match course offering department"})
 
-    hard_score = max(0.0, 100.0 - hard_penalty)
-    soft_score = max(0.0, 100.0 - soft_penalty)
+    assignment_count = max(1, len(assignments))
+    normalized_hard_penalty = hard_penalty / assignment_count
+    normalized_soft_penalty = soft_penalty / assignment_count
+    hard_score = max(0.0, 100.0 - normalized_hard_penalty)
+    soft_score = max(0.0, 100.0 - normalized_soft_penalty)
     overall = max(0.0, min(100.0, hard_score * 0.68 + soft_score * 0.32))
 
     faculty_load_balance: List[Dict[str, Any]] = []
@@ -457,6 +460,7 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
             "faculty_name": faculty.get("faculty_name"),
             "faculty_role": faculty.get("faculty_role"),
             "department_id": faculty.get("department_id"),
+            "department_name": faculty.get("department_name"),
             "total_units": round(total_units, 2),
             "max_units": round(max_units, 2),
             "free_units": round(free_units, 2),
@@ -488,6 +492,11 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
             "explainability": explainability,
             "conflicts": conflicts,
             "load_imbalance_score": round(sum((loads.get(int(to_number(f.get('faculty_id')) or 0), 0.0) - average_load) ** 2 for f in faculties), 2),
+            "fitness_summary": {
+                "assignment_count": assignment_count,
+                "normalized_hard_penalty": round(normalized_hard_penalty, 2),
+                "normalized_soft_penalty": round(normalized_soft_penalty, 2),
+            },
         },
     }
 
