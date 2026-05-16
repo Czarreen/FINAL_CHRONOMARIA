@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw, BookOpen } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom, fetchRoomOfferings } from '../services/roomsApi.js';
 import { fetchRoomNotifications, rescanAllRoomNotifications, resolveRoomNotification } from '../services/notificationsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
+import { highlightRowElement } from '../utils/highlightRow.js';
 
 function parseStartMinutes(schedule) {
   if (!schedule) return Infinity;
@@ -87,6 +88,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [subjectCols, setSubjectCols] = useState(new Set(['code', 'course_no', 'descriptive_title', 'schedule']));
   const [subjectSort, setSubjectSort] = useState({ key: 'schedule', dir: 'asc' });
+  const [pendingScrollToRoom, setPendingScrollToRoom] = useState(null);
 
   // Info overlay states
   const [showAddInfo, setShowAddInfo] = useState(false);
@@ -109,6 +111,11 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
+
+  const clearRoomFiltersForJump = () => {
+    setSearchQuery('');
+    setStatusFilter('');
+  };
 
   const columns = [
     { key: 'room_name', label: 'Room Name' },
@@ -472,14 +479,36 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
+  useLayoutEffect(() => {
+    if (!pendingScrollToRoom?.id) return;
+
+    highlightRowElement(pendingScrollToRoom.id, {
+      scrollIntoView: true,
+      severity: pendingScrollToRoom.severity,
+      retry: true,
+      maxWaitMs: 2500,
+      pollIntervalMs: 16,
+      onHighlighted: () => setPendingScrollToRoom(null),
+    });
+  }, [pendingScrollToRoom, currentRooms]);
+
   // Notification handlers
   function handleNotificationJump(item) {
     const rowElement = document.getElementById(`room-row-${item.room_id}`);
     if (rowElement) {
-      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      rowElement.classList.add('animate-pulse');
-      setTimeout(() => rowElement.classList.remove('animate-pulse'), 2000);
+      highlightRowElement(item.room_id, { scrollIntoView: true, severity: item.severity || null, retry: true, maxWaitMs: 1200, pollIntervalMs: 16 });
+      return;
     }
+
+    const roomIndex = rooms.findIndex((room) => room.room_id === item.room_id);
+    if (roomIndex === -1) return;
+
+    clearRoomFiltersForJump();
+    const targetPage = Math.max(1, Math.ceil((roomIndex + 1) / PAGE_SIZE));
+    if (targetPage !== currentPage) {
+      setCurrentPage(targetPage);
+    }
+    setPendingScrollToRoom({ id: item.room_id, severity: item.severity || null });
   }
 
   function handleNotificationEdit(item) {
@@ -487,11 +516,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     const room = rooms.find((r) => r.room_id === item.room_id);
     if (room) {
       handleEditClick(room);
-      // Scroll to the room row
-      const rowElement = document.getElementById(`room-row-${item.room_id}`);
-      if (rowElement) {
-        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      handleNotificationJump(item);
     }
   }
 

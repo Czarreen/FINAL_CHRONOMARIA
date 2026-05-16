@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
@@ -6,6 +6,7 @@ import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { highlightRowElement } from '../utils/highlightRow.js';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 
 export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 0 } = {}) {
@@ -58,6 +59,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
+  const [pendingScrollToSubject, setPendingScrollToSubject] = useState(null);
 
   const columns = [
     { key: 'curr_id', label: 'Curriculum ID' },
@@ -80,6 +82,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   const colButtonRef = useRef(null);
   const colMenuRef = useRef(null);
   const pendingStatusUpdatesRef = useRef(new Set());
+  const skipNextSearchResetRef = useRef(false);
 
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -210,7 +213,11 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       setSearch(searchInput);
-      setPage(1); // Reset to page 1 when search changes
+      if (skipNextSearchResetRef.current) {
+        skipNextSearchResetRef.current = false;
+      } else {
+        setPage(1); // Reset to page 1 when search changes
+      }
     }, 500); // 500ms debounce
 
     return () => clearTimeout(debounceTimer);
@@ -220,6 +227,27 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     setSearch(searchInput);
     setPage(1);
   }, [searchInput]);
+
+  useLayoutEffect(() => {
+    if (!pendingScrollToSubject?.id) return;
+
+    highlightRowElement(pendingScrollToSubject.id, {
+      scrollIntoView: true,
+      severity: pendingScrollToSubject.severity,
+      retry: true,
+      maxWaitMs: 2500,
+      pollIntervalMs: 16,
+      onHighlighted: () => setPendingScrollToSubject(null),
+    });
+  }, [pendingScrollToSubject, subjects]);
+
+  function clearSubjectFiltersForJump() {
+    skipNextSearchResetRef.current = true;
+    setSearchInput('');
+    setSearch('');
+    setSearchField('all');
+    setStatusFilter('');
+  }
 
   // Load subjects data
   useEffect(() => {
@@ -469,10 +497,10 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     }
   }
 
-  function scrollToSubjectRowById(subjectId) {
+  function scrollToSubjectRowById(subjectId, severity = null) {
     const rowElement = document.getElementById(`subject-row-${subjectId}`);
     if (rowElement) {
-      setHighlight(subjectId, 'SubjectsView');
+      setHighlight(subjectId, 'SubjectsView', severity, { retry: true, maxWaitMs: 1200, pollIntervalMs: 16 });
       return;
     }
 
@@ -484,14 +512,13 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     // Use the page-lookup endpoint instead of iterating up to 200 pages
     (async () => {
       try {
-        const targetPage = await fetchSubjectPageNumber(numericId, { search, searchField, status: statusFilter, limit });
+        clearSubjectFiltersForJump();
+        const targetPage = await fetchSubjectPageNumber(numericId, { search: '', searchField: 'all', status: '', limit });
         if (!targetPage) return;
         if (targetPage !== page) {
           setPage(targetPage);
         }
-        window.setTimeout(() => {
-          setHighlight(subjectId, 'SubjectsView');
-        }, 150);
+        setPendingScrollToSubject({ id: subjectId, severity });
       } catch (_) {
         // ignore fallback failures
       }
@@ -918,7 +945,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
               }}
               onItemJump={(item) => {
                 const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
-                if (rowId) scrollToSubjectRowById(rowId);
+                if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
               }}
               onItemResolve={(item) => handleResolveNotification(item)}
               severityFilter={notifSeverityFilter}
