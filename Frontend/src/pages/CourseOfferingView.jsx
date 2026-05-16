@@ -1563,7 +1563,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Data Table - Compact */}
       <div className="glass-panel overflow-hidden flex-1">
         <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
-          <table className="min-w-full w-full text-left text-base">
+          <table className="min-w-full w-full text-left text-xs">
             <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
                   <th className="px-3 py-3 text-center w-12">
@@ -1572,30 +1572,30 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                       checked={(displayedOfferings || []).length > 0 && selectedOfferings.size === (displayedOfferings || []).length}
                       indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < (displayedOfferings || []).length ? true : undefined}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </th>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
                       <th key={col.key} className={`px-3 py-3 ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : 'text-left'}`} scope="col">
-                        <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1.5 text-sm font-bold uppercase tracking-wider transition-colors ${
+                        <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
                           sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
                         }`} aria-pressed={sortConfig.key === col.key ? 'true' : 'false'}>
                           <span>{col.label}</span>
-                          <ArrowUpDown size={12} />
+                          <ArrowUpDown size={10} />
                         </button>
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-30 bg-white/95 px-3 py-3 text-center text-sm font-bold uppercase tracking-wider text-on-surface-variant/70 backdrop-blur">Act</th>
+                  <th className="sticky right-0 z-30 bg-white/95 px-3 py-3 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Act</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-white/20">
               {loading && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-base text-on-surface-variant"
+                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     Loading...
@@ -1606,7 +1606,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               {!loading && error && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-base text-error"
+                    className="px-3 py-4 text-center text-xs text-error"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     {error}
@@ -1617,7 +1617,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               {!loading && !error && offerings.length === 0 && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-base text-on-surface-variant"
+                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     No offerings found.
@@ -1626,13 +1626,13 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               )}
 
               {!loading && !error && displayedOfferings.map((offering) => (
-                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40 text-base">
+                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40">
                   <td className="px-3 py-3 text-center">
                     <input
                       type="checkbox"
                       checked={selectedOfferings.has(offering.id)}
                       onChange={() => toggleSelectOffering(offering.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </td>
                   {columns.map((col) => {
@@ -1640,27 +1640,27 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     return (
                       <td key={col.key} className={`px-3 py-3 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
                         {col.key === 'code' ? (
-                          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-sm font-bold text-primary">
+                          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'course_no' ? (
-                          <span className="text-sm font-medium text-on-surface">
+                          <span className="text-xs font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'descriptive_title' ? (
-                          <span className="text-sm text-on-surface-variant truncate max-w-xs block">{renderCellValue(offering[col.key])}</span>
+                          <span className="text-xs text-on-surface-variant truncate max-w-xs block">{renderCellValue(offering[col.key])}</span>
                         ) : col.key === 'units' ? (
-                          <span className="text-sm font-medium text-on-surface">
+                          <span className="text-xs font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'lec_hrs' || col.key === 'lab_hrs' ? (
-                          <span className="text-sm font-medium text-on-surface-variant">
+                          <span className="text-xs font-medium text-on-surface-variant">
                             {renderCellValue(offering[col.key])}h
                           </span>
                         ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                          <span className="text-sm text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
+                          <span className="text-xs text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
                         ) : (
-                          <span className="text-sm text-on-surface-variant truncate">
+                          <span className="text-xs text-on-surface-variant truncate">
                             {renderCellValue(offering[col.key])}
                           </span>
                         )}
