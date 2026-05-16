@@ -39,8 +39,10 @@ import { fetchDepartments } from '../services/departmentsApi';
 import NotificationButton from '../components/NotificationButton';
 import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
-import { isFormValid, getDisabledReason, getSchedulePairStatus } from '../utils/courseOfferingValidation';
+import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidation';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
+import ScheduleCardInput from '../components/ScheduleCardInput';
+import { buildScheduleString, parseScheduleString, emptyCardState } from '../utils/scheduleUtils';
 
 const PAGE_SIZE = 50;
 
@@ -94,6 +96,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [editingFromNotification, setEditingFromNotification] = useState(false);
   const [notificationMissingFields, setNotificationMissingFields] = useState(new Set());
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+
+  // Structured schedule card state — drives mth_schedule / tfs_schedule strings
+  const [mthCard, setMthCard] = useState(emptyCardState('mth'));
+  const [tfsCard, setTfsCard] = useState(emptyCardState('tfs'));
 
   const { setHighlight, clearHighlight } = useRowHighlight();
   const skipNextFilterResetRef = useRef(false);
@@ -344,8 +350,13 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   }
 
   async function handleAddOffering() {
-    if (!isFormValid(editingData)) {
-      setOfferingError(getDisabledReason(editingData) || 'Please fill in all required fields');
+    // Derive schedule strings from structured card state (null for disabled cards)
+    const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
+    const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+    const dataForValidation = { ...editingData, mth_schedule: mthStr || null, tfs_schedule: tfsStr || null };
+
+    if (!isFormValid(dataForValidation)) {
+      setOfferingError(getDisabledReason(dataForValidation) || 'Please fill in all required fields');
       return;
     }
 
@@ -353,25 +364,28 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setSavingOffering(true);
       setOfferingError(null);
 
-      // Convert room arrays to slash-separated strings
-      const mthRoomIds = Array.isArray(editingData.mth_room_id)
-        ? editingData.mth_room_id.filter(Boolean).join('/')
-        : (editingData.mth_room_id || null);
+      const mthRoomId = mthCard.enabled
+        ? (Array.isArray(editingData.mth_room_id) ? editingData.mth_room_id.filter(Boolean)[0] || null : (editingData.mth_room_id || null))
+        : null;
 
-      const tfsRoomIds = Array.isArray(editingData.tfs_room_id)
-        ? editingData.tfs_room_id.filter(Boolean).join('/')
-        : (editingData.tfs_room_id || null);
+      const tfsRoomId = tfsCard.enabled
+        ? (Array.isArray(editingData.tfs_room_id) ? editingData.tfs_room_id.filter(Boolean)[0] || null : (editingData.tfs_room_id || null))
+        : null;
 
       const payload = {
         ...editingData,
-        mth_room_id: mthRoomIds,
-        tfs_room_id: tfsRoomIds,
+        mth_schedule: mthStr || null,
+        tfs_schedule: tfsStr || null,
+        mth_room_id: mthRoomId,
+        tfs_room_id: tfsRoomId,
       };
 
       await createCourseOffering(payload);
       setSuccessMessage(`Created "${editingData.code}"`);
       setShowAddModal(false);
       setEditingData({});
+      setMthCard(emptyCardState('mth'));
+      setTfsCard(emptyCardState('tfs'));
       setDuplicateCodeSuggestions([]);
       await loadInitialPage();
     } catch (err) {
@@ -383,6 +397,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
   async function handleEditOffering(offering, notifItem = null) {
     setEditingId(offering.id);
+    const mthRoomIds = resolveRoomIds(offering, 'mth').map(String);
+    const tfsRoomIds = resolveRoomIds(offering, 'tfs').map(String);
     setEditingData({
       code: offering.code || '',
       course_no: offering.course_no || '',
@@ -394,10 +410,19 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       lec_hrs: offering.lec_hrs || 0,
       lab_hrs: offering.lab_hrs || 0,
       mth_schedule: offering.mth_schedule || '',
-      mth_room_id: resolveRoomIds(offering, 'mth').map(String),
+      mth_room_id: mthRoomIds,
       tfs_schedule: offering.tfs_schedule || '',
-      tfs_room_id: resolveRoomIds(offering, 'tfs').map(String),
+      tfs_room_id: tfsRoomIds,
     });
+    // Pre-populate structured card state from existing schedule strings
+    const mthParsed = parseScheduleString(offering.mth_schedule || '', 'mth');
+    setMthCard(mthParsed
+      ? { enabled: true, mode: mthParsed.mode, startH: mthParsed.startH, startM: mthParsed.startM, endH: mthParsed.endH, endM: mthParsed.endM, type: mthParsed.type }
+      : emptyCardState('mth'));
+    const tfsParsed = parseScheduleString(offering.tfs_schedule || '', 'tfs');
+    setTfsCard(tfsParsed
+      ? { enabled: true, mode: tfsParsed.mode, startH: tfsParsed.startH, startM: tfsParsed.startM, endH: tfsParsed.endH, endM: tfsParsed.endM, type: tfsParsed.type }
+      : emptyCardState('tfs'));
     setEditingFromNotification(!!notifItem);
     setNotificationMissingFields(
       notifItem
@@ -412,19 +437,24 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setSavingOffering(true);
       setOfferingError(null);
 
-      // Convert room arrays to slash-separated strings
-      const mthRoomIds = Array.isArray(editingData.mth_room_id)
-        ? editingData.mth_room_id.filter(Boolean).join('/')
-        : (editingData.mth_room_id || null);
+      // Derive schedule strings from structured card state (null for disabled cards)
+      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
+      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
 
-      const tfsRoomIds = Array.isArray(editingData.tfs_room_id)
-        ? editingData.tfs_room_id.filter(Boolean).join('/')
-        : (editingData.tfs_room_id || null);
+      const mthRoomId = mthCard.enabled
+        ? (Array.isArray(editingData.mth_room_id) ? editingData.mth_room_id.filter(Boolean)[0] || null : (editingData.mth_room_id || null))
+        : null;
+
+      const tfsRoomId = tfsCard.enabled
+        ? (Array.isArray(editingData.tfs_room_id) ? editingData.tfs_room_id.filter(Boolean)[0] || null : (editingData.tfs_room_id || null))
+        : null;
 
       const payload = {
         ...editingData,
-        mth_room_id: mthRoomIds,
-        tfs_room_id: tfsRoomIds,
+        mth_schedule: mthStr || null,
+        tfs_schedule: tfsStr || null,
+        mth_room_id: mthRoomId,
+        tfs_room_id: tfsRoomId,
       };
 
       const savedId = editingId;
@@ -432,6 +462,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setSuccessMessage(`Updated "${editingData.code}"`);
       setEditingId(null);
       setEditingData({});
+      setMthCard(emptyCardState('mth'));
+      setTfsCard(emptyCardState('tfs'));
       setEditingFromNotification(false);
       setNotificationMissingFields(new Set());
       // Re-sync notifications for this offering in the background then refresh list
@@ -441,6 +473,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       if (String(err.message || '').includes('404')) {
         setEditingId(null);
         setEditingData({});
+        setMthCard(emptyCardState('mth'));
+        setTfsCard(emptyCardState('tfs'));
         setEditingFromNotification(false);
         setNotificationMissingFields(new Set());
         await loadInitialPage();
@@ -1490,6 +1524,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               onClick={() => {
                 setShowAddModal(true);
                 setEditingData({ mth_room_id: [], tfs_room_id: [] });
+                setMthCard(emptyCardState('mth'));
+                setTfsCard(emptyCardState('tfs'));
                 setOfferingError(null);
               }}
               type="button"
@@ -1992,26 +2028,31 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Edit Modal */}
       {editingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-8">
-            <div className="mb-6 flex items-center justify-between">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
-                <h3 className="text-2xl font-bold text-on-surface">Edit Course Offering</h3>
+                <h3 className="text-lg font-bold text-white">
+                  {editingFromNotification ? 'Fix Missing Fields' : 'Edit Course Offering'}
+                </h3>
                 {editingFromNotification && (
-                  <p className="mt-1 text-sm text-amber-600 font-semibold">From notification</p>
+                  <p className="text-xs text-white/70 mt-0.5">Only fields with missing data are editable</p>
                 )}
               </div>
               <button
                 onClick={() => {
                   setEditingId(null);
+                  setMthCard(emptyCardState('mth'));
+                  setTfsCard(emptyCardState('tfs'));
                   setEditingFromNotification(false);
                   setNotificationMissingFields(new Set());
                 }}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/60 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
                 aria-label="Close edit modal"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
+            <div className="px-6 py-5 space-y-4">
 
             {offeringError && (
               <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
@@ -2037,48 +2078,90 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     <h4 className={`text-lg font-bold uppercase tracking-[0.2em] ${group.titleColor}`}>
                       {group.title}
                     </h4>
-                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                      {group.columns.map((col) => {
-                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
-                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
-                        return (
-                          <div key={col.key}>
-                            <label className={`mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
-                              {col.label}
-                              {isLocked && <Lock size={12} className="text-slate-300" />}
-                              {isMissing && <span className="text-xs text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
-                            </label>
-                            {isLocked ? (
-                              <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-base text-slate-400 cursor-not-allowed select-none">
-                                <Lock size={13} className="flex-shrink-0 text-slate-300" />
-                                <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
-                              </div>
-                            ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                              <div className={isMissing ? 'ring-2 ring-amber-400/40 rounded-lg' : ''}>
-                                {renderRoomPicker(col.key)}
-                              </div>
-                            ) : (
-                              <input
-                                type={numericCols.has(col.key) ? 'number' : 'text'}
-                                value={editingData[col.key] ?? ''}
-                                onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                                className={`w-full rounded-lg border px-4 py-3 text-base text-on-surface outline-none transition-all ${
-                                  isMissing
-                                    ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
-                                    : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
-                                }`}
+                    {group.title === 'Schedule' ? (
+                      /* Schedule group: render structured card inputs instead of plain text fields */
+                      <div className="space-y-4">
+                        {(() => {
+                          const mthLocked = editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id');
+                          const tfsLocked = editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id');
+                          const mthMissing = editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'));
+                          const tfsMissing = editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'));
+                          return (
+                            <>
+                              <ScheduleCardInput
+                                slot="mth"
+                                value={mthCard}
+                                onChange={setMthCard}
+                                onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                canDisable={tfsCard.enabled}
+                                roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
+                                onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
+                                rooms={rooms}
+                                getConflictingOfferings={getConflictingOfferings}
+                                editingId={editingId}
+                                isMissing={mthMissing}
+                                disabled={mthLocked}
                               />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                              <ScheduleCardInput
+                                slot="tfs"
+                                value={tfsCard}
+                                onChange={setTfsCard}
+                                onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                canDisable={mthCard.enabled}
+                                roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
+                                onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
+                                rooms={rooms}
+                                getConflictingOfferings={getConflictingOfferings}
+                                editingId={editingId}
+                                isMissing={tfsMissing}
+                                disabled={tfsLocked}
+                              />
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                        {group.columns.map((col) => {
+                          const isLocked = editableKeys !== null && !editableKeys.has(col.key);
+                          const isMissing = editableKeys !== null && editableKeys.has(col.key);
+                          return (
+                            <div key={col.key}>
+                              <label className={`mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
+                                {col.label}
+                                {isLocked && <Lock size={12} className="text-slate-300" />}
+                                {isMissing && <span className="text-xs text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
+                              </label>
+                              {isLocked ? (
+                                <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-base text-slate-400 cursor-not-allowed select-none">
+                                  <Lock size={13} className="flex-shrink-0 text-slate-300" />
+                                  <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type={numericCols.has(col.key) ? 'number' : 'text'}
+                                  value={editingData[col.key] ?? ''}
+                                  onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
+                                  className={`w-full rounded-lg border px-4 py-3 text-base text-on-surface outline-none transition-all ${
+                                    isMissing
+                                      ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
+                                      : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
+                                  }`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div className="flex gap-4 pt-6">
                   <button
                     onClick={() => {
                       setEditingId(null);
+                      setMthCard(emptyCardState('mth'));
+                      setTfsCard(emptyCardState('tfs'));
                       setEditingFromNotification(false);
                       setNotificationMissingFields(new Set());
                     }}
@@ -2096,6 +2179,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -2103,22 +2187,25 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-on-surface">Add New Course Offering</h3>
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
+              <h3 className="text-lg font-bold text-white">Add New Course Offering</h3>
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingData({});
+                  setMthCard(emptyCardState('mth'));
+                  setTfsCard(emptyCardState('tfs'));
                   setOfferingError(null);
                   setDuplicateCodeSuggestions([]);
                 }}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
                 aria-label="Close add modal"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
+            <div className="px-6 py-5 space-y-6">
 
             {offeringError && (
               <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
@@ -2295,65 +2382,33 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   Schedules & Rooms (At least one required *)
                 </h4>
 
-                {/* MTH Schedule & Room */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h5 className="font-semibold text-on-surface text-base">MTH Schedule & Room</h5>
-                    <span className={`text-base font-semibold ${getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
-                      {getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).icon || '○'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                        Schedule (e.g., MWF 10:00-11:30 or MTH 14:00-15:30)
-                      </label>
-                      <input
-                        type="text"
-                        value={editingData.mth_schedule ?? ''}
-                        onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
-                        placeholder="e.g., MWF 10:00-11:30"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                        Room
-                      </label>
-                      {renderRoomPicker('mth_room_id')}
-                    </div>
-                  </div>
-                </div>
+                {/* MTH Schedule Card */}
+                <ScheduleCardInput
+                  slot="mth"
+                  value={mthCard}
+                  onChange={setMthCard}
+                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={tfsCard.enabled}
+                  roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
+                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
+                  rooms={rooms}
+                  getConflictingOfferings={getConflictingOfferings}
+                  editingId={editingId}
+                />
 
-                {/* TFS Schedule & Room */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h5 className="font-semibold text-on-surface text-base">TFS Schedule & Room (Optional)</h5>
-                    <span className={`text-base font-semibold ${getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
-                      {getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).icon || '○'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                        Schedule (e.g., TTh 10:00-11:30 or TFS 14:00-15:30)
-                      </label>
-                      <input
-                        type="text"
-                        value={editingData.tfs_schedule ?? ''}
-                        onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
-                        placeholder="e.g., TTh 10:00-11:30"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                        Room
-                      </label>
-                      {renderRoomPicker('tfs_room_id')}
-                    </div>
-                  </div>
-                </div>
+                {/* TFS Schedule Card */}
+                <ScheduleCardInput
+                  slot="tfs"
+                  value={tfsCard}
+                  onChange={setTfsCard}
+                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={mthCard.enabled}
+                  roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
+                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
+                  rooms={rooms}
+                  getConflictingOfferings={getConflictingOfferings}
+                  editingId={editingId}
+                />
               </div>
 
               {/* Buttons */}
@@ -2362,6 +2417,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   onClick={() => {
                     setShowAddModal(false);
                     setEditingData({});
+                    setMthCard(emptyCardState('mth'));
+                    setTfsCard(emptyCardState('tfs'));
                     setOfferingError(null);
                     setDuplicateCodeSuggestions([]);
                   }}
@@ -2369,15 +2426,25 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleAddOffering}
-                  disabled={savingOffering || !isFormValid(editingData)}
-                  title={!isFormValid(editingData) ? getDisabledReason(editingData) : ''}
-                  className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-base min-h-[48px]"
-                >
-                  {savingOffering ? 'Creating...' : 'Create Offering'}
-                </button>
+                {(() => {
+                  const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
+                  const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+                  const previewData = { ...editingData, mth_schedule: mthStr || null, tfs_schedule: tfsStr || null };
+                  const valid = isFormValid(previewData);
+                  const disabledReason = !valid ? getDisabledReason(previewData) : '';
+                  return (
+                    <button
+                      onClick={handleAddOffering}
+                      disabled={savingOffering || !valid}
+                      title={disabledReason}
+                      className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-base min-h-[48px]"
+                    >
+                      {savingOffering ? 'Creating...' : 'Create Offering'}
+                    </button>
+                  );
+                })()}
               </div>
+            </div>
             </div>
           </div>
         </div>
