@@ -920,32 +920,31 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     const scheduleType = field === 'mth_room_id' ? 'mth' : 'tfs';
 
     return (
-      <div className="space-y-2 rounded-lg border border-white/60 bg-white/70 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
+      <div className="space-y-3 rounded-lg border border-white/60 bg-white/70 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
             Selected Rooms:
           </span>
           {selectedRoomNames.length ? (
             selectedRoomNames.map((roomName, index) => (
               <span
                 key={`${field}-selected-${index}`}
-                className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
               >
                 {roomName}
               </span>
             ))
           ) : (
-            <span className="text-xs text-on-surface-variant/70">None selected</span>
+            <span className="text-sm text-on-surface-variant/70">None selected</span>
           )}
         </div>
-        <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-56 space-y-2 overflow-y-auto pr-2">
           {!rooms || rooms.length === 0 ? (
-            <p className="text-xs text-on-surface-variant">
+            <p className="text-sm text-on-surface-variant">
               {rooms === null ? 'Loading rooms...' : 'No rooms available'}
             </p>
           ) : (
             rooms.map((room, idx) => {
-              // Safely get room_id - handle 0 as valid ID
               const roomId = room?.room_id !== undefined ? room.room_id : (room?.id !== undefined ? room.id : null);
 
               if (roomId === null || roomId === undefined) {
@@ -960,27 +959,27 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               return (
                 <div key={roomIdStr}>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-on-surface-variant transition-colors hover:bg-slate-50">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-base text-on-surface-variant transition-colors hover:bg-slate-50">
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => toggleRoomSelection(field, roomIdStr)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="font-medium text-on-surface break-words">
+                      <span className="font-medium text-on-surface break-words text-base">
                         {room?.room_name || `Room ${roomId}`}
                       </span>
                       {room?.room_type && (
-                        <span className="ml-2 text-xs text-on-surface-variant/70">
+                        <span className="ml-2 text-sm text-on-surface-variant/70">
                           ({room.room_type})
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-on-surface-variant/70 flex-shrink-0">#{roomId}</span>
+                    <span className="text-sm text-on-surface-variant/70 flex-shrink-0">#{roomId}</span>
                   </label>
                   {conflictCount > 0 && (
-                    <p className="ml-7 text-xs text-amber-600">
+                    <p className="ml-10 text-sm text-amber-600">
                       ⚠️ Used by {conflictCount} other offering(s)
                     </p>
                   )}
@@ -989,7 +988,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             })
           )}
         </div>
-        <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant/60">
+        <p className="text-sm uppercase tracking-[0.18em] text-on-surface-variant/60">
           {selectedValues.length ? `${selectedValues.length} room(s) selected` : 'No rooms selected'}
         </p>
       </div>
@@ -1220,135 +1219,71 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   };
 
   return (
-    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500 p-3">
+    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
       {/* Header with compact stats */}
-      <div className="glass-panel flex flex-col gap-2 p-3">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-on-surface">Course Offerings</h2>
+      <div className="glass-panel p-3">
+        <div className="flex flex-row items-center justify-between gap-3 flex-nowrap">
+          <div className="space-y-1 flex-shrink-0">
+            <h2 className="text-2xl font-bold text-on-surface">Course Offerings</h2>
             <p className="text-xs text-on-surface-variant">Manage offerings, schedules, and room assignments.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <NotificationButton
-              title="Missing Data"
-              buttonLabel="Issues"
-              emptyLabel="No missing data detected."
-              panelSize="lg"
-              items={filteredNotifications}
-              onItemJump={focusNotificationItem}
-              onItemEdit={editNotificationItem}
-              onItemResolve={resolveNotificationItem}
-              onItemInlineSave={handleInlineSave}
-              severityFilter={notificationFilter}
-              onSeverityFilterChange={setNotificationFilter}
-              notificationSearch={notificationSearch}
-              onNotificationSearchChange={setNotificationSearch}
-              notificationStats={notificationStats}
-              isRescanning={notificationsLoading}
-              totalEntityCount={totalRows}
-            />
-            <button
-              type="button"
-              onClick={handleForceRescan}
-              disabled={notificationsLoading}
-              title="Clear and re-detect all schedule conflicts and missing data"
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={notificationsLoading ? 'animate-spin' : ''} />
-              <span>Rescan</span>
-            </button>
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto pb-2">
+            {/* Notification + Rescan group */}
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+              <NotificationButton
+                title="Missing Data"
+                buttonLabel="Issues"
+                emptyLabel="No missing data detected."
+                panelSize="lg"
+                items={filteredNotifications}
+                onItemJump={focusNotificationItem}
+                onItemEdit={editNotificationItem}
+                onItemResolve={resolveNotificationItem}
+                onItemInlineSave={handleInlineSave}
+                severityFilter={notificationFilter}
+                onSeverityFilterChange={setNotificationFilter}
+                notificationSearch={notificationSearch}
+                onNotificationSearchChange={setNotificationSearch}
+                notificationStats={notificationStats}
+                isRescanning={notificationsLoading}
+                totalEntityCount={totalRows}
+              />
+              <div className="h-5 w-px bg-slate-200" />
+              <button
+                type="button"
+                onClick={handleForceRescan}
+                disabled={notificationsLoading}
+                title="Clear and re-detect all schedule conflicts and missing data"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
+              >
+                <RefreshCw size={14} className={notificationsLoading ? 'animate-spin' : ''} />
+                <span>Rescan</span>
+              </button>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
               <BookMarked size={12} className="text-primary" />
               {totalRows}
             </span>
             {selectedOfferings.size > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-primary/60 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary backdrop-blur">
+              <span className="inline-flex items-center gap-1 rounded-full border border-primary/60 bg-primary/10 px-2 py-1.5 text-xs font-semibold text-primary backdrop-blur flex-shrink-0">
                 {selectedOfferings.size} sel
               </span>
             )}
-            <button
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={loadInitialPage}
-              type="button"
-              title="Reload data"
-            >
-              <RefreshCw size={14} />
-              <span>Reload</span>
-            </button>
-            <button
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={exportToCSV}
-              type="button"
-              title="Export to CSV"
-            >
-              <Download size={14} />
-              <span>Export</span>
-            </button>
-            <button
-              ref={colButtonRef}
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={() => setColMenuOpen((prev) => !prev)}
-              type="button"
-              title="Column visibility"
-            >
-              <Settings size={14} />
-              <span>Cols</span>
-            </button>
-            {colMenuOpen && typeof document !== 'undefined' && createPortal(
-              <div
-                ref={colMenuRef}
-                style={{
-                  position: 'fixed',
-                  top: `${colMenuPos.top}px`,
-                  left: `${colMenuPos.left}px`,
-                  zIndex: 9999,
-                }}
-                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
-              >
-                {columns.map((col) => (
-                  <label
-                    key={col.key}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.has(col.key)}
-                      onChange={() => toggleColumnVisibility(col.key)}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
-                    />
-                    {col.label}
-                  </label>
-                ))}
-              </div>,
-              document.body
-            )}
             {selectedOfferings.size > 0 && (
               <button
-                className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2 py-1 font-semibold text-white text-xs transition-colors hover:bg-red-700"
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 font-semibold text-white text-sm min-h-[44px] min-w-max transition-colors hover:bg-red-700 flex-shrink-0"
                 onClick={handleBulkDelete}
                 type="button"
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
                 <span>Delete</span>
               </button>
             )}
-            <button
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
-              onClick={() => {
-                setShowAddModal(true);
-                setEditingData({ mth_room_id: [], tfs_room_id: [] });
-                setOfferingError(null);
-              }}
-              type="button"
-            >
-              <PlusCircle size={14} />
-              <span>Add</span>
-            </button>
             {/* CSV Import group */}
-            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/80 p-1 backdrop-blur shadow-sm">
+            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
               {/* File picker */}
               <label
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors select-none ${
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors select-none min-h-[40px] ${
                   selectedCsvFile
                     ? 'bg-primary/10 text-primary'
                     : 'text-on-surface-variant hover:bg-slate-100'
@@ -1356,7 +1291,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 title="Choose a CSV file to import"
               >
                 <FileUp size={14} className={selectedCsvFile ? 'text-primary' : 'text-on-surface-variant'} />
-                <span className="max-w-[120px] truncate">
+                <span className="max-w-[100px] truncate">
                   {selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}
                 </span>
                 {selectedCsvFile && (
@@ -1380,7 +1315,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                       }
                     }}
                   >
-                    <X size={11} />
+                    <X size={12} />
                   </span>
                 )}
                 <input
@@ -1401,7 +1336,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {/* Replace mode toggle */}
               <label
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium select-none transition-colors ${
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium select-none transition-colors min-h-[40px] whitespace-nowrap ${
                   replaceMode
                     ? 'bg-orange-100 text-orange-700'
                     : 'text-on-surface-variant hover:bg-slate-100'
@@ -1412,11 +1347,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   type="checkbox"
                   checked={replaceMode}
                   onChange={(e) => setReplaceMode(e.target.checked)}
-                  className="h-3 w-3 rounded border-slate-300 accent-orange-500"
+                  className="h-3.5 w-3.5 rounded border-slate-300 accent-orange-500"
                 />
                 <span>Replace All</span>
                 {replaceMode && (
-                  <span className="rounded bg-orange-200 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-800">
+                  <span className="rounded bg-orange-200 px-1 py-0.5 text-xs font-bold uppercase tracking-wide text-orange-800">
                     New Sem
                   </span>
                 )}
@@ -1427,7 +1362,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {/* Import button */}
               <button
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50 min-h-[40px] min-w-max ${
                   replaceMode
                     ? 'bg-orange-500 hover:bg-orange-600'
                     : 'bg-primary hover:bg-primary/90'
@@ -1437,8 +1372,22 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 disabled={importingCsv}
                 title={replaceMode ? 'Import and replace all existing data' : 'Import CSV — update or add rows'}
               >
-                <Upload size={13} />
+                <Upload size={14} />
                 <span>{importingCsv ? 'Importing…' : 'Import'}</span>
+              </button>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Export button */}
+              <button
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[40px] min-w-max"
+                onClick={exportToCSV}
+                type="button"
+                title="Export to CSV"
+              >
+                <Download size={14} />
+                <span>Export</span>
               </button>
             </div>
           </div>
@@ -1446,14 +1395,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       </div>
 
       {/* Controls: Search / Filter / Sort */}
-      <div className="glass-panel space-y-2 p-3">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+      <div className="glass-panel space-y-3 p-3">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           {/* Search Input */}
-          <div className="flex gap-2 flex-1 xl:max-w-xs">
+          <div className="flex gap-3 flex-1 xl:max-w-sm">
             <select
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
-              className="rounded-lg border border-white/30 bg-white/50 px-2 py-1.5 text-xs text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white"
+              aria-label="Search column"
+              className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white min-h-[44px]"
             >
               <option value="all">All cols</option>
               {columns.map((c) => (
@@ -1461,7 +1411,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               ))}
             </select>
             <div className="relative flex-1">
-              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
               <input
                 type="text"
                 placeholder={`Search ${filterColumn === 'all' ? 'all columns' : columns.find(c => c.key === filterColumn)?.label || filterColumn}...`}
@@ -1469,25 +1419,88 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 onChange={(e) => {
                   setFilterText(e.target.value);
                 }}
-                className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-8 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+                aria-label="Search course offerings"
+                className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg min-h-[44px]"
               />
               {filterText && (
                 <button
                   onClick={() => setFilterText('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
                   title="Clear search"
+                  aria-label="Clear search"
                 >
-                  <X size={14} />
+                  <X size={18} />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Reset Button */}
-          <div className="flex flex-wrap gap-1 xl:justify-end">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <button
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+              onClick={loadInitialPage}
+              type="button"
+              title="Reload data"
+            >
+              <RefreshCw size={14} />
+              <span>Reload</span>
+            </button>
+            <button
+              ref={colButtonRef}
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+              onClick={() => setColMenuOpen((prev) => !prev)}
+              type="button"
+              aria-label="Show/hide columns"
+              title="Column visibility"
+            >
+              <Settings size={14} />
+              <span>Cols</span>
+            </button>
+            {colMenuOpen && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={colMenuRef}
+                style={{
+                  position: 'fixed',
+                  top: `${colMenuPos.top}px`,
+                  left: `${colMenuPos.left}px`,
+                  zIndex: 9999,
+                }}
+                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
+              >
+                {columns.map((col) => (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2 px-3 py-2.5 text-sm text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => toggleColumnVisibility(col.key)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>,
+              document.body
+            )}
+            <button
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+              onClick={() => {
+                setShowAddModal(true);
+                setEditingData({ mth_room_id: [], tfs_room_id: [] });
+                setOfferingError(null);
+              }}
+              type="button"
+              title="Add new course offering"
+            >
+              <PlusCircle size={14} />
+              <span>Add</span>
+            </button>
             <button
               onClick={() => { setFilterText(''); setFilterColumn('all'); setSortConfig({ key: 'code', direction: 'asc' }); }}
-              className="rounded-lg border border-white/60 bg-white px-2 py-1.5 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50"
+              className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50 min-h-[44px]"
             >
               Reset
             </button>
@@ -1496,26 +1509,26 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
         {/* Error Messages */}
         {error && (
-          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-            <AlertCircle size={14} />
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <AlertCircle size={18} />
             {error}
           </div>
         )}
         {updateError && (
-          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-            <AlertCircle size={14} />
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <AlertCircle size={18} />
             {updateError}
           </div>
         )}
         {importError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+            <AlertCircle size={18} />
             {importError}
           </div>
         )}
         {importSummary && (
-          <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-emerald-900">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 font-medium">
+          <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+            <div className="flex flex-wrap gap-x-6 gap-y-2 font-medium text-base">
               <span>Total: {importSummary.totalRows}</span>
               <span>Processed: {importSummary.processedRows}</span>
               <span>Inserted: {importSummary.insertedRows}</span>
@@ -1524,13 +1537,13 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               <span>Skipped: {importSummary.skippedRows}</span>
             </div>
             {Array.isArray(importSummary.errors) && importSummary.errors.length > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-800/80">
                   Row Errors
                 </p>
                 <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-emerald-100 bg-white/80 p-2">
                   {importSummary.errors.slice(0, 20).map((issue) => (
-                    <p key={`csv-error-${issue.row}-${(issue.messages || []).join('|')}`} className="text-xs text-red-700">
+                    <p key={`csv-error-${issue.row}-${(issue.messages || []).join('|')}`} className="text-sm text-red-700">
                       Row {issue.row}: {Array.isArray(issue.messages) ? issue.messages.join('; ') : 'Unknown row error'}
                     </p>
                   ))}
@@ -1540,8 +1553,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           </div>
         )}
         {successMessage && (
-          <div className="flex items-center gap-1 rounded-lg bg-green-50 p-2 text-xs text-green-700">
-            <Check size={14} />
+          <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700" role="alert">
+            <Check size={18} />
             {successMessage}
           </div>
         )}
@@ -1549,40 +1562,40 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
       {/* Data Table - Compact */}
       <div className="glass-panel overflow-hidden flex-1">
-        <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
-          <table className="min-w-full w-full text-left text-xs">
+        <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
+          <table className="min-w-full w-full text-left text-base">
             <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
-                  <th className="px-3 py-2 text-center w-10">
+                  <th className="px-3 py-3 text-center w-12">
                     <input
                       type="checkbox"
                       checked={(displayedOfferings || []).length > 0 && selectedOfferings.size === (displayedOfferings || []).length}
                       indeterminate={selectedOfferings.size > 0 && selectedOfferings.size < (displayedOfferings || []).length ? true : undefined}
                       onChange={toggleSelectAll}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </th>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <th key={col.key} className={`px-3 py-2 ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : 'text-left'}`}>
-                        <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      <th key={col.key} className={`px-3 py-3 ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : 'text-left'}`} scope="col">
+                        <button type="button" onClick={() => handleSort(col.key)} className={`flex items-center justify-start gap-1.5 text-sm font-bold uppercase tracking-wider transition-colors ${
                           sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
-                        }`}>
+                        }`} aria-pressed={sortConfig.key === col.key ? 'true' : 'false'}>
                           <span>{col.label}</span>
-                          <ArrowUpDown size={10} />
+                          <ArrowUpDown size={12} />
                         </button>
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-30 bg-white/95 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/70 backdrop-blur">Act</th>
+                  <th className="sticky right-0 z-30 bg-white/95 px-3 py-3 text-center text-sm font-bold uppercase tracking-wider text-on-surface-variant/70 backdrop-blur">Act</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-white/20">
               {loading && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
+                    className="px-3 py-4 text-center text-base text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     Loading...
@@ -1593,7 +1606,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               {!loading && error && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-xs text-error"
+                    className="px-3 py-4 text-center text-base text-error"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     {error}
@@ -1604,7 +1617,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               {!loading && !error && offerings.length === 0 && (
                 <tr>
                   <td
-                    className="px-3 py-4 text-center text-xs text-on-surface-variant"
+                    className="px-3 py-4 text-center text-base text-on-surface-variant"
                     colSpan={columns.filter((c) => visibleColumns.has(c.key)).length + 2}
                   >
                     No offerings found.
@@ -1613,62 +1626,64 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               )}
 
               {!loading && !error && displayedOfferings.map((offering) => (
-                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40 text-xs">
-                  <td className="px-3 py-2 text-center">
+                <tr id={`offering-row-${offering.id}`} key={offering.id} className="transition-colors hover:bg-white/40 text-base">
+                  <td className="px-3 py-3 text-center">
                     <input
                       type="checkbox"
                       checked={selectedOfferings.has(offering.id)}
                       onChange={() => toggleSelectOffering(offering.id)}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </td>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <td key={col.key} className={`px-3 py-2 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
+                      <td key={col.key} className={`px-3 py-3 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
                         {col.key === 'code' ? (
-                          <span className="inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-sm font-bold text-primary">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'course_no' ? (
-                          <span className="text-[11px] font-medium text-on-surface">
+                          <span className="text-sm font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'descriptive_title' ? (
-                          <span className="text-[10px] text-on-surface-variant truncate max-w-xs block">{renderCellValue(offering[col.key])}</span>
+                          <span className="text-sm text-on-surface-variant truncate max-w-xs block">{renderCellValue(offering[col.key])}</span>
                         ) : col.key === 'units' ? (
-                          <span className="text-[11px] font-medium text-on-surface">
+                          <span className="text-sm font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
                           </span>
                         ) : col.key === 'lec_hrs' || col.key === 'lab_hrs' ? (
-                          <span className="text-[11px] font-medium text-on-surface-variant">
+                          <span className="text-sm font-medium text-on-surface-variant">
                             {renderCellValue(offering[col.key])}h
                           </span>
                         ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
-                          <span className="text-[10px] text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
+                          <span className="text-sm text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
                         ) : (
-                          <span className="text-[11px] text-on-surface-variant truncate">
+                          <span className="text-sm text-on-surface-variant truncate">
                             {renderCellValue(offering[col.key])}
                           </span>
                         )}
                       </td>
                     );
                   })}
-                  <td className="sticky right-0 z-10 bg-white/90 px-2 py-2 backdrop-blur">
-                    <div className="flex justify-center gap-1">
+                  <td className="sticky right-0 z-10 bg-white/90 px-3 py-3 backdrop-blur">
+                    <div className="flex justify-center gap-2">
                       <button
                         onClick={() => handleEditOffering(offering)}
-                        className="rounded-md p-1 text-slate-400 transition-colors hover:bg-white hover:text-primary"
+                        className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-white hover:text-primary min-h-[40px] min-w-[40px] flex items-center justify-center"
                         title="Edit"
+                        aria-label={`Edit offering ${offering.code}`}
                       >
-                        <Edit3 size={14} />
+                        <Edit3 size={16} />
                       </button>
                       <button
                         onClick={() => handleDeleteOffering(offering)}
-                        className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 min-h-[40px] min-w-[40px] flex items-center justify-center"
                         title="Delete"
+                        aria-label={`Delete offering ${offering.code}`}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -1680,24 +1695,24 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       </div>
 
       {/* Pagination - Always visible and compact */}
-      <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-3 py-2 gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
+      <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-4 py-2 gap-3">
+        <p className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
           {startRow}-{endRow} / {totalRows}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
             disabled={page <= 1 || loading}
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             type="button"
             title="Previous page"
           >
-            <ChevronLeft size={12} />
+            <ChevronLeft size={16} />
             Prev
           </button>
 
-          <div className="flex items-center gap-2 rounded-md border border-white/60 bg-white px-2 py-1">
-            <span className="text-xs text-on-surface-variant">Page</span>
+          <div className="flex items-center gap-3 rounded-lg border border-white/60 bg-white px-3 py-2.5">
+            <span className="text-sm text-on-surface-variant">Page</span>
             <input
               type="number"
               min="1"
@@ -1708,20 +1723,20 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') applyPageInput();
               }}
-              className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-right text-base text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             />
-            <span className="text-xs text-on-surface-variant">of {totalPages}</span>
+            <span className="text-sm text-on-surface-variant">of {totalPages}</span>
           </div>
 
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
             disabled={page >= totalPages || loading}
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             type="button"
             title="Next page"
           >
             Next
-            <ChevronRight size={12} />
+            <ChevronRight size={16} />
           </button>
         </div>
       </div>
@@ -1763,11 +1778,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
 
             {/* Header */}
-            <div className={`px-6 py-4 ${importResultModal.failedRows > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+            <div className={`px-6 py-5 ${importResultModal.failedRows > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white">
-                  {importResultModal.failedRows > 0 ? <AlertCircle size={18} /> : <Check size={18} />}
-                  <span className="font-bold text-base">
+                <div className="flex items-center gap-3 text-white">
+                  {importResultModal.failedRows > 0 ? <AlertCircle size={22} /> : <Check size={22} />}
+                  <span className="font-bold text-lg">
                     {importResultModal.failedRows > 0 ? 'Import Completed with Errors' : 'Import Successful'}
                   </span>
                 </div>
@@ -1775,22 +1790,23 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   type="button"
                   onClick={() => setImportResultModal(null)}
                   className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                  aria-label="Close import result modal"
                 >
-                  <X size={16} />
+                  <X size={20} />
                 </button>
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-6 space-y-5">
               {/* Mode badge */}
               {importResultModal.replaceMode && (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-2 text-sm font-semibold text-orange-700">
                   <span>Replace Mode — all old data was cleared first</span>
                 </div>
               )}
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: 'Total Rows', value: importResultModal.totalRows, color: 'bg-slate-50 text-slate-700' },
                   { label: 'Inserted', value: importResultModal.insertedRows, color: 'bg-emerald-50 text-emerald-700' },
@@ -1799,31 +1815,31 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   { label: 'Failed', value: importResultModal.failedRows, color: importResultModal.failedRows > 0 ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-400' },
                   { label: 'Subjects Synced', value: importResultModal.syncedSubjectRows, color: 'bg-purple-50 text-purple-700' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className={`rounded-xl ${color} flex flex-col items-center justify-center p-3`}>
-                    <span className="text-2xl font-bold">{value ?? 0}</span>
-                    <span className="text-[10px] font-medium text-center leading-tight mt-0.5">{label}</span>
+                  <div key={label} className={`rounded-xl ${color} flex flex-col items-center justify-center p-4`}>
+                    <span className="text-3xl font-bold">{value ?? 0}</span>
+                    <span className="text-xs font-medium text-center leading-tight mt-1">{label}</span>
                   </div>
                 ))}
               </div>
 
               {/* Row errors */}
               {Array.isArray(importResultModal.errors) && importResultModal.errors.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                <div className="space-y-2">
+                  <p className="text-sm font-bold uppercase tracking-widest text-red-600">
                     Row Errors ({importResultModal.errors.length})
                   </p>
-                  <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl border border-red-100 bg-red-50 p-2">
+                  <div className="max-h-36 space-y-2 overflow-y-auto rounded-xl border border-red-100 bg-red-50 p-3">
                     {importResultModal.errors.slice(0, 30).map((issue) => (
                       <p
                         key={`result-error-${issue.row}-${(issue.messages || []).join('|')}`}
-                        className="text-xs text-red-700"
+                        className="text-sm text-red-700"
                       >
                         <span className="font-bold">Row {issue.row}:</span>{' '}
                         {Array.isArray(issue.messages) ? issue.messages.join('; ') : 'Unknown error'}
                       </p>
                     ))}
                     {importResultModal.errors.length > 30 && (
-                      <p className="text-xs text-red-500 font-medium">
+                      <p className="text-sm text-red-500 font-medium">
                         ...and {importResultModal.errors.length - 30} more errors.
                       </p>
                     )}
@@ -1834,7 +1850,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               <button
                 type="button"
                 onClick={() => setImportResultModal(null)}
-                className="w-full rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+                className="w-full rounded-xl bg-slate-800 px-5 py-3.5 text-base font-semibold text-white transition-colors hover:bg-slate-700 min-h-[48px]"
               >
                 Done
               </button>
@@ -1850,72 +1866,73 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden">
 
             {/* Header stripe — orange for replace, blue for update */}
-            <div className={`px-6 py-4 ${replaceMode ? 'bg-orange-500' : 'bg-primary'}`}>
+            <div className={`px-6 py-5 ${replaceMode ? 'bg-orange-500' : 'bg-primary'}`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white">
-                  <Download size={18} />
-                  <span className="font-bold text-base">Save a Backup First?</span>
+                <div className="flex items-center gap-3 text-white">
+                  <Download size={22} />
+                  <span className="font-bold text-lg">Save a Backup First?</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowBackupPrompt(false)}
                   className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                  aria-label="Close backup prompt"
                 >
-                  <X size={16} />
+                  <X size={20} />
                 </button>
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-6 space-y-5">
               {/* File being imported */}
-              <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-600">
-                <FileUp size={13} className="shrink-0 text-slate-400" />
+              <div className="flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-100 px-4 py-3 text-sm text-slate-600">
+                <FileUp size={16} className="shrink-0 text-slate-400" />
                 <span className="truncate font-medium">{selectedCsvFile?.name}</span>
               </div>
 
               {/* Warning message */}
               {replaceMode ? (
-                <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-xs text-orange-800 space-y-1">
-                  <p className="font-bold flex items-center gap-1.5">
-                    <AlertCircle size={13} />
+                <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 text-sm text-orange-800 space-y-2">
+                  <p className="font-bold flex items-center gap-2">
+                    <AlertCircle size={16} />
                     Replace Mode is ON
                   </p>
                   <p>This will permanently delete <strong>all</strong> existing Course Offerings, Subjects, and Rooms — then import the new file from scratch.</p>
                   <p className="font-semibold">We strongly recommend downloading a backup before continuing.</p>
                 </div>
               ) : (
-                <p className="text-sm text-on-surface-variant">
+                <p className="text-base text-on-surface-variant">
                   Would you like to download a backup of your current course offerings before the import runs?
                 </p>
               )}
 
               {/* Actions */}
-              <div className="flex flex-col gap-2 pt-1">
+              <div className="flex flex-col gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => {
                     setShowBackupPrompt(false);
                     exportToCSV().then(() => runImport());
                   }}
-                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors ${
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-base font-semibold text-white transition-colors min-h-[48px] ${
                     replaceMode ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary/90'
                   }`}
                 >
-                  <Download size={15} />
+                  <Download size={18} />
                   Download Backup, then Import
                 </button>
                 <button
                   type="button"
                   onClick={runImport}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-base font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[48px]"
                 >
-                  <Upload size={15} />
+                  <Upload size={18} />
                   Skip Backup &amp; Import Now
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowBackupPrompt(false)}
-                  className="w-full rounded-xl px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+                  className="w-full rounded-xl px-5 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:text-slate-600"
                 >
                   Cancel
                 </button>
@@ -1929,24 +1946,24 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Confirmation Modal */}
       {confirmDialog && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-start gap-3">
+          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white p-8 shadow-2xl">
+            <div className="mb-5 flex items-start gap-4">
               <div
-                className={`mt-0.5 rounded-full p-2 ${confirmDialog.tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'}`}
+                className={`mt-1 rounded-full p-3 ${confirmDialog.tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'}`}
               >
-                <AlertCircle size={18} />
+                <AlertCircle size={24} />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-on-surface">{confirmDialog.title}</h3>
-                <p className="text-sm text-on-surface-variant">{confirmDialog.message}</p>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-on-surface">{confirmDialog.title}</h3>
+                <p className="text-base text-on-surface-variant">{confirmDialog.message}</p>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-4">
               <button
                 type="button"
                 onClick={() => setConfirmDialog(null)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-5 py-3 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 text-base min-h-[48px]"
               >
                 {confirmDialog.cancelLabel || 'Cancel'}
               </button>
@@ -1960,7 +1977,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     setConfirmDialog(null);
                   }
                 }}
-                className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition-colors disabled:opacity-50 ${
+                className={`flex-1 rounded-lg px-5 py-3 font-semibold text-white transition-colors disabled:opacity-50 text-base min-h-[48px] ${
                   confirmDialog.tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'
                 }`}
                 disabled={savingOffering}
@@ -1978,9 +1995,9 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-8">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold text-on-surface">Edit Course Offering</h3>
+                <h3 className="text-2xl font-bold text-on-surface">Edit Course Offering</h3>
                 {editingFromNotification && (
-                  <p className="mt-0.5 text-xs text-amber-600 font-semibold">From notification</p>
+                  <p className="mt-1 text-sm text-amber-600 font-semibold">From notification</p>
                 )}
               </div>
               <button
@@ -1990,24 +2007,25 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   setNotificationMissingFields(new Set());
                 }}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/60 hover:text-on-surface"
+                aria-label="Close edit modal"
               >
-                <X size={20} />
+                <X size={24} />
               </button>
             </div>
 
             {offeringError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
+                <AlertCircle size={18} />
                 {offeringError}
               </div>
             )}
 
             {editingFromNotification && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-amber-500" />
+              <div className="mb-4 flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+                <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-500" />
                 <div>
                   <p className="font-semibold">Fixing missing data</p>
-                  <p className="text-xs mt-0.5 text-amber-700">Filled fields are locked. Only highlighted fields need your attention.</p>
+                  <p className="text-sm mt-1 text-amber-700">Filled fields are locked. Only highlighted fields need your attention.</p>
                 </div>
               </div>
             )}
@@ -2015,24 +2033,24 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             {editingId && (
               <div className="space-y-6">
                 {columnGroups.map((group) => (
-                  <div key={group.title} className={`space-y-4 rounded-xl ${group.color} p-4`}>
-                    <h4 className={`text-sm font-bold uppercase tracking-[0.2em] ${group.titleColor}`}>
+                  <div key={group.title} className={`space-y-4 rounded-xl ${group.color} p-5`}>
+                    <h4 className={`text-lg font-bold uppercase tracking-[0.2em] ${group.titleColor}`}>
                       {group.title}
                     </h4>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                       {group.columns.map((col) => {
                         const isLocked = editableKeys !== null && !editableKeys.has(col.key);
                         const isMissing = editableKeys !== null && editableKeys.has(col.key);
                         return (
                           <div key={col.key}>
-                            <label className={`mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
+                            <label className={`mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
                               {col.label}
-                              {isLocked && <Lock size={10} className="text-slate-300" />}
-                              {isMissing && <span className="text-[10px] text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
+                              {isLocked && <Lock size={12} className="text-slate-300" />}
+                              {isMissing && <span className="text-xs text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
                             </label>
                             {isLocked ? (
-                              <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed select-none">
-                                <Lock size={11} className="flex-shrink-0 text-slate-300" />
+                              <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-base text-slate-400 cursor-not-allowed select-none">
+                                <Lock size={13} className="flex-shrink-0 text-slate-300" />
                                 <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
                               </div>
                             ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
@@ -2044,7 +2062,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                                 type={numericCols.has(col.key) ? 'number' : 'text'}
                                 value={editingData[col.key] ?? ''}
                                 onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                                className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all ${
+                                className={`w-full rounded-lg border px-4 py-3 text-base text-on-surface outline-none transition-all ${
                                   isMissing
                                     ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
                                     : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
@@ -2057,21 +2075,21 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     </div>
                   </div>
                 ))}
-                <div className="flex gap-3 pt-6">
+                <div className="flex gap-4 pt-6">
                   <button
                     onClick={() => {
                       setEditingId(null);
                       setEditingFromNotification(false);
                       setNotificationMissingFields(new Set());
                     }}
-                    className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                    className="flex-1 rounded-lg border border-white/60 bg-white px-5 py-3 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 text-base min-h-[48px]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveEdit}
                     disabled={savingOffering}
-                    className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 text-base min-h-[48px]"
                   >
                     {savingOffering ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -2087,7 +2105,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-on-surface">Add New Course Offering</h3>
+              <h3 className="text-2xl font-bold text-on-surface">Add New Course Offering</h3>
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -2096,22 +2114,23 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   setDuplicateCodeSuggestions([]);
                 }}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-on-surface"
+                aria-label="Close add modal"
               >
-                <X size={20} />
+                <X size={24} />
               </button>
             </div>
 
             {offeringError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                <AlertCircle size={16} />
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
+                <AlertCircle size={18} />
                 {offeringError}
               </div>
             )}
 
             {duplicateCodeSuggestions.length > 0 && (
-              <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-                <p className="mb-2 text-sm font-semibold text-yellow-900">Similar course codes found:</p>
-                <div className="space-y-1 text-sm text-yellow-800">
+              <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                <p className="mb-3 text-sm font-semibold text-yellow-900">Similar course codes found:</p>
+                <div className="space-y-2 text-sm text-yellow-800">
                   {duplicateCodeSuggestions.map((sugg) => (
                     <div key={sugg.id} className="flex justify-between">
                       <span>{sugg.code} - {sugg.descriptive_title || 'No title'} (Section {sugg.section || 'N/A'})</span>
@@ -2125,13 +2144,13 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             <div className="space-y-6">
               {/* Basic Information Section */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
                   Basic Information
                 </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   {/* Course Code with duplicate detection */}
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Course Code *
                     </label>
                     <input
@@ -2141,48 +2160,48 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                         setEditingData({ ...editingData, code: e.target.value });
                         handleCheckDuplicateCode(e.target.value);
                       }}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="Enter course code"
                     />
                   </div>
 
                   {/* Course Number */}
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Course Number *
                     </label>
                     <input
                       type="text"
                       value={editingData.course_no ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, course_no: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="Enter course number"
                     />
                   </div>
 
                   {/* Section */}
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Section *
                     </label>
                     <input
                       type="text"
                       value={editingData.section ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, section: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="Enter section"
                     />
                   </div>
 
                   {/* Department Dropdown */}
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Department *
                     </label>
                     <select
                       value={editingData.department_id ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                     >
                       <option value="">Select department</option>
                       {(departments || []).map((dept) => (
@@ -2195,28 +2214,28 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
                   {/* Curriculum ID */}
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Curriculum ID *
                     </label>
                     <input
                       type="text"
                       value={editingData.curr_id ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, curr_id: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="Enter curriculum ID"
                     />
                   </div>
 
                   {/* Descriptive Title */}
                   <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Descriptive Title
                     </label>
                     <input
                       type="text"
                       value={editingData.descriptive_title ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, descriptive_title: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="Enter course title"
                     />
                   </div>
@@ -2225,45 +2244,45 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {/* Hours and Units Section */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
                   Hours & Units
                 </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Units
                     </label>
                     <input
                       type="number"
                       value={editingData.units ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, units: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="0"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Lecture Hours
                     </label>
                     <input
                       type="number"
                       value={editingData.lec_hrs ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, lec_hrs: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="0"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                       Lab Hours
                     </label>
                     <input
                       type="number"
                       value={editingData.lab_hrs ?? ''}
                       onChange={(e) => setEditingData({ ...editingData, lab_hrs: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                       placeholder="0"
                     />
                   </div>
@@ -2272,33 +2291,33 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {/* Schedules Section */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
                   Schedules & Rooms (At least one required *)
                 </h4>
 
                 {/* MTH Schedule & Room */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h5 className="font-semibold text-on-surface">MTH Schedule & Room</h5>
-                    <span className={`text-sm font-semibold ${getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h5 className="font-semibold text-on-surface text-base">MTH Schedule & Room</h5>
+                    <span className={`text-base font-semibold ${getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
                       {getSchedulePairStatus(editingData.mth_schedule, editingData.mth_room_id).icon || '○'}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Schedule (e.g., MWF 10:00-11:30 or MTH 14:00-15:30)
                       </label>
                       <input
                         type="text"
                         value={editingData.mth_schedule ?? ''}
                         onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., MWF 10:00-11:30"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Room
                       </label>
                       {renderRoomPicker('mth_room_id')}
@@ -2307,28 +2326,28 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 </div>
 
                 {/* TFS Schedule & Room */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h5 className="font-semibold text-on-surface">TFS Schedule & Room (Optional)</h5>
-                    <span className={`text-sm font-semibold ${getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h5 className="font-semibold text-on-surface text-base">TFS Schedule & Room (Optional)</h5>
+                    <span className={`text-base font-semibold ${getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'complete' ? 'text-green-600' : getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).status === 'incomplete' ? 'text-yellow-600' : 'text-slate-400'}`}>
                       {getSchedulePairStatus(editingData.tfs_schedule, editingData.tfs_room_id).icon || '○'}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Schedule (e.g., TTh 10:00-11:30 or TFS 14:00-15:30)
                       </label>
                       <input
                         type="text"
                         value={editingData.tfs_schedule ?? ''}
                         onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., TTh 10:00-11:30"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Room
                       </label>
                       {renderRoomPicker('tfs_room_id')}
@@ -2338,7 +2357,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               </div>
 
               {/* Buttons */}
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-4 pt-4">
                 <button
                   onClick={() => {
                     setShowAddModal(false);
@@ -2346,7 +2365,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     setOfferingError(null);
                     setDuplicateCodeSuggestions([]);
                   }}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-5 py-3 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 text-base min-h-[48px]"
                 >
                   Cancel
                 </button>
@@ -2354,7 +2373,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   onClick={handleAddOffering}
                   disabled={savingOffering || !isFormValid(editingData)}
                   title={!isFormValid(editingData) ? getDisabledReason(editingData) : ''}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-base min-h-[48px]"
                 >
                   {savingOffering ? 'Creating...' : 'Create Offering'}
                 </button>

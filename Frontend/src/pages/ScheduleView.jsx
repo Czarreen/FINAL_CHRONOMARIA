@@ -1,4 +1,4 @@
-import { Calendar, ChevronLeft, ChevronRight, CalendarOff, BrainCircuit, Clock3, LayoutGrid, Sparkles } from 'lucide-react';
+cuimport { Calendar, ChevronLeft, ChevronRight, CalendarOff, BrainCircuit, Clock3, LayoutGrid, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function ScheduleView() {
