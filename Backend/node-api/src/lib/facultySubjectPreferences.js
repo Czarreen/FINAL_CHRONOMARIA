@@ -114,6 +114,19 @@ export async function fetchFacultySubjectPreferenceRows() {
 }
 
 export async function fetchFacultySubjectPreferencesForFaculty(facultyId) {
+  const facultyResp = await supabaseAdmin
+    .from('faculty')
+    .select('faculty_id, faculty_name, department_id')
+    .eq('faculty_id', facultyId)
+    .maybeSingle();
+
+  if (facultyResp.error) throw facultyResp.error;
+
+  const faculty = facultyResp.data;
+  if (!faculty) {
+    return [];
+  }
+
   const preferenceResp = await supabaseAdmin
     .from('faculty_subject_tags')
     .select('faculty_id, subject_id, priority_level, created_at, updated_at')
@@ -182,6 +195,38 @@ export async function saveFacultySubjectPreference({ facultyId, subjectId, prior
     throw new Error('subjectId is required');
   }
 
+  // Validate department constraint
+  const facultyResp = await supabaseAdmin
+    .from('faculty')
+    .select('department_id')
+    .eq('faculty_id', normalizedFacultyId)
+    .maybeSingle();
+
+  if (facultyResp.error) throw facultyResp.error;
+
+  const faculty = facultyResp.data;
+  if (!faculty) {
+    throw new Error('Faculty member not found');
+  }
+
+  const subjectResp = await supabaseAdmin
+    .from('subjects')
+    .select('department_id')
+    .eq('subject_id', normalizedSubjectId)
+    .maybeSingle();
+
+  if (subjectResp.error) throw subjectResp.error;
+
+  const subject = subjectResp.data;
+  if (!subject) {
+    throw new Error('Subject not found');
+  }
+
+  // Enforce department constraint
+  if (faculty.department_id !== subject.department_id) {
+    throw new Error(`Cannot tag faculty with subjects from different departments. Faculty department: ${faculty.department_id}, Subject department: ${subject.department_id}`);
+  }
+
   const payload = {
     faculty_id: normalizedFacultyId,
     subject_id: normalizedSubjectId,
@@ -247,10 +292,12 @@ export async function autoGenerateFacultySubjectPreferences({ facultyId }) {
     return { faculty: null, generated: [], upserted: 0 };
   }
 
+  // Filter subjects by faculty's department
   const subjectResp = await supabaseAdmin
     .from('subjects')
     .select('subject_id, subject_code, subject_course_no, subject_descriptive_title, department_id, subject_status, subject_section')
     .eq('subject_status', 'active')
+    .eq('department_id', faculty.department_id)
     .order('subject_code', { ascending: true })
     .order('subject_course_no', { ascending: true })
     .order('subject_section', { ascending: true })

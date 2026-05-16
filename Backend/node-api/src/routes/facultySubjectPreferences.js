@@ -76,7 +76,12 @@ router.post('/:id/subject-preferences', async (req, res) => {
     return res.status(201).json({ ...saved, faculty });
   } catch (err) {
     console.error('[facultySubjectPreferences] POST error:', err);
-    return res.status(500).json({ error: err instanceof Error && err.message ? err.message : 'Unknown error' });
+    const message = err instanceof Error && err.message ? err.message : 'Unknown error';
+    // Return 400 for department constraint violations
+    if (message.includes('Cannot tag faculty') || message.includes('different departments')) {
+      return res.status(400).json({ error: message });
+    }
+    return res.status(500).json({ error: message });
   }
 });
 
@@ -91,6 +96,37 @@ router.delete('/:id/subject-preferences/:subjectId', async (req, res) => {
 
     if (!Number.isFinite(subjectId)) {
       return res.status(400).json({ error: 'Invalid subject id' });
+    }
+
+    // Verify department constraint
+    const facultyResp = await supabaseAdmin
+      .from('faculty')
+      .select('department_id')
+      .eq('faculty_id', facultyId)
+      .maybeSingle();
+
+    if (facultyResp.error) throw facultyResp.error;
+
+    const faculty = facultyResp.data;
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty member not found' });
+    }
+
+    const subjectResp = await supabaseAdmin
+      .from('subjects')
+      .select('department_id')
+      .eq('subject_id', subjectId)
+      .maybeSingle();
+
+    if (subjectResp.error) throw subjectResp.error;
+
+    const subject = subjectResp.data;
+    if (!subject) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    if (faculty.department_id !== subject.department_id) {
+      return res.status(403).json({ error: 'Cannot delete: subject is not in faculty\'s department' });
     }
 
     const deleted = await deleteFacultySubjectPreference({ facultyId, subjectId });

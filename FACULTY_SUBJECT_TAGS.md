@@ -2,13 +2,14 @@
 
 ## Overview
 
-The Faculty Subject Preferences feature allows administrators to tag faculty members with their preferred teaching subjects. This system supports priority levels (High, Capable, Fallback) and includes an auto-generation feature that intelligently parses faculty specialization data to suggest initial tags.
+The Faculty Subject Preferences feature allows administrators to tag faculty members with their preferred teaching subjects. This system supports priority levels (High, Capable, Fallback) and includes an auto-generation feature that intelligently parses faculty specialization data to suggest initial tags. **Department constraints are enforced**: faculty can only be tagged with subjects from their own department.
 
 ### Key Benefits
 
 - **Structured Subject Assignment**: Organize faculty expertise with explicit subject mappings
 - **Priority Levels**: Mark subject expertise from high (1) to fallback (3)
-- **Auto-Tagging**: Automatically generate preferences from faculty specialization field
+- **Department Constraints**: Faculty can only be tagged with subjects from their own department
+- **Auto-Tagging**: Automatically generate preferences from faculty specialization field (department-scoped)
 - **Embedded Dictionary**: In-memory caching for GA efficiency (future integration)
 - **Full CRUD**: Add, edit, and delete preferences as needed
 
@@ -125,29 +126,49 @@ CREATE INDEX idx_faculty_subject_tags_subject_id
 **Core Functions**:
 
 - `fetchFacultySubjectPreferencesForFaculty(facultyId)` - Get all preferences for a faculty with subject details
-- `saveFacultySubjectPreference({facultyId, subjectId, priorityLevel})` - Create/update preference (upsert)
+- `saveFacultySubjectPreference({facultyId, subjectId, priorityLevel})` - Create/update preference (upsert) **with department validation**
 - `deleteFacultySubjectPreference({facultyId, subjectId})` - Remove preference
-- `autoGenerateFacultySubjectPreferences({facultyId})` - Auto-generate tags from specialization
+- `autoGenerateFacultySubjectPreferences({facultyId})` - Auto-generate tags from specialization **filtered by department**
 - `scoreSubjectMatch(facultySpecialization, subject)` - Calculate match score
 - `buildFacultyPreferenceMap(rows)` - Convert DB rows to dictionary format
 
 **Auto-Generation Algorithm**:
 
 ```javascript
-1. Extract specialization from faculty record
-2. Split by delimiters: [,;/|]
-3. Extract keywords (2+ chars, alphanumeric only)
-4. For each subject in database:
-   - Calculate match score based on:
-     - Exact match in title: +24 points
-     - Exact match in code: +16 points
-     - Exact match in course_no: +14 points
-     - Each keyword match: +10 points
-5. Assign priority based on score:
-   - score ≥ 30 → Priority 1
-   - score ≥ 15 → Priority 2
-   - score > 0  → Priority 3
-6. Insert all upserts into database
+1. Fetch faculty record (including department_id)
+2. Extract specialization from faculty record
+3. Split by delimiters: [,;/|]
+4. Extract keywords (2+ chars, alphanumeric only)
+5. For each subject in faculty's department (filtered by department_id):
+    - Calculate match score based on:
+      - Exact match in title: +24 points
+      - Exact match in code: +16 points
+      - Exact match in course_no: +14 points
+      - Each keyword match: +10 points
+6. Assign priority based on score:
+    - score ≥ 30 → Priority 1
+    - score ≥ 15 → Priority 2
+    - score > 0  → Priority 3
+7. Insert all upserts into database
+```
+
+**Department Constraint Enforcement**:
+
+The system enforces department constraints at multiple levels:
+
+```javascript
+// In saveFacultySubjectPreference():
+1. Fetch faculty record and get faculty.department_id
+2. Fetch subject record and get subject.department_id
+3. If departments don't match, throw error:
+   "Cannot tag faculty with subjects from different departments"
+4. Otherwise, proceed with upsert
+
+// In autoGenerateFacultySubjectPreferences():
+1. Fetch faculty record with department_id
+2. Query subjects WHERE department_id = faculty.department_id
+3. Score and generate tags only from department's subjects
+4. Auto-generation respects department boundaries
 ```
 
 #### Routes: `Backend/node-api/src/routes/facultySubjectPreferences.js`
@@ -278,6 +299,13 @@ Content-Type: application/json
 }
 ```
 
+**Response (400 - Department Constraint Violation)**:
+```json
+{
+  "error": "Cannot tag faculty with subjects from different departments. Faculty department: 2, Subject department: 3"
+}
+```
+
 ### DELETE /api/faculty/:id/subject-preferences/:subjectId
 
 **Request**:
@@ -291,6 +319,13 @@ DELETE /api/faculty/5/subject-preferences/101
   "deleted": true,
   "faculty_id": 5,
   "subject_id": 101
+}
+```
+
+**Response (403 - Department Constraint Violation)**:
+```json
+{
+  "error": "Cannot delete: subject is not in faculty's department"
 }
 ```
 
