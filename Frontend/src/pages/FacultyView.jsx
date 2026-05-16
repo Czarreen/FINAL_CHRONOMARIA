@@ -766,7 +766,7 @@ export default function FacultyView() {
           <div className="max-h-[calc(100vh-18rem)] overflow-auto">
             <table className="min-w-full w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
+                <tr className="sticky top-0 z-20 border-b border-white bg-white">
 
                   {columns.map(col => visibleColumns.has(col.key) && (
                     <th key={col.key} className="px-4 py-2 text-left">
@@ -779,7 +779,7 @@ export default function FacultyView() {
                   <th className="sticky right-0 z-30 px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/20">
+              <tbody className="divide-y divide-black">
                 {sortedFaculty.map((member) => {
                   const specializationItems = parseSpecializations(member.faculty_specialization);
                   const visibleSpecializations = specializationItems.slice(0, 2);

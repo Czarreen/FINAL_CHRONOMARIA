@@ -932,7 +932,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
           <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
             <table className="min-w-full w-full text-left text-xs">
               <thead>
-                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
+                <tr className="sticky top-0 z-20 border-b border-white bg-white/95 backdrop-blur">
                   <th className="px-3 py-2 text-center w-10">
                     <input
                       type="checkbox"
@@ -956,7 +956,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   <th className="sticky right-0 z-30 bg-white/95 px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Act</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/20">
+              <tbody className="divide-y divide-black">
                 {currentRooms.map((room, index) => (
                   <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`transition-colors hover:bg-white/45 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-3 py-2 text-center">
