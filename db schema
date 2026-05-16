@@ -17,6 +17,25 @@ CREATE TABLE public.audit_logs (
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.automatic_scheduler (
+  id integer NOT NULL DEFAULT nextval('course_offerings_id_seq'::regclass),
+  curr_id integer,
+  code text,
+  course_no text,
+  department_id integer,
+  section text,
+  descriptive_title text,
+  units real,
+  lec_hrs real,
+  lab_hrs real,
+  mth_schedule text,
+  mth_room_id text CHECK (mth_room_id IS NULL OR mth_room_id ~ '^[0-9]+(\/[0-9]+)*$'::text),
+  tfs_schedule text,
+  tfs_room_id text CHECK (tfs_room_id IS NULL OR tfs_room_id ~ '^[0-9]+(\/[0-9]+)*$'::text),
+  merged text DEFAULT false,
+  CONSTRAINT automatic_scheduler_pkey PRIMARY KEY (id),
+  CONSTRAINT automatic_scheduler_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
+);
 CREATE TABLE public.course_offering_mth_rooms (
   offering_id integer NOT NULL,
   room_id integer NOT NULL,
@@ -93,9 +112,9 @@ CREATE TABLE public.faculty_loading (
   department_id integer,
   section text,
   descriptive_title text,
-  units integer,
-  lec_hrs integer,
-  lab_hrs integer,
+  units real,
+  lec_hrs real,
+  lab_hrs real,
   mth_schedule text,
   mth_room_id integer,
   tfs_schedule text,
@@ -120,6 +139,14 @@ CREATE TABLE public.faculty_notifications (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT faculty_notifications_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.faculty_subject_tags (
+  faculty_id integer NOT NULL,
+  subject_id integer NOT NULL,
+  priority_level smallint NOT NULL DEFAULT '2'::smallint,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT faculty_subject_tags_pkey PRIMARY KEY (faculty_id, subject_id)
 );
 CREATE TABLE public.rooms (
   room_id integer NOT NULL DEFAULT nextval('rooms_room_id_seq'::regclass),
@@ -151,13 +178,13 @@ CREATE TABLE public.subjects (
   subject_units real,
   subject_lec_hrs real,
   subject_lab_hrs real,
-  is_general boolean NOT NULL DEFAULT false,
   subject_status text NOT NULL DEFAULT 'active'::text,
   mth_schedule text,
   tfs_schedule text,
   mth_room text,
   tfs_room text,
   curr_id integer,
+  is_general boolean NOT NULL DEFAULT false,
   CONSTRAINT subjects_pkey PRIMARY KEY (subject_id),
   CONSTRAINT subjects_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
 );
@@ -166,7 +193,7 @@ CREATE TABLE public.users (
   username text NOT NULL UNIQUE,
   email text,
   password_hash text NOT NULL,
-  role text DEFAULT 'admin'::text,
+  role text DEFAULT 'staff'::text,
   status text DEFAULT 'active'::text,
   created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
