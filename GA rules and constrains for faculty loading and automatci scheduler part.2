@@ -1,0 +1,210 @@
+important note read the rules and constrains below carefully and logically make sure all are met.
+another note some of this functions are already in the code you might doublecheck the logic and function before updating, removing or add new code function.
+FACULTY LOADING - PAGE
+
+Update constraints and rules only.
+Read first and double check logic.
+If any function needs to be updated or removed, inform first.
+
+ GA USES FROM TABLE FACULTY:
+- faculty_name
+- faculty_id
+- faculty_specialization
+- department_id
+- faculty_max_units
+- faculty_role
+- faculty_status
+
+GA USES FROM TABLE SUBJECTS:
+- subject_id
+- subject_code
+- subject_course_no
+- department_id
+- subject_section
+- subject_descriptive_title
+- subject_units
+- subject_status
+- curr_id
+- is_general
+- subject_lec_hrs
+- subject_lab_hrs
+- mth_schedule
+- mth_room
+- tfs_schedule
+- tfs_room
+
+GA USES FROM TABLE ROOMS:
+- room_id
+- room_name
+- room_type
+- room_status
+
+
+
+DB structure(this is already exist in the db)-
+CREATE TABLE public.faculty (
+  faculty_id integer NOT NULL DEFAULT nextval('faculty_faculty_id_seq'::regclass),
+  faculty_name text NOT NULL,
+  department_id integer,
+  faculty_email text,
+  faculty_specialization text,
+  faculty_max_units integer,
+  faculty_role text,
+  faculty_status text,
+  CONSTRAINT faculty_pkey PRIMARY KEY (faculty_id),
+  CONSTRAINT faculty_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
+);
+
+
+CREATE TABLE public.rooms (
+  room_id integer NOT NULL DEFAULT nextval('rooms_room_id_seq'::regclass),
+  room_name text NOT NULL,
+  room_type text,
+  room_status text,
+  CONSTRAINT rooms_pkey PRIMARY KEY (room_id)
+);
+
+CREATE TABLE public.subjects (
+  subject_id integer NOT NULL DEFAULT nextval('subjects_subject_id_seq'::regclass),
+  subject_code text,
+  subject_course_no text,
+  department_id integer,
+  subject_section text,
+  subject_descriptive_title text,
+  subject_units real,
+  subject_lec_hrs real,
+  subject_lab_hrs real,
+  subject_status text NOT NULL DEFAULT 'active'::text,
+  mth_schedule text,
+  tfs_schedule text,
+  mth_room text,
+  tfs_room text,
+  curr_id integer,
+  is_general boolean NOT NULL DEFAULT false,
+  CONSTRAINT subjects_pkey PRIMARY KEY (subject_id),
+  CONSTRAINT subjects_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
+);
+
+CREATE TABLE public.departments (
+  department_id integer NOT NULL DEFAULT nextval('departments_department_id_seq'::regclass),
+  department_name text NOT NULL,
+  department_program text,
+  CONSTRAINT departments_pkey PRIMARY KEY (department_id)
+);
+
+CREATE TABLE public.faculty_loading (
+  facloading_id integer NOT NULL DEFAULT nextval('faculty_loading_facloading_id_seq'::regclass),
+  curr_id integer,
+  faculty_id integer,
+  code text,
+  course_no text,
+  department_id integer,
+  section text,
+  descriptive_title text,
+  units real,
+  lec_hrs real,
+  lab_hrs real,
+  mth_schedule text,
+  mth_room_id integer,
+  tfs_schedule text,
+  tfs_room_id integer,
+  merged boolean DEFAULT false,
+  CONSTRAINT faculty_loading_pkey PRIMARY KEY (facloading_id),
+  CONSTRAINT faculty_loading_faculty_id_fkey FOREIGN KEY (faculty_id) REFERENCES public.faculty(faculty_id),
+  CONSTRAINT faculty_loading_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id),
+  CONSTRAINT faculty_loading_mth_room_id_fkey FOREIGN KEY (mth_room_id) REFERENCES public.rooms(room_id),
+  CONSTRAINT faculty_loading_tfs_room_id_fkey FOREIGN KEY (tfs_room_id) REFERENCES public.rooms(room_id)
+);
+
+CREATE TABLE public.faculty_notifications (
+  id integer NOT NULL DEFAULT nextval('faculty_notifications_id_seq'::regclass),
+  faculty_id integer NOT NULL,
+  title text,
+  description text,
+  severity text DEFAULT 'medium'::text,
+  missing_fields jsonb,
+  issues jsonb,
+  is_resolved boolean DEFAULT false,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faculty_notifications_pkey PRIMARY KEY (id)
+);
+
+================================================================================
+AUTOMATIC FACULTY LOADING - GENETIC ALGORITHM
+================================================================================
+
+Genetic Algorithm — Automatic Faculty Loading
+(Handles faculty assignment to subjects only)
+
+PRE-FACULTY LOADING FILTERS (Applied once before GA runs)
+PRE-1 — Remove all faculty where faculty_status = inactive.
+PRE-2 — Remove all faculty where faculty_max_units = 0 or already fully loaded.
+PRE-3 — [FIXED] General subjects (is_general = true) are excluded from automated faculty loading. Left blank for user to fill manually.
+PRE-4 — [FIXED] Merged subjects detected by merge detection logic are assigned only one faculty. Schedule and room assignment are not touched.
+
+AVAILABLE UNITS COMPUTATION [FIXED]
+(Computed once before GA runs — stored in memory only, not in DB)
+
+  already_assigned_units = SUM(subject_units)
+    WHERE assigned_faculty_id = faculty_id
+      AND subject_status = active
+
+  available_units = faculty_max_units - already_assigned_units
+
+================================================================================
+FACULTY CONSTRAINTS (F)
+================================================================================
+
+HARD CONSTRAINTS
+F-H1 — A faculty member cannot teach two classes at the same time (no double-booking).
+F-H2 — [FIXED] Faculty assignments always match the pattern as a whole. MTH subjects are assigned as a single faculty load on Monday and Thursday. TF subjects are assigned as a single faculty load on Tuesday and Friday. Saturday is always a special case and is user-defined only.
+F-H3 — A faculty member with faculty_status = inactive must not be assigned any class. (Handled by Pre-Filter PRE-1.)
+F-H4 — The total subject units assigned to a faculty must not exceed their faculty_max_units as stored in the database. This value is fully user-defined per faculty member regardless of their role. (Handled by Pre-Filter PRE-2.)
+F-H5 — [FIXED] General subjects (is_general = true) are excluded from automated faculty loading. Left blank for user to fill manually.
+F-H6 — [FIXED] Merged subjects are assigned only one faculty. The GA will not assign a second faculty to a merged subject.
+F-H7 — [NEW] A faculty member must not have more than 4 consecutive hours of teaching without a break.
+F-H8 — [NEW] A faculty member must not have more than 4 subject preparations within their total teaching load.
+
+================================================================================
+FACULTY ASSIGNMENT PRIORITY [FIXED]
+================================================================================
+
+(Applied in order inside the GA)
+Priority 1 — Specialization Check: Specialization tag matches the subject. Units considered: No — specialization match wins regardless.
+Priority 2 — Department Check: Same department as the subject (faculty_department_id = subject_department_id). Units considered: Yes — only faculty with available units in the department are eligible.
+Priority 3 — Cross-Department Fallback Check: Any faculty from any department with available units remaining. Units considered: Yes — cross-department fallback example: CS subjects assigned to IT faculty.
+Priority 4 — Role Check: Full-time faculty are exhausted before part-time faculty at every level above. Units considered: Yes.
+Fallback — [RECOMMENDATION] If no faculty is found after all priority levels are exhausted due to department mismatch, the system will flag the subject as unassigned and recommend possible cross-department faculty candidates to the user. The final decision of assigning a cross-department faculty is left to the user and is not applied automatically.
+
+================================================================================
+FACULTY ASSIGNMENT FITNESS SCORE
+================================================================================
+
+  Specialization match — Full score
+  Department match only, no specialization — Partial score
+  Cross-department with specialization match — Partial score
+  Cross-department without specialization match — Low score but still valid
+  No faculty assigned — Heavy penalty
+  Exceeds faculty_max_units — Hard disqualification
+
+================================================================================
+FACULTY SOFT CONSTRAINTS
+================================================================================
+
+F-S1 — [HIGH] Prioritize assigning faculty classes as close to 7:30 AM as possible. Faculty schedules should be packed toward the start of the day to reduce idle gaps and late assignments.
+F-S2 — [HIGH] A faculty member should have at least a 30-minute break between consecutive classes.
+F-S3 — [HIGH] [FIXED] A faculty member should not exceed 8 to 10 teaching hours per day.
+F-S4 — [MEDIUM] Prefer scheduling a faculty member's classes consecutively rather than scattered across the full day to minimize idle waiting time on campus.
+
+F-S7 — [MEDIUM] Faculty teaching load should be distributed as evenly as possible across the available days.
+F-S8 — [LOW] Full-time faculty should be prioritized first before part-time faculty when assigning subjects.
+F-S9 — [LOW] [FIXED] Always maximize the number of units assigned to a faculty up to their faculty_max_units. Do not leave units idle if subjects are available. This applies within the allowable total teaching load of the faculty.
+F-S10 — [LOW] Distribute teaching load fairly among faculty within the same department. Avoid one faculty being overloaded while others remain underloaded.
+
+================================================================================
+
+
+
+

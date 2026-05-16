@@ -1,10 +1,4 @@
-"""Chronomaria faculty loading GA service.
-
-The Node API sends faculty, course offerings, rooms, and subjects to the
-`POST /generate` endpoint. This module runs a deterministic genetic algorithm
-to assign course offerings to faculty while respecting department, role, load,
-and schedule constraints.
-"""
+"""Chronomaria faculty loading GA service."""
 
 from __future__ import annotations
 
@@ -37,16 +31,6 @@ def to_number(value: Any) -> Optional[float]:
     if math.isnan(number) or math.isinf(number):
         return None
     return number
-
-
-def is_empty(value: Any) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, str):
-        return value.strip() == ""
-    if isinstance(value, (list, tuple, set, dict)):
-        return len(value) == 0
-    return False
 
 
 def split_tokens(value: Any) -> List[str]:
@@ -108,19 +92,10 @@ def build_schedule_blocks(offering: Dict[str, Any]) -> List[Dict[str, Any]]:
         schedule_text = normalize_text(offering.get(f"{group}_schedule"))
         if not schedule_text:
             continue
-
         parsed = parse_time_range(schedule_text)
         if not parsed:
             continue
-
-        blocks.append(
-            {
-                "group": group.upper(),
-                "schedule_text": schedule_text,
-                **parsed,
-                "room_id": to_number(offering.get(f"{group}_room_id")),
-            }
-        )
+        blocks.append({"group": group.upper(), "schedule_text": schedule_text, **parsed})
     return blocks
 
 
@@ -161,41 +136,6 @@ def build_offering_key(offering: Dict[str, Any]) -> str:
             normalize_upper(offering.get("section")),
         ]
     )
-
-
-def build_room_lookup(rooms: Sequence[Dict[str, Any]]) -> Tuple[Dict[int, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
-    by_id: Dict[int, Dict[str, Any]] = {}
-    by_name: Dict[str, Dict[str, Any]] = {}
-    for room in rooms:
-        room_id = to_number(room.get("room_id"))
-        room_name = re.sub(r"[^A-Z0-9]", "", normalize_upper(room.get("room_name")))
-        if room_id is not None:
-            by_id[int(room_id)] = room
-        if room_name:
-            by_name[room_name] = room
-    return by_id, by_name
-
-
-def resolve_room_reference(value: Any, room_lookup: Tuple[Dict[int, Dict[str, Any]], Dict[str, Dict[str, Any]]]) -> Optional[int]:
-    raw = normalize_text(value)
-    if not raw:
-        return None
-
-    first_token = split_tokens(raw)[0] if split_tokens(raw) else raw
-    numeric = to_number(first_token)
-    room_by_id, room_by_name = room_lookup
-
-    if numeric is not None and int(numeric) in room_by_id:
-        return int(numeric)
-
-    key = re.sub(r"[^A-Z0-9]", "", normalize_upper(first_token))
-    room = room_by_name.get(key)
-    if room is not None:
-        room_id = to_number(room.get("room_id"))
-        return int(room_id) if room_id is not None else None
-
-    return None
-
 
 def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any], matched_subject: Optional[Dict[str, Any]]) -> float:
     source_text = " ".join(
@@ -257,38 +197,142 @@ def score_offering_difficulty(offering: Dict[str, Any], faculties: Sequence[Dict
     return 1000.0 - matches * 90.0 - (to_number(offering.get("units")) or 0.0) * 10.0
 
 
-def choose_best_faculty(offering: Dict[str, Any], faculties: Sequence[Dict[str, Any]], loads: Dict[int, float], subject_index: Dict[str, Dict[str, Any]], rng: random.Random) -> int:
+def choose_best_faculty(
+    offering: Dict[str, Any],
+    faculties: Sequence[Dict[str, Any]],
+    loads: Dict[int, float],
+    subject_index: Dict[str, Dict[str, Any]],
+    rng: random.Random,
+    current_assignments: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+) -> Optional[int]:
     matched_subject = subject_index.get(build_offering_key(offering))
     scored: List[Tuple[int, float]] = []
 
     for index, faculty in enumerate(faculties):
         units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
         current_load = loads.get(index, 0.0)
-        max_units = max(1.0, to_number(faculty.get("faculty_max_units")) or 1.0)
-        projected = (current_load + units) / max_units
+        max_units = to_number(faculty.get("faculty_max_units"))
+        if max_units is None:
+            max_units = 0.0
+        # Hard filter: faculty with zero or negative capacity are not eligible
+        if max_units <= 0.0:
+            continue
+        projected_units = current_load + units
         dept_match = to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))
         role = normalize_role(faculty.get("faculty_role"))
         specialization_score = match_specialization_score(faculty, offering, matched_subject)
         status = normalize_upper(faculty.get("faculty_status"))
 
+        # Hard filter: inactive or would exceed faculty_max_units
+        if status != "ACTIVE":
+            continue
+        if projected_units > max_units:
+            continue
+
+        # Hard constraint checks based on current assignments:
+        assignments_for_faculty = (current_assignments or {}).get(index, [])
+        # F-H8: preparations must not exceed 4
+        current_prep = count_preparations(assignments_for_faculty)
+        # if adding this offering increases preparations beyond 4 -> skip
+        new_prep = current_prep + (1 if offering else 0)
+        if new_prep > 4:
+            continue
+
+        # F-H7: no more than 4 consecutive hours (240 minutes)
+        # compute schedule blocks including the candidate offering
+        existing_blocks: List[Dict[str, Any]] = []
+        for a in assignments_for_faculty:
+            existing_blocks.extend(build_schedule_blocks(a.get("offering") if isinstance(a, dict) and a.get("offering") else a))
+        # add candidate offering blocks
+        existing_blocks.extend(build_schedule_blocks(offering))
+        # sort and compute max consecutive run
+        if existing_blocks:
+            blocks_sorted = sorted(existing_blocks, key=lambda b: b["start"])
+            cons = 0.0
+            max_cons = 0.0
+            for i, b in enumerate(blocks_sorted):
+                if i == 0:
+                    cons = b.get("duration", 0)
+                else:
+                    gap = max(0.0, float(b.get("start", 0)) - float(blocks_sorted[i - 1].get("end", 0)))
+                    if gap < 30:
+                        cons += b.get("duration", 0)
+                    else:
+                        max_cons = max(max_cons, cons)
+                        cons = b.get("duration", 0)
+            max_cons = max(max_cons, cons)
+            if max_cons > 240:
+                continue
+
         score = 0.0
-        score += 120.0 if dept_match else -24.0
-        score += specialization_score
-        score += 40.0 if role == "FT" else 8.0 if role == "PT" else 0.0
-        score += 12.0 if status == "ACTIVE" else -70.0
-        score -= max(0.0, projected - 1.0) * 120.0
-        score -= max(0.0, current_load / max_units - 0.9) * 35.0
-        score -= current_load * 0.7
+        # Priority ordering guidance from rules:
+        # specialization first, then department, then role, then load usage
+        score += specialization_score * 3.0
+        score += 80.0 if dept_match else 12.0
+        score += 28.0 if role == "FT" else 6.0 if role == "PT" else 0.0
+        score += (projected_units / max_units) * 14.0 if max_units > 0 else 0.0
+        score -= current_load * 0.4
 
         scored.append((index, score))
+
+    if not scored:
+        return None
 
     scored.sort(key=lambda pair: (-pair[1], pair[0], rng.random()))
     return scored[0][0]
 
 
-def build_initial_candidate(faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]], rng: random.Random) -> List[int]:
+def build_recommended_candidates(
+    offering: Dict[str, Any],
+    faculties: Sequence[Dict[str, Any]],
+    loads: Dict[int, float],
+    subject_index: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    matched_subject = subject_index.get(build_offering_key(offering))
+    candidates: List[Tuple[float, Dict[str, Any]]] = []
+
+    for index, faculty in enumerate(faculties):
+        max_units = max(1.0, to_number(faculty.get("faculty_max_units")) or 1.0)
+        current = loads.get(index, 0.0)
+        available = max(0.0, max_units - current)
+        if available <= 0:
+            continue
+        specialization = match_specialization_score(faculty, offering, matched_subject)
+        same_dept = to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))
+        rec_score = specialization + (18.0 if same_dept else 4.0) + (available * 0.8)
+        candidates.append(
+            (
+                rec_score,
+                {
+                    "faculty_id": faculty.get("faculty_id"),
+                    "faculty_name": faculty.get("faculty_name"),
+                    "department_id": faculty.get("department_id"),
+                    "department_name": faculty.get("department_name"),
+                    "faculty_role": faculty.get("faculty_role"),
+                    "available_units": round(available, 2),
+                    "specialization_score": round(specialization, 2),
+                    "same_department": same_dept,
+                },
+            )
+        )
+
+    candidates.sort(key=lambda item: -item[0])
+    return [item[1] for item in candidates[:5]]
+
+
+def build_initial_candidate(
+    faculties: Sequence[Dict[str, Any]],
+    offerings: Sequence[Dict[str, Any]],
+    subject_index: Dict[str, Dict[str, Any]],
+    rng: random.Random,
+    initial_loads: Optional[Dict[int, float]] = None,
+) -> Tuple[List[int], List[Dict[str, Any]]]:
     loads: Dict[int, float] = {}
-    assignments = [0 for _ in offerings]
+    if initial_loads:
+        # copy initial loads (keys are faculty indices)
+        loads.update({int(k): float(v) for k, v in initial_loads.items()})
+    assignments = [-1 for _ in offerings]
+    unassigned: List[Dict[str, Any]] = []
 
     ordering = sorted(
         (
@@ -298,22 +342,46 @@ def build_initial_candidate(faculties: Sequence[Dict[str, Any]], offerings: Sequ
         key=lambda entry: (-entry[2], entry[0]),
     )
 
+    # maintain assignment lists per faculty to enforce prep/consecutive rules
+    faculty_assignments: Dict[int, List[Dict[str, Any]]] = {}
+
     for index, offering, _difficulty in ordering:
-        faculty_index = choose_best_faculty(offering, faculties, loads, subject_index, rng)
+        faculty_index = choose_best_faculty(offering, faculties, loads, subject_index, rng, current_assignments=faculty_assignments)
+        if faculty_index is None:
+            unassigned.append(
+                {
+                    "offering_id": offering.get("id"),
+                    "code": offering.get("code"),
+                    "course_no": offering.get("course_no"),
+                    "section": offering.get("section"),
+                    "descriptive_title": offering.get("descriptive_title"),
+                    "reason": "No eligible faculty after specialization/department/units checks.",
+                    "recommended_candidates": build_recommended_candidates(offering, faculties, loads, subject_index),
+                }
+            )
+            continue
+
         assignments[index] = faculty_index
         units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
         loads[faculty_index] = loads.get(faculty_index, 0.0) + units
+        # record assignment for hard checks
+        faculty_assignments.setdefault(faculty_index, []).append({"offering": offering})
 
-    return assignments
+    return assignments, unassigned
 
 
 def mutate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]], rng: random.Random, mutation_rate: float) -> List[int]:
     next_candidate = list(candidate)
     loads: Dict[int, float] = {}
 
+    # build loads and faculty assignments from existing candidate
+    faculty_assignments: Dict[int, List[Dict[str, Any]]] = {}
     for index, faculty_index in enumerate(next_candidate):
         units = to_number(offerings[index].get("units")) or to_number(offerings[index].get("lec_hrs")) or 0.0
+        if faculty_index is None or faculty_index < 0:
+            continue
         loads[faculty_index] = loads.get(faculty_index, 0.0) + units
+        faculty_assignments.setdefault(faculty_index, []).append({"offering": offerings[index]})
 
     for index, offering in enumerate(offerings):
         if rng.random() > mutation_rate:
@@ -321,9 +389,12 @@ def mutate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offeri
         current = next_candidate[index]
         units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
         loads[current] = max(0.0, loads.get(current, 0.0) - units)
-        replacement = choose_best_faculty(offering, faculties, loads, subject_index, rng)
+        replacement = choose_best_faculty(offering, faculties, loads, subject_index, rng, current_assignments=faculty_assignments)
         next_candidate[index] = replacement
-        loads[replacement] = loads.get(replacement, 0.0) + units
+        # update loads and assignments maps
+        if replacement is not None:
+            loads[replacement] = loads.get(replacement, 0.0) + units
+            faculty_assignments.setdefault(replacement, []).append({"offering": offering})
 
     return next_candidate
 
@@ -400,20 +471,41 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
 
         prep_count = count_preparations(assignments_for_faculty)
         if prep_count > 4:
-            soft_penalty += (prep_count - 4) * 18.0
-            conflicts.append({"type": "preparations", "faculty_id": faculty_id, "problem": f"Faculty has {prep_count} preparations"})
+            # Hard violation: too many preparations
+            hard_penalty += (prep_count - 4) * 120.0
+            conflicts.append({"type": "preparations", "faculty_id": faculty_id, "problem": f"Faculty has {prep_count} preparations (exceeds 4)"})
 
         blocks = sorted(block_map.get(faculty_id, []), key=lambda block: block["start"])
         if len(blocks) >= 2:
             gap_total = 0.0
             block_duration = 0.0
+            # detect consecutive teaching duration without >=30min break
+            consecutive_duration = 0.0
+            max_consecutive = 0.0
             for idx, block in enumerate(blocks):
                 block_duration += block["duration"]
                 if idx > 0:
-                    gap_total += max(0.0, float(block["start"]) - float(blocks[idx - 1]["end"]))
+                    gap = max(0.0, float(block["start"]) - float(blocks[idx - 1]["end"]))
+                    gap_total += gap
                     if overlaps(blocks[idx - 1], block):
                         hard_penalty += 35.0
                         conflicts.append({"type": "time_conflict", "faculty_id": faculty_id, "problem": "Faculty has overlapping schedule blocks"})
+
+                    # consecutive calculation: if gap < 30, accumulate, else reset
+                    if gap < 30:
+                        consecutive_duration += block["duration"]
+                    else:
+                        max_consecutive = max(max_consecutive, consecutive_duration)
+                        consecutive_duration = block["duration"]
+                else:
+                    # first block starts a new consecutive run
+                    consecutive_duration = block["duration"]
+
+            # finalize max_consecutive
+            max_consecutive = max(max_consecutive, consecutive_duration)
+            if max_consecutive > 240:
+                hard_penalty += (max_consecutive - 240.0) * 10.0
+                conflicts.append({"type": "consecutive_hours", "faculty_id": faculty_id, "problem": f"Faculty has {max_consecutive/60:.2f} consecutive teaching hours (>4)"})
 
             avg_gap = gap_total / max(1, len(blocks) - 1)
             if avg_gap > 30:
@@ -512,6 +604,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     faculties = list(payload.get("faculty", []))
     offerings = list(payload.get("offerings", []))
     all_subjects = list(payload.get("subjects", []))
+    existing_loads_rows = list(payload.get("faculty_loading", []))
     # Only consider subjects explicitly marked ACTIVE for assignment
     active_subjects = [s for s in all_subjects if normalize_upper(s.get("subject_status")) == "ACTIVE"]
     # Record inactive subjects for reporting (code, title, curriculum id)
@@ -551,10 +644,27 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "run_id": payload.get("run_id") or "empty",
         }
 
-    population: List[List[int]] = [build_initial_candidate(faculties, offerings, subject_index, rng)]
+    # Map faculty_id to index for initial loads
+    faculty_id_to_index: Dict[int, int] = {}
+    for idx, f in enumerate(faculties):
+        fid = int(to_number(f.get("faculty_id")) or 0)
+        faculty_id_to_index[fid] = idx
+
+    initial_loads_by_index: Dict[int, float] = {}
+    for row in existing_loads_rows:
+        fid = int(to_number(row.get("faculty_id")) or 0)
+        units = to_number(row.get("units")) or 0.0
+        idx = faculty_id_to_index.get(fid)
+        if idx is None:
+            continue
+        initial_loads_by_index[idx] = initial_loads_by_index.get(idx, 0.0) + units
+
+    # Build initial population using initial loads
+    assignments0, _ = build_initial_candidate(faculties, offerings, subject_index, rng, initial_loads=initial_loads_by_index)
+    population: List[List[int]] = [assignments0]
     while len(population) < max(6, population_size):
-        variant = build_initial_candidate(faculties, offerings, subject_index, rng)
-        population.append(mutate(variant, faculties, offerings, subject_index, rng, min(0.35, mutation_rate * 1.6)))
+        variant_assignments, _ = build_initial_candidate(faculties, offerings, subject_index, rng, initial_loads=initial_loads_by_index)
+        population.append(mutate(variant_assignments, faculties, offerings, subject_index, rng, min(0.35, mutation_rate * 1.6)))
 
     best_candidate = population[0]
     best_result = summarize_candidate(best_candidate, faculties, offerings, subject_index)

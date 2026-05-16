@@ -1,47 +1,35 @@
-# GA + Faculty Loading Migration TODO
+# Automatic Scheduler GA - Implementation TODO
 
-- [x] Read remaining orchestration/config files:
-  - [x] run.py
-  - [x] Backend/node-api/src/routes/ga.js
-  - [x] Backend/node-api/src/config/env.js
-  - [x] Backend/python-ga/README.md
-- [x] Create new top-level GeneticAlgorithm service:
-  - [x] Add GeneticAlgorithm/optimizer.py (migrated + enhanced GA logic)
-  - [x] Add GeneticAlgorithm/README.md
-- [x] Update backend integration:
-  - [x] Update Backend/node-api/src/config/env.js GA service defaults (if needed)
-  - [x] Update Backend/node-api/src/controllers/gaController.js pre-flight + mapping + persistence safeguards
-- [x] Update orchestration:
-  - [x] Update run.py to run top-level GeneticAlgorithm service
-- [x] Keep schema compatibility:
-  - [x] Ensure no DB schema changes
-  - [x] Ensure faculty_loading columns are preserved exactly
-- [x] Validate:
-  - [x] Python syntax check
-  - [x] Backend check/build
-  - [x] Frontend check/build
-  - [x] Verify GA output/report shape and persistence behavior
+- [x] Backend: Add automatic scheduler routes in `Backend/node-api/src/routes/ga.js`
+- [x] Backend: Implement automatic scheduler controller logic in `Backend/node-api/src/controllers/gaController.js`
+  - [x] Preflight with rule-aware filtering and validations
+  - [x] Run GA (automatic scheduling mode) with payload preparation
+  - [x] Persist generated rows to `public.automatic_scheduler`
+  - [x] Export rows for backup/import
+  - [x] Update `course_offerings` with optional backup-first flow
+- [ ] Python GA: Extend `Backend/python-ga/optimizer.py` for automatic scheduling mode
+  - [ ] Enforce hard constraints (days/pattern/time bounds/no overlaps/room-type priority)
+  - [ ] Apply soft constraints and fitness scoring
+  - [ ] Generate unresolved issues + room/time suggestions
+- [ ] Frontend API: Add automatic scheduler API methods in `Frontend/src/services/gaApi.js`
+- [ ] Frontend UI: Implement Automatic Scheduler page in `Frontend/src/pages/ScheduleView.jsx`
+  - [ ] List view for `automatic_scheduler` rows
+  - [ ] Run controls and fitness/issue reporting
+  - [ ] Export-only action
+  - [ ] Update-course-offering action with:
+    - [ ] Backup export then update
+    - [ ] Update without backup
+- [ ] Faculty Loading GA (Part.2): Update and enforce refined faculty-loading constraints/rules
+  - [ ] Strict pre-filters for inactive/zero-capacity faculty
+  - [ ] Hard-constraint enforcement for max 4 consecutive teaching hours
+  - [ ] Hard-constraint enforcement for max 4 preparations
+  - [ ] Unassigned + recommendation fallback when no valid faculty candidate remains
+  - [ ] Available-units baseline computation and enforcement
+- [ ] Validate integration and basic flow checks
+- [ ] Final review for GA rules/constraints alignment
 
-## UI Revamp (old Faculty Loading layout concept with current styling)
-
-- [ ] Revamp `Frontend/src/pages/FacultyLoadingView.jsx` layout to old-page-inspired sections
-- [ ] Preserve all existing current functions/behaviors (no removals)
-- [ ] Add latest run snapshot + quality/issues panel + generated list table view
-- [ ] Keep design consistent with current app style classes/tokens
-- [ ] Rebuild frontend and verify no errors
-
-## Course Offering CRUD sync with Subjects and Rooms
-
-- [x] Review `Backend/node-api/src/routes/courseOfferings.js` CRUD flow and current sync helpers
-- [x] Update create/update handlers to sync both subjects and rooms consistently
-- [x] Update delete handler to propagate delete effects to related subjects/rooms safely
-- [x] Add safe orphan-room pruning (only if not referenced elsewhere)
-- [ ] Run backend syntax/quick verification
-
-- [x] Update GA subject mapping to use subjects.curr_id with fallback to subject_id
-- [x] Verify faculty_loading persistence uses mapped offering.curr_id from subject-derived offerings
-- [x] Provide short recommendation text for team decision on duplicate-subject merge handling
-- [x] Add canonical normalization helpers and merge-key builder for subject deduplication
-- [x] Refactor subject-to-GA mapping to group duplicates and emit one representative offering
-- [x] Add merged/audit metadata for grouped rows (duplicate_count/source ids)
-- [x] Validate dedupe output is compatible with preflight and GA payload flow
+## Current Task: Code-only alignment with DB schema for Automatic Scheduler + GA
+- [x] Confirm scope: no DB schema changes, code changes only
+- [ ] Normalize `merged` and room-id handling in `Backend/node-api/src/controllers/gaController.js`
+- [ ] Align `Backend/python-ga/optimizer.py` behavior with scheduler payload expectations
+- [ ] Run consistency checks (no schema edits, scheduler + GA variable/path alignment)
