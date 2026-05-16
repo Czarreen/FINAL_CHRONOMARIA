@@ -13,6 +13,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState(1);
   const [total, setTotal] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
   const [limit, setLimit] = useState(50);
@@ -756,6 +757,19 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
 
   const totalPages = Math.ceil(total / limit);
 
+  useEffect(() => {
+    setPageInput(page);
+  }, [page]);
+
+  const applyPageInput = () => {
+    const nextPage = Number(pageInput);
+    if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
+      setPage(nextPage);
+    } else {
+      setPageInput(page);
+    }
+  };
+
   function sortHeaderClass(columnKey) {
     return `flex w-full items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
       sortConfig.key === columnKey ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
@@ -1247,7 +1261,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
               <div className="text-xs text-on-surface-variant">
                 {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
               </div>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
@@ -1255,32 +1269,21 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
                 >
                   <ChevronLeft size={14} />
                 </button>
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (page <= 3) {
-                      pageNum = i + 1;
-                    } else if (page >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = page - 2 + i;
-                    }
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`rounded-lg px-2 py-1 text-xs font-bold transition-all ${
-                          pageNum === page
-                            ? 'bg-primary text-white'
-                            : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center gap-2 rounded-lg border border-white/30 bg-white px-3 py-1">
+                  <span className="text-xs text-on-surface-variant">Page</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyPageInput();
+                    }}
+                    className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                  />
+                  <span className="text-xs text-on-surface-variant">of {totalPages}</span>
                 </div>
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}

@@ -48,6 +48,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [offerings, setOfferings] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState(1);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -152,6 +153,19 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     if (!totalRows) return 1;
     return Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   }, [totalRows]);
+
+  useEffect(() => {
+    setPageInput(page);
+  }, [page]);
+
+  const applyPageInput = () => {
+    const nextPage = Number(pageInput);
+    if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
+      setPage(nextPage);
+    } else {
+      setPageInput(page);
+    }
+  };
 
   // Debounced search text — prevents a request on every keystroke
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1658,28 +1672,43 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
           {startRow}-{endRow} / {totalRows}
         </p>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-0.5 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page <= 1 || loading}
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             type="button"
             title="Previous page"
           >
             <ChevronLeft size={12} />
-            <span>Prev</span>
+            Prev
           </button>
-          <span className="text-xs font-semibold text-on-surface-variant px-1">
-            {page} / {totalPages}
-          </span>
+
+          <div className="flex items-center gap-2 rounded-md border border-white/60 bg-white px-2 py-1">
+            <span className="text-xs text-on-surface-variant">Page</span>
+            <input
+              type="number"
+              min="1"
+              max={totalPages}
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onBlur={applyPageInput}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyPageInput();
+              }}
+              className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+            <span className="text-xs text-on-surface-variant">of {totalPages}</span>
+          </div>
+
           <button
-            className="inline-flex items-center gap-0.5 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-white/60 bg-white px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page >= totalPages || loading}
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             type="button"
             title="Next page"
           >
-            <span>Next</span>
+            Next
             <ChevronRight size={12} />
           </button>
         </div>

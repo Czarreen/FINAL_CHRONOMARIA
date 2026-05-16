@@ -60,6 +60,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState(1);
   const PAGE_SIZE = 50;
 
   // Notification states
@@ -361,6 +362,19 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   useEffect(() => {
     loadRooms({ refreshNotifications: true, forceNotificationRescan: true });
   }, [authRefreshKey]);
+
+  useEffect(() => {
+    setPageInput(currentPage);
+  }, [currentPage]);
+
+  const applyPageInput = () => {
+    const nextPage = Number(pageInput);
+    if (Number.isInteger(nextPage) && nextPage >= 1) {
+      setCurrentPage(nextPage);
+    } else {
+      setPageInput(currentPage);
+    }
+  };
 
   const { stats, totalPages, currentRooms } = useMemo(() => {
     // Filter rooms by search query and status
@@ -939,9 +953,9 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-6 py-4">
               <div className="text-sm text-on-surface-variant">
-                Page {currentPage} of {totalPages}
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, stats.totalRooms)} of {stats.totalRooms}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={currentPage === 1}
@@ -950,32 +964,21 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   <ChevronLeft size={16} />
                   Previous
                 </button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`rounded-lg px-3 py-2 text-sm font-bold transition-all ${
-                          pageNum === currentPage
-                            ? 'bg-primary text-white'
-                            : 'border border-white/30 bg-white text-on-surface hover:bg-slate-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center gap-2 rounded-lg border border-white/30 bg-white px-3 py-1">
+                  <span className="text-sm text-on-surface-variant">Page</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyPageInput();
+                    }}
+                    className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                  />
+                  <span className="text-sm text-on-surface-variant">of {totalPages}</span>
                 </div>
                 <button
                   onClick={handleNextPage}
