@@ -591,45 +591,49 @@ export default function FacultyView() {
   }
 
   return (
-<div className="p-3 flex flex-col h-screen bg-background animate-in slide-in-from-bottom-4 duration-500 bg-cover">
+<div className="space-y-2 animate-in slide-in-from-bottom-4 duration-500">
 
       {/* Header with Title, Description, and Action Buttons */}
-      <div className="bg-white/90 rounded-xl border border-white/60 flex items-center justify-between p-3 flex-shrink-0">
+      <div className="glass-panel flex items-center justify-between p-3">
 
         <div className="space-y-0.5 min-w-0">
           <h2 className="text-lg font-bold text-on-surface truncate">Faculty Directory</h2>
           <p className="text-xs text-on-surface-variant truncate">Manage and track academic teaching staff.</p>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0 ml-4">
-          <NotificationButton
-            items={filteredNotifications}
-            title="Faculty Notifications"
-            buttonLabel="Issues"
-            emptyLabel="No faculty issues"
-            panelSize="md"
-            onItemEdit={handleNotificationEdit}
-            onItemJump={handleNotificationJump}
-            onItemResolve={handleResolveNotification}
-            onItemInlineSave={handleInlineSave}
-            severityFilter={notificationSeverityFilter}
-            onSeverityFilterChange={setNotificationSeverityFilter}
-            notificationSearch={notificationSearch}
-            onNotificationSearchChange={setNotificationSearch}
-            notificationStats={notificationStats}
-          />
+        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+          <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+            <NotificationButton
+              items={filteredNotifications}
+              title="Faculty Notifications"
+              buttonLabel="Issues"
+              emptyLabel="No faculty issues"
+              panelSize="md"
+              onItemEdit={handleNotificationEdit}
+              onItemJump={handleNotificationJump}
+              onItemResolve={handleResolveNotification}
+              onItemInlineSave={handleInlineSave}
+              severityFilter={notificationSeverityFilter}
+              onSeverityFilterChange={setNotificationSeverityFilter}
+              notificationSearch={notificationSearch}
+              onNotificationSearchChange={setNotificationSearch}
+              notificationStats={notificationStats}
+            />
+            <div className="h-5 w-px bg-slate-200 self-center" />
+            <button
+              onClick={() => loadFaculty()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[40px] min-w-max"
+              title="Reload faculty members"
+            >
+              <RotateCcw size={14} />
+              <span>Reload</span>
+            </button>
+          </div>
           <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
             {total} faculty
           </span>
           <button
-            onClick={() => loadFaculty()}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-primary flex-shrink-0"
-            title="Reload faculty members"
-          >
-            <RotateCcw size={16} />
-          </button>
-          <button
             ref={colButtonRef}
-            className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
             onClick={() => setColMenuOpen((prev) => !prev)}
             type="button"
             title="Column visibility"
@@ -665,15 +669,15 @@ export default function FacultyView() {
             </div>,
             document.body
           )}
-          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1 px-3 py-1.5 text-sm flex-shrink-0">
-            <PlusCircle size={16} />
+          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px] flex-shrink-0">
+            <PlusCircle size={14} />
             <span>Add</span>
           </button>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white/90 rounded-xl border border-white/60 space-y-2 p-3 flex-shrink-0 mt-1">
+      <div className="glass-panel space-y-2 p-3">
 
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="relative flex-1 md:max-w-md">
@@ -719,14 +723,14 @@ export default function FacultyView() {
       </div>
 
       {loading && (
-        <div className="glass-panel flex flex-col items-center justify-center flex-1 mt-1">
+        <div className="glass-panel flex flex-col items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary"></div>
           <p className="mt-4 text-sm text-on-surface-variant">Loading faculty members...</p>
         </div>
       )}
 
       {error && !loading && (
-        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-3 text-red-700 flex-1 mt-1">
+        <div className="glass-panel flex items-center gap-3 rounded-lg bg-red-50 p-3 text-red-700">
           <AlertCircle size={18} />
           <div>
             <p className="font-bold text-sm">Error loading faculty</p>
@@ -736,9 +740,9 @@ export default function FacultyView() {
       )}
 
       {!loading && !error && faculty.length > 0 && (
-        <div className="bg-white/90 rounded-xl border border-white/60 overflow-hidden flex-1 flex flex-col mt-1 min-h-0">
+        <div className="glass-panel overflow-hidden">
 
-          <div className="overflow-auto flex-1">
+          <div className="max-h-[calc(100vh-18rem)] overflow-auto">
             <table className="min-w-full w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
@@ -910,7 +914,7 @@ export default function FacultyView() {
       )}
 
       {!loading && !error && faculty.length === 0 && (
-        <div className="glass-panel flex flex-col items-center justify-center flex-1 mt-1 text-center">
+        <div className="glass-panel flex flex-col items-center justify-center py-16 text-center">
           <Users size={40} className="text-on-surface-variant/30" />
           <p className="mt-3 text-sm font-bold text-on-surface">No faculty members found</p>
           <p className="mt-1 text-xs text-on-surface-variant">

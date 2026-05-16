@@ -694,7 +694,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   };
 
   return (
-    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500 p-3 flex flex-col h-screen">
+    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
       {refreshStatus && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-800">
           {refreshStatus}
@@ -742,7 +742,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               </span>
             )}
             <button
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
               onClick={() => loadRooms({ refreshNotifications: true, forceNotificationRescan: true })}
               type="button"
               title="Reload data"
@@ -753,7 +753,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
             </button>
             <button
               ref={colButtonRef}
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
               onClick={() => setColMenuOpen((prev) => !prev)}
               type="button"
               title="Column visibility"
@@ -791,7 +791,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
             )}
             {selectedRooms.size > 0 && (
               <button
-                className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2 py-1 font-semibold text-white text-xs transition-colors hover:bg-red-700"
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 font-semibold text-white text-xs min-h-[44px] min-w-max transition-colors hover:bg-red-700"
                 onClick={handleBulkDelete}
                 type="button"
               >
@@ -801,7 +801,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
             )}
             <button
               onClick={handleAddClick}
-              className="btn-primary flex items-center gap-1 text-xs px-2 py-1"
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
             >
               <Plus size={14} />
               <span>Add Room</span>
@@ -811,7 +811,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       </div>
 
       {/* Search and Filter Bar - Line 2 */}
-      <div className="glass-panel space-y-4 p-4">
+      <div className="glass-panel space-y-3 p-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {/* Search Input */}
           <div className="relative flex-1 md:max-w-md">
@@ -852,8 +852,8 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
       {/* Rooms Table */}
       {!loading && !error && rooms.length > 0 && (
-        <div className="glass-panel overflow-hidden flex-1">
-          <div className="max-h-[calc(100vh-24rem)] overflow-auto pb-8">
+        <div className="glass-panel overflow-hidden">
+          <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
             <table className="min-w-full w-full text-left text-xs">
               <thead>
                 <tr className="sticky top-0 z-20 border-b border-white/20 bg-white/95 backdrop-blur">
@@ -951,7 +951,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-6 py-4">
+            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2">
               <div className="text-sm text-on-surface-variant">
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, stats.totalRooms)} of {stats.totalRooms}
               </div>
