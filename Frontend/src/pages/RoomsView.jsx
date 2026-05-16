@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw, BookOpen } from 'lucide-react';
+import { ArrowUpDown, DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw, BookOpen } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom, fetchRoomOfferings } from '../services/roomsApi.js';
 import { fetchRoomNotifications, rescanAllRoomNotifications, resolveRoomNotification } from '../services/notificationsApi.js';
@@ -100,6 +100,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'room_name', direction: 'asc' });
   const [selectedRooms, setSelectedRooms] = useState(new Set());
   const [confirmDialog, setConfirmDialog] = useState(null);
 
@@ -383,40 +384,60 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     }
   };
 
-  const { stats, totalPages, currentRooms } = useMemo(() => {
+  const { stats, totalPages, currentRooms, sortedFilteredRooms } = useMemo(() => {
     // Filter rooms by search query and status
-    let filteredRooms = searchQuery.trim() === '' 
-      ? rooms 
+    let filteredRooms = searchQuery.trim() === ''
+      ? rooms
       : rooms.filter((r) => {
-        const query = searchQuery.toLowerCase();
-        return (
-          (r.room_name || '').toLowerCase().includes(query) ||
-          (r.room_type || '').toLowerCase().includes(query) ||
-          (r.room_status || '').toLowerCase().includes(query)
-        );
-      });
+          const query = searchQuery.toLowerCase();
+          return (
+            (r.room_name || '').toLowerCase().includes(query) ||
+            (r.room_type || '').toLowerCase().includes(query) ||
+            (r.room_status || '').toLowerCase().includes(query)
+          );
+        });
 
     // Apply status filter
     if (statusFilter) {
       filteredRooms = filteredRooms.filter((r) => r.room_status === statusFilter);
     }
 
-    const totalRooms = filteredRooms.length;
-    const availableRooms = filteredRooms.filter((r) => r.room_status === 'available').length;
-    const roomTypeCount = new Set(filteredRooms.map(r => r.room_type || 'Unassigned')).size;
-    
+    // Sort
+    const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
+    const getRoomSortValue = (room) => {
+      switch (sortConfig.key) {
+        case 'room_name': return String(room.room_name ?? '');
+        case 'room_type': return String(room.room_type ?? '');
+        case 'room_status': return String(room.room_status ?? '');
+        default: return String(room.room_name ?? '');
+      }
+    };
+    const sorted = [...filteredRooms].sort(
+      (left, right) =>
+        String(getRoomSortValue(left)).localeCompare(
+          String(getRoomSortValue(right)),
+          undefined,
+          { sensitivity: 'base' }
+        ) * directionMultiplier
+    );
+
+    const totalRooms = sorted.length;
+    const availableRooms = sorted.filter((r) => r.room_status === 'available').length;
+    const roomTypeCount = new Set(sorted.map((r) => r.room_type || 'Unassigned')).size;
+
     // Calculate pagination
     const pages = Math.ceil(totalRooms / PAGE_SIZE);
     const startIdx = (currentPage - 1) * PAGE_SIZE;
     const endIdx = startIdx + PAGE_SIZE;
-    const paginatedRooms = filteredRooms.slice(startIdx, endIdx);
+    const paginatedRooms = sorted.slice(startIdx, endIdx);
 
     return {
       stats: { totalRooms, availableRooms, roomTypeCount },
       totalPages: pages,
       currentRooms: paginatedRooms,
+      sortedFilteredRooms: sorted,
     };
-  }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE]);
+  }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE, sortConfig]);
 
   const filteredNotifications = useMemo(() => {
     let filtered = [...notifications];
@@ -479,6 +500,20 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
+  function handleSort(columnKey) {
+    setSortConfig((currentSort) => ({
+      key: columnKey,
+      direction: currentSort.key === columnKey && currentSort.direction === 'asc' ? 'desc' : 'asc',
+    }));
+    setCurrentPage(1);
+  }
+
+  function sortHeaderClass(columnKey) {
+    return `flex w-full items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
+      sortConfig.key === columnKey ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
+    }`;
+  }
+
   useLayoutEffect(() => {
     if (!pendingScrollToRoom?.id) return;
 
@@ -500,10 +535,26 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       return;
     }
 
-    const roomIndex = rooms.findIndex((room) => room.room_id === item.room_id);
+    // Clear filters first so the full sorted list is shown after navigation
+    clearRoomFiltersForJump();
+
+    // Find the room's position in the full sorted (unfiltered) list so the
+    // page calculation matches what will be rendered after the filters clear.
+    const dirMult = sortConfig.direction === 'asc' ? 1 : -1;
+    const getSortVal = (room) => {
+      switch (sortConfig.key) {
+        case 'room_name': return String(room.room_name ?? '');
+        case 'room_type': return String(room.room_type ?? '');
+        case 'room_status': return String(room.room_status ?? '');
+        default: return String(room.room_name ?? '');
+      }
+    };
+    const fullSorted = [...rooms].sort((a, b) =>
+      String(getSortVal(a)).localeCompare(String(getSortVal(b)), undefined, { sensitivity: 'base' }) * dirMult
+    );
+    const roomIndex = fullSorted.findIndex((room) => room.room_id === item.room_id);
     if (roomIndex === -1) return;
 
-    clearRoomFiltersForJump();
     const targetPage = Math.max(1, Math.ceil((roomIndex + 1) / PAGE_SIZE));
     if (targetPage !== currentPage) {
       setCurrentPage(targetPage);
@@ -895,9 +946,10 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
                       <th key={col.key} className="px-6 py-4 text-left">
-                        <span className="text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">
-                          {col.label}
-                        </span>
+                        <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
+                          <span>{col.label}</span>
+                          <ArrowUpDown size={10} />
+                        </button>
                       </th>
                     );
                   })}
@@ -1112,7 +1164,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   >
                     <option value="available">Available</option>
                     <option value="unavailable">Unavailable</option>
-                    <option value="occupied">Occupied</option>
                   </select>
                 </div>
 
@@ -1202,7 +1253,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   >
                     <option value="available">Available</option>
                     <option value="unavailable">Unavailable</option>
-                    <option value="occupied">Occupied</option>
                   </select>
                 </div>
 
