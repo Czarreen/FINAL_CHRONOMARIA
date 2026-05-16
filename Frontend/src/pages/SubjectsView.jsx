@@ -8,6 +8,8 @@ import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveS
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { highlightRowElement } from '../utils/highlightRow.js';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
+import ScheduleCardInput from '../components/ScheduleCardInput';
+import { buildScheduleString, parseScheduleString, emptyCardState } from '../utils/scheduleUtils';
 
 export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
@@ -27,7 +29,11 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
   const [roomNameById, setRoomNameById] = useState({});
-  
+
+  // Structured schedule card state shared between Add and Edit modals
+  const [mthCard, setMthCard] = useState(emptyCardState('mth'));
+  const [tfsCard, setTfsCard] = useState(emptyCardState('tfs'));
+
   // Add Subject modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSubject, setNewSubject] = useState({
@@ -608,6 +614,15 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       subject_status: subject.subject_status || 'active',
       curr_id: subject.curr_id ?? '',
     });
+    // Pre-populate structured card state from existing schedule strings
+    const mthParsed = parseScheduleString(subject.mth_schedule || '', 'mth');
+    setMthCard(mthParsed
+      ? { enabled: true, mode: mthParsed.mode, startH: mthParsed.startH, startM: mthParsed.startM, endH: mthParsed.endH, endM: mthParsed.endM, type: mthParsed.type }
+      : emptyCardState('mth'));
+    const tfsParsed = parseScheduleString(subject.tfs_schedule || '', 'tfs');
+    setTfsCard(tfsParsed
+      ? { enabled: true, mode: tfsParsed.mode, startH: tfsParsed.startH, startM: tfsParsed.startM, endH: tfsParsed.endH, endM: tfsParsed.endM, type: tfsParsed.type }
+      : emptyCardState('tfs'));
     setShowEditModal(true);
     setEditError(null);
   }
@@ -621,7 +636,16 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       setSavingEdit(true);
       setEditError(null);
       const previousStatus = editingSubject.subject_status || 'active';
-      const updated = await updateSubject(editingSubject.subject_id, editingData);
+      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
+      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+      const payload = {
+        ...editingData,
+        mth_schedule: mthStr || null,
+        tfs_schedule: tfsStr || null,
+        mth_room: mthCard.enabled ? (editingData.mth_room || '') : '',
+        tfs_room: tfsCard.enabled ? (editingData.tfs_room || '') : '',
+      };
+      const updated = await updateSubject(editingSubject.subject_id, payload);
       // Update local state
       setSubjects(subjects.map(s => s.subject_id === editingSubject.subject_id ? updated : s));
       if ((previousStatus === 'active') !== (updated.subject_status === 'active')) {
@@ -629,11 +653,15 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       }
       setShowEditModal(false);
       setEditingSubject(null);
+      setMthCard(emptyCardState('mth'));
+      setTfsCard(emptyCardState('tfs'));
       await loadSubjectNotifications();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
         setEditingSubject(null);
+        setMthCard(emptyCardState('mth'));
+        setTfsCard(emptyCardState('tfs'));
         await loadSubjects();
         setUpdateError('That subject was removed. The list has been refreshed.');
         return;
@@ -751,9 +779,20 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     try {
       setSavingSubject(true);
       setSubjectError(null);
-      const createdSubject = await createSubject(newSubject);
+      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
+      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+      const payload = {
+        ...newSubject,
+        mth_schedule: mthStr || null,
+        tfs_schedule: tfsStr || null,
+        mth_room: mthCard.enabled ? (newSubject.mth_room || '') : '',
+        tfs_room: tfsCard.enabled ? (newSubject.tfs_room || '') : '',
+      };
+      const createdSubject = await createSubject(payload);
       // Reset form and close modal
       setShowAddModal(false);
+      setMthCard(emptyCardState('mth'));
+      setTfsCard(emptyCardState('tfs'));
       setNewSubject({
         subject_code: '',
         subject_course_no: '',
@@ -899,6 +938,33 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     [subjectNotifications]
   );
 
+  // Sorted rooms array for ScheduleCardInput (derived from roomNameById dict)
+  const roomsArray = useMemo(
+    () =>
+      Object.entries(roomNameById)
+        .map(([id, name]) => ({ room_id: id, room_name: name }))
+        .sort((a, b) => a.room_name.localeCompare(b.room_name)),
+    [roomNameById]
+  );
+
+  // Room → subjects map for conflict detection in ScheduleCardInput
+  const subjectRoomConflictMap = useMemo(() => {
+    const map = new Map();
+    for (const s of subjects) {
+      for (const slot of ['mth', 'tfs']) {
+        const roomId = String(s[`${slot}_room`] ?? s[`${slot}_room_id`] ?? '').trim();
+        if (!roomId) continue;
+        const key = `${roomId}:${slot}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(s);
+      }
+    }
+    return map;
+  }, [subjects]);
+
+  const getSubjectConflictingOfferings = (roomId, slot) =>
+    subjectRoomConflictMap.get(`${roomId}:${slot}`) || [];
+
   function getSubjectIssueState(subjectId) {
     const id = Number(subjectId);
     const hasNotificationIssues = notificationSubjectIds.has(id);
@@ -1018,7 +1084,11 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
             document.body
           )}
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setMthCard(emptyCardState('mth'));
+              setTfsCard(emptyCardState('tfs'));
+              setShowAddModal(true);
+            }}
             className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px] flex-shrink-0"
           >
             <PlusCircle size={14} />
@@ -1344,11 +1414,11 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       {/* Add Subject Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <h3 className="text-lg font-bold text-white">Add New Subject</h3>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
                 className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
@@ -1415,61 +1485,31 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Schedule
-                  </label>
-                  <input
-                    type="text"
-                    value={newSubject.mth_schedule}
-                    onChange={(e) => setNewSubject({ ...newSubject, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., M 7:00-10:00"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Room
-                  </label>
-                  <select
-                    value={newSubject.mth_room}
-                    onChange={(e) => setNewSubject({ ...newSubject, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">— No Room —</option>
-                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
-                      <option key={id} value={id}>{name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Schedule
-                  </label>
-                  <input
-                    type="text"
-                    value={newSubject.tfs_schedule}
-                    onChange={(e) => setNewSubject({ ...newSubject, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., T 1:00-4:00"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Room
-                  </label>
-                  <select
-                    value={newSubject.tfs_room}
-                    onChange={(e) => setNewSubject({ ...newSubject, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">— No Room —</option>
-                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
-                      <option key={id} value={id}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-3">
+                <ScheduleCardInput
+                  slot="mth"
+                  value={mthCard}
+                  onChange={setMthCard}
+                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={tfsCard.enabled}
+                  roomId={newSubject.mth_room || null}
+                  onRoomChange={(id) => setNewSubject((s) => ({ ...s, mth_room: id || '' }))}
+                  rooms={roomsArray}
+                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  editingId={null}
+                />
+                <ScheduleCardInput
+                  slot="tfs"
+                  value={tfsCard}
+                  onChange={setTfsCard}
+                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={mthCard.enabled}
+                  roomId={newSubject.tfs_room || null}
+                  onRoomChange={(id) => setNewSubject((s) => ({ ...s, tfs_room: id || '' }))}
+                  rooms={roomsArray}
+                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  editingId={null}
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1545,7 +1585,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
 
               <div className="flex gap-3 pt-6">
                 <button
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
                   className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                 >
                   Cancel
@@ -1566,7 +1606,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       {/* Edit Subject Modal */}
       {showEditModal && editingSubject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
                 <h3 className="text-lg font-bold text-white">
@@ -1577,7 +1617,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
                 )}
               </div>
               <button
-                onClick={() => setShowEditModal(false)}
+                onClick={() => { setShowEditModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
                 className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
               >
                 <X size={20} />
@@ -1648,65 +1688,49 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Schedule
-                  </label>
-                  <input
-                    type="text"
-                    value={editingData.mth_schedule}
-                    onChange={(e) => setEditingData({ ...editingData, mth_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                    placeholder="e.g., M 7:00-10:00"
-                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_schedule')}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    MTH Room
-                  </label>
-                  <select
-                    value={editingData.mth_room}
-                    onChange={(e) => setEditingData({ ...editingData, mth_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('mth_room')}
-                  >
-                    <option value="">— No Room —</option>
-                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
-                      <option key={id} value={id}>{name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Schedule
-                  </label>
-                  <input
-                    type="text"
-                    value={editingData.tfs_schedule}
-                    onChange={(e) => setEditingData({ ...editingData, tfs_schedule: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                    placeholder="e.g., T 1:00-4:00"
-                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_schedule')}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    TFS Room
-                  </label>
-                  <select
-                    value={editingData.tfs_room}
-                    onChange={(e) => setEditingData({ ...editingData, tfs_room: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                    disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('tfs_room')}
-                  >
-                    <option value="">— No Room —</option>
-                    {Object.entries(roomNameById).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => (
-                      <option key={id} value={id}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-3">
+                <ScheduleCardInput
+                  slot="mth"
+                  value={mthCard}
+                  onChange={setMthCard}
+                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={tfsCard.enabled}
+                  roomId={editingData.mth_room || null}
+                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room: id || '' }))}
+                  rooms={roomsArray}
+                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  editingId={editingSubject?.subject_id ?? null}
+                  isMissing={
+                    editingSubject?._fromNotification &&
+                    (editingSubject?._missingFields?.includes('mth_schedule') || editingSubject?._missingFields?.includes('mth_room'))
+                  }
+                  disabled={
+                    editingSubject?._fromNotification &&
+                    !editingSubject?._missingFields?.includes('mth_schedule') &&
+                    !editingSubject?._missingFields?.includes('mth_room')
+                  }
+                />
+                <ScheduleCardInput
+                  slot="tfs"
+                  value={tfsCard}
+                  onChange={setTfsCard}
+                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  canDisable={mthCard.enabled}
+                  roomId={editingData.tfs_room || null}
+                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room: id || '' }))}
+                  rooms={roomsArray}
+                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  editingId={editingSubject?.subject_id ?? null}
+                  isMissing={
+                    editingSubject?._fromNotification &&
+                    (editingSubject?._missingFields?.includes('tfs_schedule') || editingSubject?._missingFields?.includes('tfs_room'))
+                  }
+                  disabled={
+                    editingSubject?._fromNotification &&
+                    !editingSubject?._missingFields?.includes('tfs_schedule') &&
+                    !editingSubject?._missingFields?.includes('tfs_room')
+                  }
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1782,7 +1806,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
 
               <div className="flex gap-3 pt-6">
                 <button
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => { setShowEditModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
                   className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                 >
                   Cancel

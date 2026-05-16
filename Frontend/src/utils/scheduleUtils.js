@@ -1,0 +1,184 @@
+// Day abbreviations for single-day modes (pair mode emits no day prefix)
+const SINGLE_DAY_ABBREV = { mon: 'M', thu: 'Th', tue: 'T', fri: 'F', sat: 'Sat' };
+
+/**
+ * Build a schedule string from structured card values.
+ * Pair mode  → "HH:MM-HH:MM Lec/Lab"       (no day — the column is already the day indicator)
+ * Single day → "HH:MM-HH:MM DAY Lec/Lab"   (day abbreviation after the time range)
+ *
+ * @param {string} slot - 'mth' | 'tfs'
+ * @param {string} mode - 'pair' | 'mon' | 'thu' | 'tue' | 'fri' | 'sat'
+ * @param {string} startH
+ * @param {string} startM
+ * @param {string} endH
+ * @param {string} endM
+ * @param {string} type - 'lec' | 'lab'
+ * @returns {string}
+ */
+export function buildScheduleString(slot, mode, startH, startM, endH, endM, type) {
+  if (!slot || !mode || !startH || !endH) return '';
+  const start = `${String(startH).padStart(2, '0')}:${String(startM || '00').padStart(2, '0')}`;
+  const end = `${String(endH).padStart(2, '0')}:${String(endM || '00').padStart(2, '0')}`;
+  const typeSuffix = type === 'lab' ? 'Lab' : 'Lec';
+  if (mode === 'pair') return `${start}-${end} ${typeSuffix}`;
+  const day = SINGLE_DAY_ABBREV[mode] || '';
+  return day ? `${start}-${end} ${day} ${typeSuffix}` : `${start}-${end} ${typeSuffix}`;
+}
+
+/**
+ * Parse a schedule string into structured card state.
+ *
+ * Handles the actual DB format:
+ *   "7:30-9:00"              → pair mode (slot must be supplied by caller)
+ *   "1:00-3:00 M"            → mth/mon mode
+ *   "1:30-4:30 Sat"          → tfs/sat mode
+ *   "1:00-4:00 T Lab, F Lec" → tfs/tue mode, lab (first component only)
+ *
+ * Also handles the legacy format our tool previously produced:
+ *   "MT 10:00-11:30 Lec"
+ *
+ * @param {string} str
+ * @param {string|null} slot - 'mth' | 'tfs' | null  (caller supplies column context)
+ * @returns {{ slot, mode, startH, startM, endH, endM, type } | null}
+ */
+export function parseScheduleString(str, slot = null) {
+  if (!str || typeof str !== 'string') return null;
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+
+  // --- Primary format: HH:MM-HH:MM [optional suffix tokens] ---
+  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/);
+  if (timeMatch) {
+    const [, sh, sm, eh, em, rawRest = ''] = timeMatch;
+    // For complex entries like "T Lab, F Lec", only the first component is used
+    const first = rawRest.split(',')[0].trim();
+    const tokens = first.split(/\s+/).filter(Boolean);
+
+    const DAY_MAP = {
+      M:   { slot: 'mth', mode: 'mon' },
+      Th:  { slot: 'mth', mode: 'thu' },
+      T:   { slot: 'tfs', mode: 'tue' },
+      F:   { slot: 'tfs', mode: 'fri' },
+      Sat: { slot: 'tfs', mode: 'sat' },
+      S:   { slot: 'tfs', mode: 'sat' },
+    };
+
+    let resolvedSlot = slot;
+    let mode = 'pair';
+    let type = 'lec';
+
+    for (const token of tokens) {
+      if (/^lec$/i.test(token)) { type = 'lec'; continue; }
+      if (/^lab$/i.test(token)) { type = 'lab'; continue; }
+      // Exact match first, then title-case normalised
+      const dm = DAY_MAP[token]
+        || DAY_MAP[token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()];
+      if (dm) { resolvedSlot = dm.slot; mode = dm.mode; }
+    }
+
+    if (!resolvedSlot) return null;
+    return {
+      slot: resolvedSlot,
+      mode,
+      startH: String(sh).padStart(2, '0'),
+      startM: String(sm).padStart(2, '0'),
+      endH: String(eh).padStart(2, '0'),
+      endM: String(em).padStart(2, '0'),
+      type,
+    };
+  }
+
+  // --- Legacy format: DAYS HH:MM-HH:MM [Type] ---
+  const legacy = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(?:\s+(Lec|Lab))?/i);
+  if (legacy) {
+    const [, rawDays, sh, sm, eh, em, rawType] = legacy;
+    const LEGACY_MAP = {
+      MT:   { slot: 'mth', mode: 'pair' },
+      M:    { slot: 'mth', mode: 'mon'  },
+      Th:   { slot: 'mth', mode: 'thu'  },
+      TF:   { slot: 'tfs', mode: 'pair' },
+      T:    { slot: 'tfs', mode: 'tue'  },
+      F:    { slot: 'tfs', mode: 'fri'  },
+      S:    { slot: 'tfs', mode: 'sat'  },
+      Sat:  { slot: 'tfs', mode: 'sat'  },
+      MWF:  { slot: 'mth', mode: 'pair' },
+      MTH:  { slot: 'mth', mode: 'pair' },
+      TTH:  { slot: 'tfs', mode: 'pair' },
+      TTHS: { slot: 'tfs', mode: 'pair' },
+      TTh:  { slot: 'tfs', mode: 'pair' },
+      TFS:  { slot: 'tfs', mode: 'pair' },
+      MW:   { slot: 'mth', mode: 'pair' },
+    };
+    const sm2 = LEGACY_MAP[rawDays] || LEGACY_MAP[rawDays.toUpperCase()];
+    if (!sm2) return null;
+    return {
+      slot: sm2.slot,
+      mode: sm2.mode,
+      startH: String(sh).padStart(2, '0'),
+      startM: String(sm).padStart(2, '0'),
+      endH: String(eh).padStart(2, '0'),
+      endM: String(em).padStart(2, '0'),
+      type: rawType ? rawType.toLowerCase() : 'lec',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Convert a "HH:MM" string to minutes since midnight.
+ * @param {string} timeStr
+ * @returns {number | null}
+ */
+export function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const match = String(timeStr).match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
+ * Detect whether two time ranges overlap.
+ * All values are minutes since midnight. Ranges are [start, end).
+ * @param {number} startA
+ * @param {number} endA
+ * @param {number} startB
+ * @param {number} endB
+ * @returns {boolean}
+ */
+export function timesOverlap(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
+/**
+ * Extract the start/end time (in minutes) from a schedule string.
+ * Works with both "HH:MM-HH:MM ..." and "DAY HH:MM-HH:MM ..." formats.
+ * @param {string} scheduleStr
+ * @returns {{ start: number, end: number } | null}
+ */
+export function getScheduleTimeRange(scheduleStr) {
+  if (!scheduleStr) return null;
+  const match = String(scheduleStr).match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const start = Number(match[1]) * 60 + Number(match[2]);
+  const end = Number(match[3]) * 60 + Number(match[4]);
+  if (end <= start) return null;
+  return { start, end };
+}
+
+/**
+ * Default empty card state for a given slot.
+ * @param {string} slot - 'mth' | 'tfs'
+ * @returns {{ enabled, mode, startH, startM, endH, endM, type }}
+ */
+export function emptyCardState(slot) {
+  return {
+    enabled: false,
+    mode: 'pair',
+    startH: '07',
+    startM: '00',
+    endH: '10',
+    endM: '00',
+    type: 'lec',
+  };
+}
