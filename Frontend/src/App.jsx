@@ -12,7 +12,7 @@ import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
 import SettingsView from './pages/SettingsView';
 import { clearAllNotifications, rescanAllSubjectNotifications } from './services/notificationsApi';
-import { RowHighlightProvider } from './hooks/useRowHighlight.jsx';
+import { RowHighlightProvider } from './hooks/RowHighlightProvider.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);

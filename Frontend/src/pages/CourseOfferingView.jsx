@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   BookMarked,
@@ -88,13 +88,14 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const colMenuRef = useRef(null);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
-  const [pendingScrollToOfferingId, setPendingScrollToOfferingId] = useState(null);
+  const [pendingScrollToOffering, setPendingScrollToOffering] = useState(null);
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
   const [editingFromNotification, setEditingFromNotification] = useState(false);
   const [notificationMissingFields, setNotificationMissingFields] = useState(new Set());
   const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const { setHighlight, clearHighlight } = useRowHighlight();
+  const skipNextFilterResetRef = useRef(false);
 
   useEffect(() => {
     if (!offeringError) return;
@@ -162,6 +163,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
   // Reset to page 1 whenever the search query or column filter changes
   useEffect(() => {
+    if (skipNextFilterResetRef.current > 0) {
+      skipNextFilterResetRef.current -= 1;
+      return;
+    }
     setPage(1);
   }, [debouncedSearch, filterColumn]);
 
@@ -255,12 +260,21 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   }, []);
 
   // Handle scrolling to offering when it appears (after page navigation)
-  useEffect(() => {
-    if (pendingScrollToOfferingId) {
-      setHighlight(pendingScrollToOfferingId, 'CourseOfferingView');
-      setPendingScrollToOfferingId(null);
-    }
-  }, [pendingScrollToOfferingId, offerings, setHighlight]);
+  useLayoutEffect(() => {
+    if (!pendingScrollToOffering?.id) return;
+
+    setHighlight(
+      pendingScrollToOffering.id,
+      'CourseOfferingView',
+      pendingScrollToOffering.severity,
+      {
+        retry: true,
+        maxWaitMs: 2500,
+        pollIntervalMs: 16,
+        onHighlighted: () => setPendingScrollToOffering(null),
+      }
+    );
+  }, [pendingScrollToOffering, offerings, setHighlight]);
 
   async function findOfferingPageNumber(offeringId) {
     try {
@@ -736,12 +750,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       findOfferingPageNumber(item.offeringId)
         .then((pageNum) => {
           if (pageNum && pageNum !== page) {
-            // Clear search filter before navigating - allows pagination effect to run
-            if (filterText) {
-              setFilterText('');
-            }
+            skipNextFilterResetRef.current = 2;
+            setFilterText('');
+            setFilterColumn('all');
             setPage(pageNum);
-            setPendingScrollToOfferingId(item.offeringId);
+            setPendingScrollToOffering({ id: item.offeringId, severity: item.severity || null });
           } else if (!pageNum) {
             console.warn('Offering not found');
           }
@@ -772,12 +785,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         })
         .then((pageNum) => {
           if (pageNum && pageNum !== page) {
-            // Clear search filter before navigating - allows pagination effect to run
-            if (filterText) {
-              setFilterText('');
-            }
+            skipNextFilterResetRef.current = 2;
+            setFilterText('');
+            setFilterColumn('all');
             setPage(pageNum);
-            setPendingScrollToOfferingId(item.offeringId);
+            setPendingScrollToOffering({ id: item.offeringId, severity: item.severity || null });
           }
         })
         .catch((err) => {

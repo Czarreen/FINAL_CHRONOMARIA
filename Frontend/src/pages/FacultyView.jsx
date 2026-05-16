@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowUpDown,
@@ -29,6 +29,7 @@ import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 
 export default function FacultyView() {
   const [faculty, setFaculty] = useState([]);
@@ -71,7 +72,7 @@ export default function FacultyView() {
   const [notifications, setNotifications] = useState([]);
   const [notificationSearch, setNotificationSearch] = useState('');
   const [notificationSeverityFilter, setNotificationSeverityFilter] = useState('all');
-  const [pendingScrollToId, setPendingScrollToId] = useState(null);
+  const [pendingScrollTo, setPendingScrollTo] = useState(null);
   const [findingRow, setFindingRow] = useState(false);
 
   const columns = [
@@ -171,12 +172,21 @@ export default function FacultyView() {
   };
 
   // Handle scrolling to row when it appears (after page navigation)
-  useEffect(() => {
-    if (pendingScrollToId) {
-      setHighlight(pendingScrollToId, 'FacultyView');
-      setPendingScrollToId(null);
-    }
-  }, [pendingScrollToId, faculty, setHighlight]);
+  useLayoutEffect(() => {
+    if (!pendingScrollTo?.id) return;
+
+    setHighlight(
+      pendingScrollTo.id,
+      'FacultyView',
+      pendingScrollTo.severity,
+      {
+        retry: true,
+        maxWaitMs: 2500,
+        pollIntervalMs: 16,
+        onHighlighted: () => setPendingScrollTo(null),
+      }
+    );
+  }, [pendingScrollTo, faculty, setHighlight]);
 
   async function findFacultyPageNumber(facultyId) {
     try {
@@ -202,7 +212,11 @@ export default function FacultyView() {
     try {
       // Prefer persisted notifications when available
       const payload = await fetchPersistedFacultyNotifications({ page: 1, limit: 200, unresolvedOnly: true });
-      setNotifications(payload.rows || []);
+      const normalized = (payload.rows || []).map((row) => ({
+        ...row,
+        severity: normalizeNotificationSeverity(row.severity),
+      }));
+      setNotifications(normalized);
     } catch (err) {
       console.error('Failed to load faculty notifications:', err);
       setNotifications([]);
@@ -228,7 +242,12 @@ export default function FacultyView() {
         // Navigate to the page this faculty member is on
         const pageNum = await findFacultyPageNumber(item.faculty_id);
         if (pageNum && pageNum !== page) {
+          setSearch('');
+          setStatusFilter('');
           setPage(pageNum);
+          setPendingScrollTo({ id: item.faculty_id, severity: item.severity || null });
+        } else {
+          setHighlight(item.faculty_id, 'FacultyView', item.severity || null, { retry: true, maxWaitMs: 1200, pollIntervalMs: 16 });
         }
       } else {
         console.error('Faculty member not found');
@@ -241,15 +260,17 @@ export default function FacultyView() {
   function handleNotificationJump(item) {
     const rowElement = document.getElementById(`faculty-row-${item.faculty_id}`);
     if (rowElement) {
-      setHighlight(item.faculty_id, 'FacultyView');
+      setHighlight(item.faculty_id, 'FacultyView', item.severity || null, { retry: true, maxWaitMs: 1200, pollIntervalMs: 16 });
     } else {
       // Faculty member not on current page, find which page they're on
       setFindingRow(true);
       findFacultyPageNumber(item.faculty_id)
         .then((pageNum) => {
           if (pageNum && pageNum !== page) {
+            setSearch('');
+            setStatusFilter('');
             setPage(pageNum);
-            setPendingScrollToId(item.faculty_id);
+            setPendingScrollTo({ id: item.faculty_id, severity: item.severity || null });
           } else if (!pageNum) {
             console.warn('Faculty member not found');
           }

@@ -1095,8 +1095,16 @@ router.get('/', async (req, res) => {
         '*,departments!course_offerings_department_id_fkey(department_id,department_name)',
         { count: 'exact' }
       )
-      .order(validSortBy, { ascending: validSortOrder === 'asc' })
-      .range(from, to);
+      .order(validSortBy, { ascending: validSortOrder === 'asc' });
+
+    // Secondary sort by id keeps the order stable when rows share the same
+    // primary sort value (e.g. many offerings with code = null). This MUST
+    // match the secondary sort in /:id/page so the page calculation is correct.
+    if (validSortBy !== 'id') {
+      query = query.order('id', { ascending: true });
+    }
+
+    query = query.range(from, to);
 
     if (search) {
       const dbCol = searchableColumns[searchCol];
@@ -1152,11 +1160,18 @@ router.get('/:id/page', async (req, res) => {
     const ascending = sortOrder !== 'desc';
 
     // Fetch only IDs in sorted order — much lighter than full rows
-    const { data: sortedIds, error } = await supabaseAdmin
+    let idsQuery = supabaseAdmin
       .from('course_offerings')
       .select('id')
-      .order(validSortBy, { ascending })
-      .order('id', { ascending: true });
+      .order(validSortBy, { ascending });
+
+    // Only add the secondary id sort when the primary is not already id
+    // (must match the secondary sort in the main listing route)
+    if (validSortBy !== 'id') {
+      idsQuery = idsQuery.order('id', { ascending: true });
+    }
+
+    const { data: sortedIds, error } = await idsQuery;
 
     if (error) return res.status(500).json({ error: error.message });
 
