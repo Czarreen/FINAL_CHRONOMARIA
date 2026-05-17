@@ -152,23 +152,39 @@ router.get('/', requireSuperAdmin, async (req, res) => {
         : countLogs(filters, (summaryQuery) => summaryQuery.ilike('status', 'failed')),
     ]);
 
-    const optionQuery = applyAuditFilters(
+    const moduleOptionQuery = applyAuditFilters(
       supabaseAdmin
         .from('audit_logs')
-        .select('module, action, username')
+        .select('module, username')
         .order('timestamp', { ascending: false })
         .range(0, 499),
       { ...filters, moduleFilter: '', actionFilter: '' }
     );
 
-    const { data: optionRows, error: optionError } = await optionQuery;
-    if (optionError) {
-      console.error('Audit option query error:', optionError.message);
+    const actionOptionQuery = applyAuditFilters(
+      supabaseAdmin
+        .from('audit_logs')
+        .select('action')
+        .order('timestamp', { ascending: false })
+        .range(0, 499),
+      { ...filters, actionFilter: '' }
+    );
+
+    const [
+      { data: moduleOptionRows, error: moduleOptionError },
+      { data: actionOptionRows, error: actionOptionError },
+    ] = await Promise.all([moduleOptionQuery, actionOptionQuery]);
+
+    if (moduleOptionError) {
+      console.error('Audit module option query error:', moduleOptionError.message);
+    }
+    if (actionOptionError) {
+      console.error('Audit action option query error:', actionOptionError.message);
     }
 
-    const modules = [...new Set((optionRows || []).map((row) => row.module).filter(Boolean))].sort();
-    const actions = [...new Set((optionRows || []).map((row) => row.action).filter(Boolean))].sort();
-    const uniqueUsers = new Set((optionRows || []).map((row) => row.username).filter(Boolean)).size;
+    const modules = [...new Set((moduleOptionRows || []).map((row) => row.module).filter(Boolean))].sort();
+    const actions = [...new Set((actionOptionRows || []).map((row) => row.action).filter(Boolean))].sort();
+    const uniqueUsers = new Set((moduleOptionRows || []).map((row) => row.username).filter(Boolean)).size;
 
     return res.json({
       page,

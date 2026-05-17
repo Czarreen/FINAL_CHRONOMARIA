@@ -16,6 +16,7 @@ import {
 import { deleteAuditLogsOlderThan30Days, fetchAuditLogs } from '../services/auditLogsApi.js';
 
 const PAGE_SIZE = 25;
+const DESCRIPTION_PREVIEW_LENGTH = 120;
 const AUDIT_COLUMNS = [
   { key: 'timestamp', label: 'Timestamp' },
   { key: 'username', label: 'User' },
@@ -25,16 +26,28 @@ const AUDIT_COLUMNS = [
   { key: 'status', label: 'Status' },
 ];
 
-const BASE_ACTIONS = [
-  'login',
-  'logout',
-  'user_created',
-  'user_updated',
-  'user_deleted',
-  'role_changed',
-  'account_activated',
-  'account_deactivated',
-];
+const BASE_ACTIONS_BY_MODULE = {
+  authentication: ['login', 'logout'],
+  users: [
+    'user_created',
+    'user_updated',
+    'user_deleted',
+    'role_changed',
+    'account_activated',
+    'account_deactivated',
+  ],
+  course_offerings: [
+    'course_offering_created',
+    'course_offering_updated',
+    'course_offering_deleted',
+    'course_offerings_imported',
+    'course_offerings_exported',
+    'course_offering_notification_resolved',
+    'course_offering_notifications_rescanned',
+  ],
+};
+
+const BASE_ACTIONS = Object.values(BASE_ACTIONS_BY_MODULE).flat();
 
 function formatAction(action) {
   return String(action || 'unknown')
@@ -90,6 +103,7 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
   const [actionFilter, setActionFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
+  const [expandedDescriptionIds, setExpandedDescriptionIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [error, setError] = useState('');
@@ -99,12 +113,13 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const moduleOptions = useMemo(() => {
-    return [...new Set(['authentication', 'users', ...(options.modules || [])])].filter(Boolean).sort();
+    return [...new Set(['authentication', 'users', 'course_offerings', ...(options.modules || [])])].filter(Boolean).sort();
   }, [options.modules]);
 
   const actionOptions = useMemo(() => {
-    return [...new Set([...BASE_ACTIONS, ...(options.actions || [])])].filter(Boolean).sort();
-  }, [options.actions]);
+    const moduleActions = moduleFilter ? BASE_ACTIONS_BY_MODULE[moduleFilter] || [] : BASE_ACTIONS;
+    return [...new Set([...moduleActions, ...(options.actions || [])])].filter(Boolean).sort();
+  }, [moduleFilter, options.actions]);
 
   const loadLogs = async () => {
     if (!isSuperAdmin) return;
@@ -162,6 +177,12 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
     setter(value);
   };
 
+  function handleModuleFilterChange(value) {
+    setPage(1);
+    setModuleFilter(value);
+    setActionFilter('');
+  }
+
   function handleSort(columnKey) {
     setPage(1);
     setSortConfig((currentSort) => ({
@@ -184,6 +205,43 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
     return sortConfig.direction === 'asc'
       ? <ArrowUp size={12} className="shrink-0" />
       : <ArrowDown size={12} className="shrink-0" />;
+  }
+
+  function toggleDescription(logId) {
+    setExpandedDescriptionIds((current) => {
+      const next = new Set(current);
+      if (next.has(logId)) {
+        next.delete(logId);
+      } else {
+        next.add(logId);
+      }
+      return next;
+    });
+  }
+
+  function renderDescription(log) {
+    const description = String(log.description || '-');
+    if (description.length <= DESCRIPTION_PREVIEW_LENGTH) {
+      return description;
+    }
+
+    const isExpanded = expandedDescriptionIds.has(log.id);
+    const visibleDescription = isExpanded
+      ? description
+      : `${description.slice(0, DESCRIPTION_PREVIEW_LENGTH).trimEnd()}...`;
+
+    return (
+      <>
+        {visibleDescription}{' '}
+        <button
+          type="button"
+          onClick={() => toggleDescription(log.id)}
+          className="font-semibold text-primary underline-offset-2 hover:underline"
+        >
+          {isExpanded ? 'Show Less' : 'Show More'}
+        </button>
+      </>
+    );
   }
 
   if (!isSuperAdmin) {
@@ -317,7 +375,7 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
             <span className="block text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/60">Module</span>
             <select
               value={moduleFilter}
-              onChange={(event) => resetPage(setModuleFilter)(event.target.value)}
+              onChange={(event) => handleModuleFilterChange(event.target.value)}
               className="w-full rounded-2xl border border-outline-variant bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
             >
               <option value="">All modules</option>
@@ -334,9 +392,10 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
             <select
               value={actionFilter}
               onChange={(event) => resetPage(setActionFilter)(event.target.value)}
-              className="w-full rounded-2xl border border-outline-variant bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+              disabled={!moduleFilter}
+              className="w-full rounded-2xl border border-outline-variant bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-on-surface-variant/50"
             >
-              <option value="">All actions</option>
+              <option value="">{moduleFilter ? 'All actions' : 'Select a module first'}</option>
               {actionOptions.map((actionName) => (
                 <option key={actionName} value={actionName}>
                   {formatAction(actionName)}
@@ -426,7 +485,7 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
                           </span>
                         </td>
                         <td className="min-w-[260px] px-4 py-4 text-on-surface-variant">
-                          <div>{log.description || '-'}</div>
+                          <div>{renderDescription(log)}</div>
                           {affectedRecord && (
                             <div className="mt-1 text-xs text-on-surface-variant/70">Affected: {affectedRecord}</div>
                           )}

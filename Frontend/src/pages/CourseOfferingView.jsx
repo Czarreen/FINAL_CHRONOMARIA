@@ -30,6 +30,7 @@ import {
   updateCourseOffering,
   deleteCourseOffering,
   importCourseOfferingsCsv,
+  recordCourseOfferingExportAudit,
   fetchCourseOfferingById,
   fetchCourseOfferingPageNumber,
   checkDuplicateCode,
@@ -1192,6 +1193,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setUpdateError(null);
 
       let allOfferings = offerings;
+      let usedCurrentPageFallback = false;
 
       try {
         // Fetch all matching rows (respects current search + sort) for the export
@@ -1214,6 +1216,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       } catch (err) {
         console.error('Failed to fetch all offerings for export:', err);
         setUpdateError('Failed to fetch all offerings. Exporting current page only.');
+        usedCurrentPageFallback = true;
       }
 
       const headers = Array.from(visibleColumns).map((key) => {
@@ -1241,7 +1244,24 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
       const link = document.createElement('a');
       link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
-      link.download = `course-offerings-${new Date().toISOString().split('T')[0]}.csv`;
+      const fileName = `course-offerings-${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = fileName;
+
+      await recordCourseOfferingExportAudit({
+        fileName,
+        rowCount: allOfferings.length,
+        columns: headers,
+        filters: {
+          search: debouncedSearch,
+          searchCol: filterColumn !== 'all' ? filterColumn : '',
+        },
+        sort: {
+          sortBy: sortConfig.key,
+          sortOrder: sortConfig.direction,
+        },
+        usedCurrentPageFallback,
+      });
+
       link.click();
 
       setUpdateError(null);
