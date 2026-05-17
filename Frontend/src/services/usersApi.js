@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authContext.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 async function parseApiError(response) {
@@ -11,7 +13,9 @@ export async function fetchUsers({ page = 1, limit = 50, search = '', status = '
   if (status) params.status = String(status);
 
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/users?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/users?${query.toString()}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     await parseApiError(response);
@@ -29,7 +33,7 @@ export async function fetchUsers({ page = 1, limit = 50, search = '', status = '
 export async function createUser(userData) {
   const response = await fetch(`${API_BASE_URL}/api/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(userData),
   });
 
@@ -43,7 +47,7 @@ export async function createUser(userData) {
 export async function updateUser(userId, updates) {
   const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(updates),
   });
 
@@ -57,6 +61,7 @@ export async function updateUser(userId, updates) {
 export async function deleteUser(userId) {
   const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
