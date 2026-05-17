@@ -1397,6 +1397,17 @@ function buildAutomaticSchedulerPreflight(snapshot) {
 
   const candidates = (snapshot.subjects || []).map((subject) => toAutomaticCandidateFromSubject(subject, roomLookup));
 
+  // ── Scenario detection ────────────────────────────────────────────────────────
+  // Scenario 1: at least one subject already has a schedule + room assignment.
+  // Scenario 2: clean slate — no existing assignments.
+  const scenario = candidates.some(
+    (c) =>
+      (c.existing_mth_schedule && c.existing_mth_room_id) ||
+      (c.existing_tfs_schedule && c.existing_tfs_room_id)
+  )
+    ? 'scenario_1'
+    : 'scenario_2';
+
   // ── PRE-4  Merged Subject Detection ─────────────────────────────────────────
   //
   //  LOGIC (verbatim from spec):
@@ -1474,39 +1485,96 @@ function buildAutomaticSchedulerPreflight(snapshot) {
       console.log(`[preflight][merge] merged sub-group (ids=[${srGroup.map((s) => s.subject_id).join(',')}])`);
     }
 
-    // Pass B — flag singleton sub-groups that conflict with a confirmed merged class
-    if (hasMerge) {
-      for (const [srKey, srGroup] of schedRoomGroups.entries()) {
-        if (srGroup.length !== 1) continue; // only singletons
-        const [mthS, tfsS] = srKey.split('|||');
-        const hasSchedule = mthS.length > 0 || tfsS.length > 0;
-        if (!hasSchedule) continue; // unscheduled → let GA handle it
-
-        const c = srGroup[0];
-        if (c.merged) continue; // already handled
-        c.merge_conflict = true;
-        issues.push({
-          type: 'subject',
-          severity: 'high',
-          id: c.subject_id,
-          problem: `Conflict (PRE-4): same Course Number and Descriptive Title as a merged class but a different Schedule or Room. Flag for review.`,
-          entity_label: `${c.code || '-'} ${c.course_no || '-'} ${c.section || '-'}`.trim(),
-          department_name: describeDepartment(c.department_id, departmentLookup),
-        });
-        console.warn(`[preflight][merge] conflict: id=${c.subject_id}`);
-      }
-    }
+    // Note: singletons with different schedule/room from a merged class are NOT conflicts.
+    // They are valid unique schedules — handled by the unique-clean detection pass below.
   }
   console.log(`[preflight][merge] candidates=${candidates.length}, merged sub-groups=${mergeGroupCount}`);
 
+  // ── Unique-clean detection (Scenario 1 only) ─────────────────────────────────
+  // A subject is "unique-clean" when it already has a schedule+room assignment
+  // that does not cause a room conflict with any other non-merged subject.
+  // These are preserved as-is and excluded from the GA just like merged subjects.
+  if (scenario === 'scenario_1') {
+    // Build room+day time blocks from all subjects that have existing schedule+room.
+    // Merged subjects contribute ONE block per merged group (intentional room sharing).
+    const roomDayBlocks = []; // [{roomId, day, start, end, ownerId}]
+
+    function addCandidateRoomBlocks(c, ownerId) {
+      for (const pat of ['mth', 'tfs']) {
+        const sched = c[`existing_${pat}_schedule`];
+        const roomId = c[`existing_${pat}_room_id`];
+        if (!sched || !roomId) continue;
+        const parsed = parseScheduleText(sched);
+        if (!parsed) continue;
+        const days = parseDaysFromSchedule(sched, pat.toUpperCase());
+        for (const day of days) {
+          roomDayBlocks.push({ roomId: String(roomId), day, start: parsed.start, end: parsed.end, ownerId: String(ownerId) });
+        }
+      }
+    }
+
+    const seenMergedReps = new Set();
+    for (const c of candidates) {
+      if (!c.merged) continue;
+      const repId = c.merge_representative_id;
+      if (!repId || seenMergedReps.has(repId)) continue;
+      seenMergedReps.add(repId);
+      addCandidateRoomBlocks(c, `merged:${repId}`);
+    }
+
+    for (const c of candidates) {
+      if (c.merged) continue;
+      addCandidateRoomBlocks(c, c.subject_id);
+    }
+
+    // Mark non-merged candidates with a conflict-free schedule+room as unique-clean.
+    for (const c of candidates) {
+      if (c.merged) continue;
+      const hasRoom = c.existing_mth_room_id || c.existing_tfs_room_id;
+      const hasSched = c.existing_mth_schedule || c.existing_tfs_schedule;
+      if (!hasRoom || !hasSched) continue;
+
+      let hasConflict = false;
+      for (const pat of ['mth', 'tfs']) {
+        if (hasConflict) break;
+        const sched = c[`existing_${pat}_schedule`];
+        const roomId = c[`existing_${pat}_room_id`];
+        if (!sched || !roomId) continue;
+        const parsed = parseScheduleText(sched);
+        if (!parsed) continue;
+        const days = parseDaysFromSchedule(sched, pat.toUpperCase());
+        const selfId = String(c.subject_id);
+
+        for (const day of days) {
+          for (const block of roomDayBlocks) {
+            if (block.ownerId === selfId) continue;
+            if (block.roomId !== String(roomId) || block.day !== day) continue;
+            if (overlaps(parsed, block)) {
+              hasConflict = true;
+              break;
+            }
+          }
+          if (hasConflict) break;
+        }
+      }
+
+      if (!hasConflict) {
+        c.unique_clean = true;
+      }
+    }
+
+    const uniqueCleanCount = candidates.filter((c) => c.unique_clean).length;
+    console.log(`[preflight][scenario1] unique_clean=${uniqueCleanCount}`);
+  }
+
   const generalSubjects       = candidates.filter((row) => row.is_general);
   const mergedSubjects        = candidates.filter((row) => row.merged);
-  const mergeConflictSubjects = candidates.filter((row) => row.merge_conflict);
-  // General subjects are now included in the GA with lower priority.
-  // Only merged and conflict subjects are excluded.
+  const mergeConflictSubjects = []; // Pass B removed — singletons with different schedule are not auto-conflicts
+  const uniqueCleanSubjects   = candidates.filter((row) => row.unique_clean);
+
   const excluded = new Set([
     ...mergedSubjects.map((row) => row.subject_id),
-    ...mergeConflictSubjects.map((row) => row.subject_id),
+    ...uniqueCleanSubjects.map((row) => row.subject_id),
   ]);
 
   // Subjects with missing identity fields or zero hours are silently excluded from the GA.
@@ -1528,14 +1596,15 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     });
   }
 
-  // Determine status: only treat true blocking high-severity issues as 'blocked'.
-  // Merged (info) and conflict (high) subjects are shown in issues but do not block
-  // the GA — as long as there are still assignable subjects.
-  const hasHigh = issues.some((i) => i.severity === 'high' && !candidates.find((c) => c.merge_conflict && c.subject_id === i.id));
+  // Determine status: blocked only if high-severity issues exist AND no assignable subjects.
+  const hasHigh = issues.some((i) => i.severity === 'high');
   const hasAny = issues.length > 0;
   const status = hasHigh && assignable.length === 0 ? 'blocked' : hasAny ? 'partial' : 'ok';
 
+  const preservedSubjects = [...mergedSubjects, ...uniqueCleanSubjects];
+
   return {
+    scenario,
     status,
     room_count: snapshot.rooms.length,
     active_room_count: activeRooms.length,
@@ -1544,16 +1613,96 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     excluded_general_count: generalSubjects.length,
     excluded_merged_count: mergedSubjects.length,
     excluded_conflict_count: mergeConflictSubjects.length,
+    preserved_merged_count: mergedSubjects.length,
+    preserved_unique_count: uniqueCleanSubjects.length,
+    needs_scheduling_count: assignable.length,
     issues,
     assignable_subjects: assignable,
+    needs_scheduling_subjects: assignable,
+    preserved_subjects: preservedSubjects,
     excluded_general_subjects: generalSubjects,
     excluded_merged_subjects: mergedSubjects,
+    excluded_unique_subjects: uniqueCleanSubjects,
     excluded_conflict_subjects: mergeConflictSubjects,
     suggested_next_step:
       status === 'blocked'
         ? 'Resolve high-severity data issues before running automatic scheduler.'
-        : 'Automatic scheduler can run. General subjects are included with lower scheduling priority; merged/conflict subjects remain user-managed.',
+        : scenario === 'scenario_1'
+          ? `Scenario 1: ${preservedSubjects.length} subject(s) will be preserved (${mergedSubjects.length} merged, ${uniqueCleanSubjects.length} unique-clean). ${assignable.length} subject(s) will be (re)scheduled by the GA.`
+          : 'Scenario 2 (clean slate): all subjects will be scheduled by the GA.',
   };
+}
+
+// Build a list of reserved time-slot descriptors for preserved subjects.
+// Used to pre-populate the GA's and greedy's room/section reservation maps
+// so they schedule around already-fixed assignments.
+// One representative per merged group (merged subjects share a room intentionally).
+function buildReservedSlots(mergedSubjects, uniqueCleanSubjects) {
+  const slots = [];
+
+  const seenMergeReps = new Set();
+  for (const c of mergedSubjects) {
+    const repId = c.merge_representative_id;
+    if (!repId || seenMergeReps.has(repId)) continue;
+    seenMergeReps.add(repId);
+    slots.push({
+      subject_id: c.subject_id,
+      section: c.section,
+      department_id: c.department_id,
+      mth_schedule: c.existing_mth_schedule || null,
+      mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+      tfs_schedule: c.existing_tfs_schedule || null,
+      tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+    });
+  }
+
+  for (const c of uniqueCleanSubjects) {
+    slots.push({
+      subject_id: c.subject_id,
+      section: c.section,
+      department_id: c.department_id,
+      mth_schedule: c.existing_mth_schedule || null,
+      mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+      tfs_schedule: c.existing_tfs_schedule || null,
+      tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+    });
+  }
+
+  return slots;
+}
+
+// Convert preserved subjects (merged + unique-clean) into output row objects
+// that can be concatenated with GA-assigned rows before persistence.
+function buildPreservedRows(preservedSubjects, activeRooms) {
+  const roomLookup = buildRoomLookup(activeRooms);
+  return preservedSubjects.map((c) => ({
+    source_subject_id: c.subject_id,
+    curr_id: c.curr_id,
+    code: c.code,
+    course_no: c.course_no,
+    department_id: c.department_id,
+    department_name: c.department_name || null,
+    section: c.section,
+    descriptive_title: c.descriptive_title,
+    units: c.units,
+    lec_hrs: c.lec_hrs,
+    lab_hrs: c.lab_hrs,
+    mth_schedule: c.existing_mth_schedule || null,
+    mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+    mth_room_name:
+      c.existing_mth_room_name ||
+      (c.existing_mth_room_id != null
+        ? resolveRoomNamesFromIdText(String(c.existing_mth_room_id), roomLookup)
+        : null),
+    tfs_schedule: c.existing_tfs_schedule || null,
+    tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+    tfs_room_name:
+      c.existing_tfs_room_name ||
+      (c.existing_tfs_room_id != null
+        ? resolveRoomNamesFromIdText(String(c.existing_tfs_room_id), roomLookup)
+        : null),
+    merged: c.merged === true ? true : 'preserved',
+  }));
 }
 
 function formatTimeFromMinutes(totalMinutes) {
@@ -1589,7 +1738,7 @@ function findNonConflictingSlot({ durationMinutes, sectionReservations, roomRese
   return null;
 }
 
-function buildAutomaticAssignments(assignableSubjects, activeRooms) {
+function buildAutomaticAssignments(assignableSubjects, activeRooms, extraReservations = []) {
   const sectionDayReservations = new Map();
   const roomDayReservations = new Map();
   const roomUsage = new Map();
@@ -1603,6 +1752,37 @@ function buildAutomaticAssignments(assignableSubjects, activeRooms) {
   function getReservations(map, key) {
     if (!map.has(key)) map.set(key, []);
     return map.get(key);
+  }
+
+  // Pre-populate reservations from preserved subjects (merged + unique-clean)
+  // so the greedy doesn't assign other subjects to their rooms/times.
+  for (const slot of extraReservations) {
+    if (slot.mth_schedule && slot.mth_room_id) {
+      const parsed = parseScheduleText(slot.mth_schedule);
+      if (parsed) {
+        const days = parseDaysFromSchedule(slot.mth_schedule, 'MTH');
+        for (const day of days) {
+          const sectionKey = dayKey(day, normalizeUpper(slot.section || ''));
+          const roomKey = dayKey(day, slot.mth_room_id);
+          getReservations(sectionDayReservations, sectionKey).push({ start: parsed.start, end: parsed.end });
+          getReservations(roomDayReservations, roomKey).push({ start: parsed.start, end: parsed.end });
+        }
+        roomUsage.set(slot.mth_room_id, (roomUsage.get(slot.mth_room_id) || 0) + 1);
+      }
+    }
+    if (slot.tfs_schedule && slot.tfs_room_id) {
+      const parsed = parseScheduleText(slot.tfs_schedule);
+      if (parsed) {
+        const days = parseDaysFromSchedule(slot.tfs_schedule, 'TF');
+        for (const day of days) {
+          const sectionKey = dayKey(day, normalizeUpper(slot.section || ''));
+          const roomKey = dayKey(day, slot.tfs_room_id);
+          getReservations(sectionDayReservations, sectionKey).push({ start: parsed.start, end: parsed.end });
+          getReservations(roomDayReservations, roomKey).push({ start: parsed.start, end: parsed.end });
+        }
+        roomUsage.set(slot.tfs_room_id, (roomUsage.get(slot.tfs_room_id) || 0) + 1);
+      }
+    }
   }
 
   // Pre-populate reservations with existing assignments from the database
@@ -1956,8 +2136,8 @@ async function persistAutomaticScheduler(assignments) {
           row.mth_schedule,
           row.mth_room_name || row.mth_room_id,
           row.tfs_schedule,
-          row.tfs_room_name || row.tfs_room_id,
-          String(Boolean(row.merged)),
+          row.tfs_room_id,
+          row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
         );
       });
 
@@ -2154,22 +2334,37 @@ export async function postRunAutomaticScheduler(req, res) {
     const snapshot = await fetchSnapshot();
     const preflight = buildAutomaticSchedulerPreflight(snapshot);
 
-    if (preflight.assignable_count === 0) {
+    const totalToProcess =
+      preflight.assignable_count +
+      (preflight.excluded_merged_subjects || []).length +
+      (preflight.excluded_unique_subjects || []).length;
+
+    if (totalToProcess === 0) {
       return res.status(400).json({
         ...preflight,
-        error: 'No assignable subjects available for automatic scheduling.',
+        error: 'No subjects available for automatic scheduling.',
       });
     }
 
     const activeRooms = (snapshot.rooms || []).filter((room) => isRoomActive(room));
 
+    // --- Build preserved (merged + unique-clean) and GA-only subject lists ---
+    const preservedSubjects = [
+      ...(preflight.excluded_merged_subjects || []),
+      ...(preflight.excluded_unique_subjects || []),
+    ];
+    const reservedSlots = buildReservedSlots(
+      preflight.excluded_merged_subjects || [],
+      preflight.excluded_unique_subjects || []
+    );
+
     // --- Build GA constraint parameters from request body ---
     const normalizedConstraints = {
-      population_size:      Number(req.body?.population_size      ?? 120),   // was 60
-      max_generations:      Number(req.body?.max_generations      ?? 250),   // was 150
-      mutation_rate:        Number(req.body?.mutation_rate        ?? 0.07),  // was 0.12
-      crossover_rate:       Number(req.body?.crossover_rate       ?? 0.85),  // new
-      max_runtime_seconds:  Number(req.body?.max_runtime_seconds  ?? 45),    // was 25
+      population_size:      Number(req.body?.population_size      ?? 120),
+      max_generations:      Number(req.body?.max_generations      ?? 250),
+      mutation_rate:        Number(req.body?.mutation_rate        ?? 0.07),
+      crossover_rate:       Number(req.body?.crossover_rate       ?? 0.85),
+      max_runtime_seconds:  Number(req.body?.max_runtime_seconds  ?? 45),
       random_seed:          Number(req.body?.random_seed          ?? 42),
     };
 
@@ -2178,9 +2373,10 @@ export async function postRunAutomaticScheduler(req, res) {
     let usedGA = false;
     try {
       const gaPayload = {
-        subjects:    preflight.assignable_subjects,
-        rooms:       activeRooms,
-        constraints: normalizedConstraints,
+        subjects:        preflight.assignable_subjects,
+        rooms:           activeRooms,
+        reserved_slots:  reservedSlots,
+        constraints:     normalizedConstraints,
       };
       const gaResult = await callPythonScheduleGA(gaPayload);
       result = {
@@ -2197,17 +2393,20 @@ export async function postRunAutomaticScheduler(req, res) {
       console.log(`[run][automatic] GA done: gen=${result.generations}, fitness=${result.fitness_overall}, conflicts=${result.report?.conflict_count ?? 0}`);
     } catch (gaErr) {
       console.warn('[run][automatic] Python schedule GA failed, falling back to greedy:', gaErr.message);
-      result = buildAutomaticAssignments(preflight.assignable_subjects, activeRooms);
+      result = buildAutomaticAssignments(preflight.assignable_subjects, activeRooms, reservedSlots);
     }
 
-    // Merged and conflict subjects are excluded from the GA and must NOT appear in the
-    // generated schedule output — they are reported only in the preflight issues list.
-    const allAssignments = enrichAutomaticAssignments(
+    // Concat GA-assigned rows with preserved subjects (merged + unique-clean).
+    // Preserved subjects retain their existing schedule/room and appear in the output
+    // with merged='true' (merged) or merged='preserved' (unique-clean).
+    const gaAssignments = enrichAutomaticAssignments(
       result.assignments,
       preflight.assignable_subjects,
       activeRooms
     );
-    console.log(`[run][automatic] total=${allAssignments.length}, scheduled=${allAssignments.length}, merged_excluded=${(preflight.excluded_merged_subjects || []).length}, conflict_excluded=${(preflight.excluded_conflict_subjects || []).length}, dry_run=${dryRun}, used_ga=${usedGA}`);
+    const preservedRows = buildPreservedRows(preservedSubjects, activeRooms);
+    const allAssignments = [...gaAssignments, ...preservedRows];
+    console.log(`[run][automatic] total=${allAssignments.length}, ga=${gaAssignments.length}, preserved=${preservedRows.length} (merged=${(preflight.excluded_merged_subjects || []).length} unique_clean=${(preflight.excluded_unique_subjects || []).length}), dry_run=${dryRun}, used_ga=${usedGA}`);
 
     let persistence = { persisted: 0, dry_run: true };
     if (!dryRun) {

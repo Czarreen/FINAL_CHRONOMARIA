@@ -485,6 +485,14 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
               <td className="px-4 py-3">
                 {(() => {
                   const isMerged = row.merged === true || row.merged === 'true';
+                  const isPreserved = row.merged === 'preserved';
+                  if (isPreserved) {
+                    return (
+                      <span className="px-2 py-1 rounded text-xs font-semibold bg-teal-100 text-teal-700 self-start">
+                        Preserved
+                      </span>
+                    );
+                  }
                   if (!isMerged) {
                     return <span className="text-xs text-on-surface-variant">—</span>;
                   }
@@ -608,10 +616,16 @@ export default function ScheduleView({ onNavigate }) {
       };
       setLastRunSummary(summary);
       localStorage.setItem(LAST_SCHEDULER_RUN_KEY, JSON.stringify(summary));
+      const preservedCount = (preflight?.preserved_merged_count || 0) + (preflight?.preserved_unique_count || 0);
+      const gaAssigned = summary.schedulesGenerated - preservedCount;
+      const scenarioNotice =
+        preflight?.scenario === 'scenario_1' && preservedCount > 0
+          ? `${preservedCount} preserved (merged/unique), ${Math.max(0, gaAssigned)} newly assigned by GA. `
+          : '';
       setNotice(
         fitness === 100 && unresolvedIssues.length === 0
-          ? 'Schedule reached a verified state. You can export it or update Course Offering, then proceed to Faculty Loading.'
-          : 'Schedule generated, but unresolved issues still need manual review before continuing to Faculty Loading.'
+          ? `${scenarioNotice}Schedule reached a verified state. You can export it or update Course Offering, then proceed to Faculty Loading.`
+          : `${scenarioNotice}Schedule generated, but unresolved issues still need manual review before continuing to Faculty Loading.`
       );
       await loadPreflight();
       if (dryRun) {
@@ -747,6 +761,18 @@ export default function ScheduleView({ onNavigate }) {
           {!loadingPreflight && preflight?.status !== 'blocked' ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">Data is ready. You can run GA preview or persist to automatic_scheduler.</div>
           ) : null}
+
+          {!loadingPreflight && preflight?.scenario === 'scenario_1' && (
+            <div className="rounded-2xl border border-teal-200 bg-teal-50/80 p-4 text-sm text-teal-900 flex items-start gap-3">
+              <Calendar size={18} className="mt-0.5 flex-shrink-0 text-teal-600" />
+              <div>
+                <span className="font-semibold">Scenario 1 detected</span> — {(preflight.preserved_merged_count || 0) + (preflight.preserved_unique_count || 0)} subject(s) already have conflict-free schedules and will be preserved.{' '}
+                {preflight.needs_scheduling_count > 0
+                  ? `${preflight.needs_scheduling_count} subject(s) will be rescheduled by the GA.`
+                  : 'All subjects are already scheduled.'}
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard label="Subjects Loaded" value={String(subjectCount)} icon={BookOpen} tone="primary" />
