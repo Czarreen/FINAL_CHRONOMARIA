@@ -198,6 +198,52 @@ def _sec_key(subject: Dict[str, Any]) -> str:
     return f"{dept}|{sec}"
 
 
+def _build_pre_occupied(
+    reserved_slots: List[Dict[str, Any]],
+    rooms: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Convert reserved_slots (preserved subjects) into pre-occupied room/section entries.
+
+    Returns a dict with:
+      "room_entries":    [(room_idx, day, start, end), ...]
+      "section_entries": [(sec_key,  day, start, end), ...]
+    """
+    room_id_to_idx: Dict[str, int] = {
+        str(r.get("room_id")): idx
+        for idx, r in enumerate(rooms)
+        if r.get("room_id") is not None
+    }
+    MTH_DAYS = ("MON", "THU")
+    TF_DAYS  = ("TUE", "FRI")
+    room_entries: List[tuple] = []
+    section_entries: List[tuple] = []
+
+    for slot in reserved_slots:
+        dept = str(int(to_number(slot.get("department_id")) or 0))
+        sec  = normalize_upper(slot.get("section") or "")
+        sec_key = f"{dept}|{sec}"
+
+        for sched_field, room_field, default_days in [
+            ("mth_schedule", "mth_room_id", MTH_DAYS),
+            ("tfs_schedule", "tfs_room_id", TF_DAYS),
+        ]:
+            sched       = slot.get(sched_field)
+            room_id_str = str(slot.get(room_field) or "")
+            if not sched or not room_id_str:
+                continue
+            parsed = parse_time_range(sched)
+            if not parsed:
+                continue
+            start, end = parsed["start"], parsed["end"]
+            room_idx = room_id_to_idx.get(room_id_str)
+            for day in default_days:
+                if room_idx is not None:
+                    room_entries.append((room_idx, day, start, end))
+                section_entries.append((sec_key, day, start, end))
+
+    return {"room_entries": room_entries, "section_entries": section_entries}
+
+
 def build_offering_key(offering: Dict[str, Any]) -> str:
     return "|".join(
         [
@@ -741,6 +787,7 @@ def sched_init_greedy(
     subjects: List[Dict[str, Any]],
     rooms: List[Dict[str, Any]],
     rng: random.Random,
+    pre_occ: Optional[Dict[str, Any]] = None,
 ) -> List[Tuple[int, int, int, int]]:
     """First-fit greedy chromosome satisfying all hard constraints (used as seed individual).
 
@@ -753,6 +800,14 @@ def sched_init_greedy(
         i: {d: [] for d in ("MON", "TUE", "THU", "FRI")} for i in range(len(rooms))
     }
     section_slots: Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
+
+    # Pre-populate slots from preserved (reserved) subjects so GA schedules around them
+    if pre_occ:
+        for room_idx, day, start, end in pre_occ.get("room_entries", []):
+            if 0 <= room_idx < len(rooms):
+                room_slots[room_idx].setdefault(day, []).append((start, end))
+        for sec_key, day, start, end in pre_occ.get("section_entries", []):
+            section_slots.setdefault(sec_key, {d: [] for d in ("MON", "TUE", "THU", "FRI")})[day].append((start, end))
     section_pattern_counts: Dict[str, Dict[int, int]] = {}
     gene_map: Dict[int, Tuple[int, int, int, int]] = {}
 
@@ -1012,6 +1067,7 @@ def sched_evaluate(
     chromosome: List[Tuple[int, int, int, int]],
     subjects: List[Dict[str, Any]],
     rooms: List[Dict[str, Any]],
+    pre_occ: Optional[Dict[str, Any]] = None,
 ) -> Tuple[float, float, float]:
     """
     Evaluate a chromosome. Gene = (pattern_idx, start_min, day1_room_idx, day2_room_idx).
@@ -1024,7 +1080,7 @@ def sched_evaluate(
     section_day_overload = 0           # S-S6 hard: section-day >10 hrs (bounded, separate)
     soft_penalty = 0.0
 
-    # room_day_slots["{room_idx}|{day}"] = [(start, end, si), ...]
+    # room_day_slots["{room_idx}|{day}"] = [(start, end, si), ...]  si=-1 for reserved
     room_day_slots: Dict[str, List[Tuple[int, int, int]]]    = {}
     # gym_room_day_slots: same key format, stores (start, end, si, dept_id) for GYM rooms
     gym_room_day_slots: Dict[str, List[Tuple[int, int, int, int]]] = {}
@@ -1032,6 +1088,13 @@ def sched_evaluate(
     section_pattern_counts: Dict[str, Dict[int, int]]        = {}
     room_usage: Dict[int, int]                               = {}
     curr_day_count: Dict[str, int]                           = {}
+
+    # Pre-populate from preserved subjects (si=-1 marks reserved — excluded from violation sets)
+    if pre_occ:
+        for room_idx, day, start, end in pre_occ.get("room_entries", []):
+            room_day_slots.setdefault(f"{room_idx}|{day}", []).append((start, end, -1))
+        for sec_key, day, start, end in pre_occ.get("section_entries", []):
+            section_day_slots.setdefault(f"{sec_key}|{day}", []).append((start, end, -1))
 
     for si, gene in enumerate(chromosome):
         pat_idx, start, day1_room_idx, day2_room_idx = gene
@@ -1137,8 +1200,11 @@ def sched_evaluate(
         ss = sorted(slots, key=lambda x: x[0])
         for i in range(1, len(ss)):
             if ss[i][0] < ss[i - 1][1]:
-                hard_violation_subs.add(ss[i][2])
-                hard_violation_subs.add(ss[i - 1][2])
+                # Only flag GA-scheduled subjects (si >= 0); si == -1 are reserved slots
+                if ss[i][2] >= 0:
+                    hard_violation_subs.add(ss[i][2])
+                if ss[i - 1][2] >= 0:
+                    hard_violation_subs.add(ss[i - 1][2])
 
     # R-GYM: GYM rooms allow up to GYM_MAX_OVERLAP PATH FIT classes per dept per slot.
     # Excess simultaneous subjects (per dept) are hard violations.
@@ -1177,9 +1243,11 @@ def sched_evaluate(
             ps, pe, _ = ss[i - 1]
             cs, ce, _ = ss[i]
             if cs < pe:
-                # S-H11: hard overlap — mark both subjects
-                hard_violation_subs.add(ss[i][2])
-                hard_violation_subs.add(ss[i - 1][2])
+                # S-H11: hard overlap — only flag GA-scheduled subjects (si >= 0)
+                if ss[i][2] >= 0:
+                    hard_violation_subs.add(ss[i][2])
+                if ss[i - 1][2] >= 0:
+                    hard_violation_subs.add(ss[i - 1][2])
                 run_end = max(run_end, ce)
             else:
                 gap = cs - pe
@@ -1531,6 +1599,7 @@ def sched_local_repair(
     rng: random.Random,
     max_passes: int = 5,
     time_limit_s: float = 10.0,
+    pre_occ: Optional[Dict[str, Any]] = None,
 ) -> List[Tuple[int, int, int, int]]:
     """Post-GA local repair: iteratively re-place conflicted subjects greedily.
 
@@ -1556,11 +1625,18 @@ def sched_local_repair(
 
         # ── Step 1: detect conflicted subjects ─────────────────────────────
         viol_subs: set = set()
-        # Non-GYM room conflicts: standard pair-overlap check
+        # Non-GYM room conflicts: standard pair-overlap check  (si=-1 for reserved)
         room_day_slots: Dict[str, List[Tuple[int, int, int]]] = {}
         # GYM room conflicts: per-dept sweep-line (allows up to GYM_MAX_OVERLAP per dept)
         gym_room_dept_day_slots: Dict[str, List[Tuple[int, int, int]]] = {}
         sec_day_slots:  Dict[str, List[Tuple[int, int, int]]] = {}
+
+        # Pre-populate Step 1 tracking with reserved slots (si=-1)
+        if pre_occ:
+            for room_idx, day, start, end in pre_occ.get("room_entries", []):
+                room_day_slots.setdefault(f"{room_idx}|{day}", []).append((start, end, -1))
+            for sec_key, day, start, end in pre_occ.get("section_entries", []):
+                sec_day_slots.setdefault(f"{sec_key}|{day}", []).append((start, end, -1))
 
         for si, gene in enumerate(chrom):
             pat_idx, start, r1, r2 = gene
@@ -1586,7 +1662,10 @@ def sched_local_repair(
             ss = sorted(slots, key=lambda x: x[0])
             for i in range(1, len(ss)):
                 if ss[i][0] < ss[i - 1][1]:
-                    viol_subs.add(ss[i][2]); viol_subs.add(ss[i - 1][2])
+                    if ss[i][2] >= 0:
+                        viol_subs.add(ss[i][2])
+                    if ss[i - 1][2] >= 0:
+                        viol_subs.add(ss[i - 1][2])
 
         # GYM: sweep-line per (room, day, dept) — flag subjects over GYM_MAX_OVERLAP
         for gym_slots in gym_room_dept_day_slots.values():
@@ -1606,14 +1685,19 @@ def sched_local_repair(
             ss = sorted(slots, key=lambda x: x[0])
             for i in range(1, len(ss)):
                 if ss[i][0] < ss[i - 1][1]:
-                    viol_subs.add(ss[i][2]); viol_subs.add(ss[i - 1][2])
+                    if ss[i][2] >= 0:
+                        viol_subs.add(ss[i][2])
+                    if ss[i - 1][2] >= 0:
+                        viol_subs.add(ss[i - 1][2])
 
-        # S-S6: detect section-day overloads — evict shortest subjects from overloaded days
+        # S-S6: detect section-day overloads — evict shortest GA subjects from overloaded days
         for slots in sec_day_slots.values():
             total_min = sum(e - s_ for s_, e, _ in slots)
             if total_min > 600:
-                # Evict the shortest subject(s) until the day is under budget
-                sorted_by_dur = sorted(slots, key=lambda x: x[1] - x[0])
+                # Evict shortest GA-schedulable subjects (skip reserved si=-1)
+                sorted_by_dur = sorted(
+                    [x for x in slots if x[2] >= 0], key=lambda x: x[1] - x[0]
+                )
                 excess = total_min - 600
                 for s_, e, si in sorted_by_dur:
                     if excess <= 0:
@@ -1629,6 +1713,13 @@ def sched_local_repair(
         sec_track:  Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
         # GYM per-dept tracker for PATH FIT subjects
         gym_dept_track: Dict[int, Dict[str, Dict[int, List[Tuple[int, int]]]]] = {}
+
+        # Seed Step 2 tracking with reserved slots so repair candidates avoid them
+        if pre_occ:
+            for room_idx, day, start, end in pre_occ.get("room_entries", []):
+                room_track.setdefault(room_idx, {}).setdefault(day, []).append((start, end))
+            for sec_key, day, start, end in pre_occ.get("section_entries", []):
+                sec_track.setdefault(sec_key, {}).setdefault(day, []).append((start, end))
 
         for si, gene in enumerate(chrom):
             if si in viol_subs:
@@ -1749,6 +1840,16 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "report": {"summary": "No subjects or active rooms provided.", "conflicts": []},
         }
 
+    reserved_slots = list(payload.get("reserved_slots", []) or [])
+    pre_occ = _build_pre_occupied(reserved_slots, rooms) if reserved_slots else None
+    if pre_occ:
+        print(
+            f"[GA-DIAG] reserved_slots={len(reserved_slots)} "
+            f"room_entries={len(pre_occ['room_entries'])} "
+            f"section_entries={len(pre_occ['section_entries'])}",
+            flush=True,
+        )
+
     rng = random.Random(seed)
 
     # ── Section capacity triage ───────────────────────────────────────────────
@@ -1799,12 +1900,12 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Seed population: one greedy start + random fill.
     # Multiple greedy starts were tested but the init overhead cut into the GA time budget.
-    population: List[List[Tuple[int, int, int, int]]] = [sched_init_greedy(subjects, rooms, rng)]
+    population: List[List[Tuple[int, int, int, int]]] = [sched_init_greedy(subjects, rooms, rng, pre_occ=pre_occ)]
     while len(population) < pop_size:
         population.append(sched_init_random(subjects, rooms, rng))
 
     best       = population[0]
-    best_score, best_hard, best_soft = sched_evaluate(best, subjects, rooms)
+    best_score, best_hard, best_soft = sched_evaluate(best, subjects, rooms, pre_occ=pre_occ)
     generation = 0
     stagnation = 0
 
@@ -1815,7 +1916,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
           flush=True)
 
     while generation < max_gen and (time.perf_counter() - started) < max_secs:
-        scored = [(sched_evaluate(c, subjects, rooms), c) for c in population]
+        scored = [(sched_evaluate(c, subjects, rooms, pre_occ=pre_occ), c) for c in population]
         scored.sort(key=lambda x: -x[0][0])
         top_score, top_hard, top_soft = scored[0][0]
         top_chrom = scored[0][1]
@@ -1856,8 +1957,9 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     if time_remaining > 2.0:
         repair_budget = min(time_remaining - 1.0, 12.0)  # up to 12 s for repair
         repaired = sched_local_repair(best, subjects, rooms, rng,
-                                      max_passes=5, time_limit_s=repair_budget)
-        rep_score, rep_hard, rep_soft = sched_evaluate(repaired, subjects, rooms)
+                                      max_passes=5, time_limit_s=repair_budget,
+                                      pre_occ=pre_occ)
+        rep_score, rep_hard, rep_soft = sched_evaluate(repaired, subjects, rooms, pre_occ=pre_occ)
         print(f"[GA-DIAG] after repair: score={rep_score:.1f}% "
               f"(hard={rep_hard:.1f}% soft={rep_soft:.1f}%) improved={rep_score > best_score}",
               flush=True)
