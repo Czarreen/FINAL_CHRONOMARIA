@@ -254,20 +254,21 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Build key → array of all department_names sharing that code+course_no+section
-  const deptsByKey = useMemo(() => {
+  // Groups merged rows by course_no|||section → { codes: Set, depts: [] }
+  const mergedGroupMap = useMemo(() => {
     const map = new Map();
     if (!Array.isArray(rows)) return map;
     for (const row of rows) {
-      const c = normalizeKey(row.code);
+      const isMerged = row.merged === true || row.merged === 'true';
+      if (!isMerged) continue;
       const cn = normalizeKey(row.course_no);
       const sec = normalizeKey(row.section);
-      if (!c || !cn || !sec) continue;
-      const key = `${c}|||${cn}|||${sec}`;
-      if (!map.has(key)) map.set(key, []);
-      const depts = map.get(key);
+      const key = `${cn}|||${sec}`;
+      if (!map.has(key)) map.set(key, { codes: new Set(), depts: [] });
+      const entry = map.get(key);
+      if (row.code) entry.codes.add(row.code);
       const dept = row.department_name || `Dept ${row.department_id}`;
-      if (!depts.includes(dept)) depts.push(dept);
+      if (!entry.depts.includes(dept)) entry.depts.push(dept);
     }
     return map;
   }, [rows]);
@@ -496,10 +497,22 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
                   if (!isMerged) {
                     return <span className="text-xs text-on-surface-variant">—</span>;
                   }
-                  const key = `${normalizeKey(row.code)}|||${normalizeKey(row.course_no)}|||${normalizeKey(row.section)}`;
-                  const allDepts = deptsByKey.get(key) || [];
-                  const abbrevList = allDepts.map(abbreviateDept).join(', ');
-                  const fullList = allDepts.join(', ');
+                  const groupKey = `${normalizeKey(row.course_no)}|||${normalizeKey(row.section)}`;
+                  const group = mergedGroupMap.get(groupKey) || { codes: new Set(), depts: [] };
+                  const uniqueCodes = [...group.codes];
+                  const codesAreUnique = uniqueCodes.length > 1;
+                  if (codesAreUnique) {
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100/80 text-blue-700 self-start">Merged</span>
+                        <span className="text-xs text-blue-500 pl-1" title={group.depts.join(', ')}>
+                          → {uniqueCodes.join(', ')}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const abbrevList = group.depts.map(abbreviateDept).join(', ');
+                  const fullList = group.depts.join(', ');
                   return (
                     <div className="flex flex-col gap-0.5">
                       <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100/80 text-blue-700 self-start">Merged</span>
@@ -536,6 +549,7 @@ export default function ScheduleView({ onNavigate }) {
   const [updating, setUpdating] = useState(false);
   const [notice, setNotice] = useState('');
   const [updateMode, setUpdateMode] = useState(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE);
+  const [postUpdateNav, setPostUpdateNav] = useState(false);
 
   async function loadPreflight() {
     try {
@@ -600,6 +614,7 @@ export default function ScheduleView({ onNavigate }) {
       setRunning(true);
       setError('');
       setNotice('');
+      setPostUpdateNav(false);
       const response = await runAutomaticScheduler({ dryRun });
       setResult(response);
 
@@ -682,9 +697,11 @@ export default function ScheduleView({ onNavigate }) {
           : `Course Offering replaced with ${response?.updated || 0} schedule rows without creating a backup.`
       );
       setShowUpdateModal(false);
+      setPostUpdateNav(true);
       await loadPreflight();
       await loadRows();
     } catch (err) {
+      setPostUpdateNav(false);
       setError(err instanceof Error ? err.message : 'Update failed.');
     } finally {
       setUpdating(false);
@@ -737,7 +754,18 @@ export default function ScheduleView({ onNavigate }) {
       {notice && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900 flex items-start gap-3">
           <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0" />
-          <span>{notice}</span>
+          <div className="flex flex-col gap-2 flex-1">
+            <span>{notice}</span>
+            {postUpdateNav && (
+              <button
+                onClick={() => onNavigate?.('course-offering')}
+                className="self-start inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              >
+                <ArrowRight size={16} />
+                View Course Offerings
+              </button>
+            )}
+          </div>
         </div>
       )}
 

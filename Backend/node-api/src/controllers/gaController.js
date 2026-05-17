@@ -2188,20 +2188,19 @@ function toCourseOfferingRoomIdText(value, roomLookup) {
 async function buildAutomaticSchedulerExportRows() {
   const rows = await fetchAutomaticSchedulerRows();
   return rows.map((row) => ({
-    id: row.id,
     curr_id: row.curr_id,
     code: row.code,
     course_no: row.course_no,
-    department_id: row.department_id,
+    department_name: row.department_name,
     section: row.section,
     descriptive_title: row.descriptive_title,
     units: row.units,
     lec_hrs: row.lec_hrs,
     lab_hrs: row.lab_hrs,
     mth_schedule: row.mth_schedule,
-    mth_room_id: row.mth_room_id,
+    mth_room: row.mth_room_name,
     tfs_schedule: row.tfs_schedule,
-    tfs_room_id: row.tfs_room_id,
+    tfs_room: row.tfs_room_name,
     merged: row.merged,
   }));
 }
