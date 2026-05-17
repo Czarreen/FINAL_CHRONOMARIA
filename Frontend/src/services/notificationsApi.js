@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authContext.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, unresolvedOnly = true } = {}) {
@@ -15,7 +17,10 @@ export async function fetchCourseOfferingNotifications({ page = 1, limit = 500, 
 }
 
 export async function resolveCourseOfferingNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/${id}/resolve`, { method: 'PATCH' });
+  const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/${id}/resolve`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);
@@ -26,7 +31,7 @@ export async function resolveCourseOfferingNotification(id) {
 export async function rescanAllCourseOfferingNotifications(force = false) {
   const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/rescan-all`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ force }),
   });
   if (!res.ok) {
@@ -39,7 +44,7 @@ export async function rescanAllCourseOfferingNotifications(force = false) {
 export async function syncCourseOfferingNotifications(offeringId) {
   const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/sync`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ offering_id: offeringId }),
   });
   if (!res.ok) {

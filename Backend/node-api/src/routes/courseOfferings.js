@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { recordAuditLog } from '../lib/auditLogger.js';
 
 const router = Router();
+const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
 const HEADER_TO_FIELD = {
   currid: 'curr_id',
@@ -28,6 +30,14 @@ const HEADER_TO_FIELD = {
 };
 
 const REQUIRED_FIELDS = ['curr_id', 'course_no', 'section'];
+
+function formatOfferingAuditLabel(offering = {}) {
+  const code = normalizeCell(offering.code);
+  const courseNo = normalizeCell(offering.course_no);
+  const section = normalizeCell(offering.section);
+  const label = [code, courseNo, section ? `Section ${section}` : null].filter(Boolean).join(' - ');
+  return label || `#${offering.id}`;
+}
 
 function normalizeHeader(header) {
   return String(header || '')
@@ -1040,6 +1050,33 @@ router.get('/check-code/:code', async (req, res) => {
   }
 });
 
+router.post('/audit/export', async (req, res) => {
+  try {
+    const fileName = normalizeCell(req.body?.fileName) || 'course-offerings.csv';
+    const rowCount = Math.max(0, Number(req.body?.rowCount || 0));
+    const columnCount = Array.isArray(req.body?.columns) ? req.body.columns.length : 0;
+
+    await recordAuditLog(req, {
+      action: 'course_offerings_exported',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Exported ${rowCount} course offering row(s) to ${fileName}`,
+      changes_after: {
+        fileName,
+        rowCount,
+        columnCount,
+        columns: Array.isArray(req.body?.columns) ? req.body.columns : [],
+        filters: req.body?.filters || {},
+        sort: req.body?.sort || {},
+        usedCurrentPageFallback: req.body?.usedCurrentPageFallback === true,
+      },
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -1570,6 +1607,17 @@ router.post('/import-csv', async (req, res) => {
       }
     }
 
+    await recordAuditLog(req, {
+      action: 'course_offerings_imported',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Imported course offerings from ${fileName || 'CSV'} (${summary.processedRows} processed, ${summary.insertedRows} inserted, ${summary.updatedRows} updated)`,
+      changes_after: {
+        fileName,
+        replaceMode,
+        summary,
+      },
+    });
+
     return res.json({
       success: true,
       summary,
@@ -1640,6 +1688,17 @@ router.post('/', async (req, res) => {
         error: syncError instanceof Error ? syncError.message : 'Unknown room sync error',
       };
     }
+
+    await recordAuditLog(req, {
+      action: 'course_offering_created',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Created course offering ${formatOfferingAuditLabel(inserted)}`,
+      changes_after: {
+        ...inserted,
+        subjectSync,
+        roomSync,
+      },
+    });
 
     return res.status(201).json({
       ...inserted,
@@ -1734,6 +1793,18 @@ router.put('/:id', async (req, res) => {
         error: syncError instanceof Error ? syncError.message : 'Unknown room sync error',
       };
     }
+
+    await recordAuditLog(req, {
+      action: 'course_offering_updated',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Updated course offering ${formatOfferingAuditLabel(updated)}`,
+      changes_before: existingOffering,
+      changes_after: {
+        ...updated,
+        subjectSync,
+        roomSync,
+      },
+    });
 
     return res.json({
       ...updated,
@@ -1878,6 +1949,18 @@ router.delete('/:id', async (req, res) => {
         error: roomErr instanceof Error ? roomErr.message : 'Unknown room prune error',
       };
     }
+
+    await recordAuditLog(req, {
+      action: 'course_offering_deleted',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Deleted course offering ${formatOfferingAuditLabel(target)}`,
+      changes_before: target,
+      changes_after: {
+        deleted: data[0],
+        subjectDelete,
+        roomPrune,
+      },
+    });
 
     return res.json({ success: true, deleted: data[0], subjectDelete, roomPrune });
   } catch (err) {

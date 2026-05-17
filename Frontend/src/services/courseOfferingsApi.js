@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authContext.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function checkDuplicateCode(code) {
@@ -39,7 +41,7 @@ export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', 
 export async function createCourseOffering(data) {
   const response = await fetch(`${API_BASE_URL}/api/course-offerings`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(data),
   });
 
@@ -54,7 +56,7 @@ export async function createCourseOffering(data) {
 export async function updateCourseOffering(id, data) {
   const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(data),
   });
 
@@ -69,6 +71,22 @@ export async function updateCourseOffering(id, data) {
 export async function deleteCourseOffering(id) {
   const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function recordCourseOfferingExportAudit(data = {}) {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/audit/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(data),
   });
 
   if (!response.ok) {
@@ -88,7 +106,7 @@ export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode 
   try {
     response = await fetch(`${API_BASE_URL}/api/course-offerings/import-csv`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ csvText, fileName, replaceMode }),
       signal: controller.signal,
     });

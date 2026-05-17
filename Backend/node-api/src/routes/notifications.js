@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { recordAuditLog } from '../lib/auditLogger.js';
 import { buildSubjectNotificationIssues, buildSubjectNotificationRows, rescanAllSubjectNotifications } from '../lib/subjectNotifications.js';
 import { findConflictingSchedules, isRoomGym, parseScheduleString, timeRangesOverlap } from '../lib/scheduleConflictChecker.js';
 
 const router = Router();
+const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
 // GET /api/notifications/course-offerings
 router.get('/course-offerings', async (req, res) => {
@@ -42,13 +44,35 @@ router.patch('/course-offerings/:id/resolve', async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('data_quality_notifications')
+      .select('id, entity_type, entity_id, field_name, issue_type, severity, message, details, is_resolved, created_at, updated_at')
+      .eq('id', id)
+      .eq('entity_type', 'course_offering')
+      .limit(1);
+
+    if (existingError) return res.status(500).json({ error: existingError.message });
+    if (!existingRows || existingRows.length === 0) return res.status(404).json({ error: 'Notification not found' });
+
+    const existing = existingRows[0];
     const resp = await supabaseAdmin
       .from('data_quality_notifications')
       .update({ is_resolved: true, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('entity_type', 'course_offering');
+      .eq('entity_type', 'course_offering')
+      .select('id, entity_type, entity_id, field_name, issue_type, severity, message, details, is_resolved, created_at, updated_at')
+      .single();
 
     if (resp.error) return res.status(500).json({ error: resp.error.message });
+
+    await recordAuditLog(req, {
+      action: 'course_offering_notification_resolved',
+      module: COURSE_OFFERING_AUDIT_MODULE,
+      description: `Resolved course offering notification for ${existing.details?.code || `#${existing.entity_id}`}`,
+      changes_before: existing,
+      changes_after: resp.data,
+    });
+
     return res.json({ updated: resp.data });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
@@ -307,6 +331,19 @@ router.post('/course-offerings/rescan-all', async (req, res) => {
     }
 
     if (inserts.length === 0) {
+      if (force) {
+        await recordAuditLog(req, {
+          action: 'course_offering_notifications_rescanned',
+          module: COURSE_OFFERING_AUDIT_MODULE,
+          description: `Rescanned course offering notifications (${(offerings || []).length} scanned, 0 issues found)`,
+          changes_after: {
+            force,
+            scanned: (offerings || []).length,
+            inserted: 0,
+          },
+        });
+      }
+
       return res.json({ skipped: false, scanned: (offerings || []).length, inserted: 0, message: 'All offerings are complete — no issues found.' });
     }
 
@@ -317,6 +354,19 @@ router.post('/course-offerings/rescan-all', async (req, res) => {
         .from('data_quality_notifications')
         .insert(inserts.slice(i, i + BATCH));
       if (insertErr) return res.status(500).json({ error: insertErr.message });
+    }
+
+    if (force) {
+      await recordAuditLog(req, {
+        action: 'course_offering_notifications_rescanned',
+        module: COURSE_OFFERING_AUDIT_MODULE,
+        description: `Rescanned course offering notifications (${(offerings || []).length} scanned, ${inserts.length} issue(s) found)`,
+        changes_after: {
+          force,
+          scanned: (offerings || []).length,
+          inserted: inserts.length,
+        },
+      });
     }
 
     return res.json({ skipped: false, scanned: (offerings || []).length, inserted: inserts.length });
