@@ -240,8 +240,13 @@ export default function NotificationButton({
     },
   };
 
-  const totalCount = notificationStats.total || items.length;
+  const statsTotal = Number(notificationStats?.total);
+  const totalCount = Number.isFinite(statsTotal) ? statsTotal : items.length;
+  const hasIssues = totalCount > 0;
   const hasCritical = notificationStats.critical > 0;
+  const buttonStateClass = hasIssues
+    ? 'bg-error text-white hover:bg-error/90'
+    : 'bg-primary text-white hover:bg-primary/90';
 
   return (
     <div ref={panelRef} className="relative">
@@ -249,7 +254,7 @@ export default function NotificationButton({
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="btn-primary relative flex items-center gap-2"
+        className={`relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all active:scale-95 ${buttonStateClass}`}
       >
         <Bell size={18} />
         <span>{buttonLabel}</span>
