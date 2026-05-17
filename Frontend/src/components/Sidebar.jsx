@@ -10,7 +10,14 @@ import {
   CircleUserRound,
 } from 'lucide-react';
 
-export default function Sidebar({ currentView, onViewChange, onLogout }) {
+function formatRole(role) {
+  return String(role || 'System Admin')
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export default function Sidebar({ currentView, onViewChange, onLogout, currentUser }) {
   const menuItems = [
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
     { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
@@ -55,8 +62,8 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
             <CircleUserRound size={16} />
           </div>
           <div>
-            <p className="text-label-bold font-medium text-on-surface">Administrator</p>
-            <p className="text-[10px] text-on-surface-variant">System Admin</p>
+            <p className="text-label-bold font-medium text-on-surface">{currentUser?.username || 'Administrator'}</p>
+            <p className="text-[10px] text-on-surface-variant">{formatRole(currentUser?.role)}</p>
           </div>
         </div>
 

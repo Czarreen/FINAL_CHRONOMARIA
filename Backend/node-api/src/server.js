@@ -10,6 +10,7 @@ import notificationsRouter from './routes/notifications.js';
 import gaRouter from './routes/ga.js';
 import usersRouter from './routes/users.js';
 import authRouter from './routes/auth.js';
+import auditLogsRouter from './routes/auditLogs.js';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/ga', gaRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/audit-logs', auditLogsRouter);
 
 app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);
