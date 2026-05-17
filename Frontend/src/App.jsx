@@ -60,7 +60,7 @@ export default function App() {
       case 'faculty': return <FacultyView />;
       case 'subjects': return <SubjectsView authRefreshKey={authRefreshKey} subjectMutationKey={subjectMutationKey} />;
       case 'rooms': return <RoomsView authRefreshKey={authRefreshKey} />;
-      case 'schedule': return <ScheduleView />;
+      case 'schedule': return <ScheduleView onNavigate={setCurrentView} />;
       case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView onSubjectMutated={() => setSubjectMutationKey((k) => k + 1)} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={setCurrentUser} />;

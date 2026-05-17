@@ -54,11 +54,10 @@ export async function exportAutomaticSchedulerRows() {
 }
 
 export async function updateCourseOfferingFromScheduler(options = {}) {
-  const { backup = true } = options;
-  const query = backup ? '?backup=true' : '?backup=false';
+  const { mode = 'BACKUP_THEN_UPDATE' } = options;
 
-  return request(`/api/ga/automatic/update-course-offering${query}`, {
+  return request('/api/ga/automatic/update-course-offering', {
     method: 'POST',
-    body: JSON.stringify({ backup }),
+    body: JSON.stringify({ mode }),
   });
 }

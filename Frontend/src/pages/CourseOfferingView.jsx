@@ -42,7 +42,7 @@ import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidation';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
-import { buildScheduleString, parseScheduleString, emptyCardState } from '../utils/scheduleUtils';
+import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleTimeDisplay } from '../utils/scheduleUtils';
 
 const PAGE_SIZE = 50;
 
@@ -1695,6 +1695,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                           </span>
                         ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
                           <span className="text-xs text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
+                        ) : col.key === 'mth_schedule' || col.key === 'tfs_schedule' ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
+                            {formatScheduleTimeDisplay(offering[col.key]) ?? renderCellValue(offering[col.key])}
+                            {getScheduleAmPm(offering[col.key]) && (
+                              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(offering[col.key]) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {getScheduleAmPm(offering[col.key])}
+                              </span>
+                            )}
+                          </span>
                         ) : (
                           <span className="text-xs text-on-surface-variant truncate">
                             {renderCellValue(offering[col.key])}

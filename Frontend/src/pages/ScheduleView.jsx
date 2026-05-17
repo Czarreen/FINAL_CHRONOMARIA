@@ -29,8 +29,13 @@ import {
   exportAutomaticSchedulerRows,
   updateCourseOfferingFromScheduler,
 } from '../services/gaApi.js';
+import { getScheduleAmPm, formatScheduleTimeDisplay } from '../utils/scheduleUtils.js';
 
 const LAST_SCHEDULER_RUN_KEY = 'automaticSchedulerLastRun';
+const COURSE_OFFERING_UPDATE_MODES = {
+  BACKUP_THEN_UPDATE: 'BACKUP_THEN_UPDATE',
+  UPDATE_NO_BACKUP: 'UPDATE_NO_BACKUP',
+};
 
 function StatCard({ label, value, icon: Icon, tone = 'primary' }) {
   const toneClass =
@@ -103,7 +108,192 @@ function formatDateTimeStandard(date) {
   }).format(date);
 }
 
+function downloadJsonFile(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+function normalizeUnresolvedIssues(result) {
+  const list = result?.unresolved || result?.unresolved_issues || result?.report?.unresolved_issues || [];
+  return Array.isArray(list) ? list : [];
+}
+
+function issueCategories(issue) {
+  if (issue?.conflict_type) {
+    if (issue.conflict_type === 'section') return ['Time conflict'];
+    if (issue.conflict_type === 'room') return ['Room conflict'];
+    if (issue.conflict_type === 'both') return ['Room conflict', 'Time conflict'];
+  }
+  const sourceText = [
+    ...(Array.isArray(issue?.reasons) ? issue.reasons : []),
+    issue?.reason,
+    issue?.problem,
+    issue?.suggestions?.room_conflict,
+    issue?.suggestions?.time_conflict,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const categories = [];
+  if (sourceText.includes('room')) categories.push('Room conflict');
+  if (sourceText.includes('time') || sourceText.includes('slot') || sourceText.includes('schedule')) {
+    categories.push('Time conflict');
+  }
+
+  return categories.length > 0 ? categories : ['Manual review'];
+}
+
+function buildIssueRecommendations(issue, roomCount) {
+  const categories = issueCategories(issue);
+  const steps = [];
+
+  if (categories.includes('Room conflict')) {
+    if (issue?.rooms_exhausted) {
+      steps.push('Add more rooms in the Rooms page, then rerun the scheduler.');
+    } else if (Array.isArray(issue?.available_rooms) && issue.available_rooms.length > 0) {
+      steps.push('Assign this class to one of the available rooms shown above, then rerun the scheduler.');
+    } else if (issue?.suggestions?.room_conflict) {
+      steps.push(issue.suggestions.room_conflict);
+    } else {
+      steps.push(
+        roomCount > 0
+          ? 'Review the active rooms already loaded and try reassigning this class.'
+          : 'No active rooms are currently loaded. Add more rooms before rerunning the scheduler.'
+      );
+    }
+  }
+
+  if (categories.includes('Time conflict')) {
+    if (issue?.section_blocked) {
+      steps.push('Manually reschedule another class in this section to free a time slot, then rerun.');
+    } else if (Array.isArray(issue?.available_time_slots) && issue.available_time_slots.length > 0) {
+      steps.push('Try manually assigning this subject to one of the free time windows shown above.');
+    } else if (issue?.suggestions?.time_conflict) {
+      steps.push(issue.suggestions.time_conflict);
+    } else {
+      steps.push('Adjust the time schedule for this section, then rerun the scheduler.');
+    }
+  }
+
+  if (categories.includes('Manual review')) {
+    steps.push('Review subject data and room/schedule assignments, then rerun the scheduler.');
+  }
+
+  return steps;
+}
+
+function abbreviateDept(name) {
+  if (!name) return '?';
+  const stripped = name.replace(/^(department|college|school|institute)\s+of\s+/i, '').trim();
+  const words = stripped.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+  return words.map((w) => w[0]?.toUpperCase() || '').join('');
+}
+
 function ScheduleTable({ rows, loading }) {
+  const normalizeKey = (v) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
+
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Build key → array of all department_names sharing that code+course_no+section
+  const deptsByKey = useMemo(() => {
+    const map = new Map();
+    if (!Array.isArray(rows)) return map;
+    for (const row of rows) {
+      const c = normalizeKey(row.code);
+      const cn = normalizeKey(row.course_no);
+      const sec = normalizeKey(row.section);
+      if (!c || !cn || !sec) continue;
+      const key = `${c}|||${cn}|||${sec}`;
+      if (!map.has(key)) map.set(key, []);
+      const depts = map.get(key);
+      const dept = row.department_name || `Dept ${row.department_id}`;
+      if (!depts.includes(dept)) depts.push(dept);
+    }
+    return map;
+  }, [rows]);
+
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  function handleSort(col) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  }
+
+  const SORT_KEYS = {
+    code: (r) => (r.code || '').toLowerCase(),
+    course_no: (r) => (r.course_no || '').toLowerCase(),
+    section: (r) => (r.section || '').toLowerCase(),
+    title: (r) => (r.descriptive_title || '').toLowerCase(),
+    lec_hrs: (r) => Number(r.lec_hrs) || 0,
+    lab_hrs: (r) => Number(r.lab_hrs) || 0,
+    mth_schedule: (r) => (r.mth_schedule || '').toLowerCase(),
+    mth_room: (r) => (r.mth_room_name || r.mth_room_id || '').toLowerCase(),
+    tfs_schedule: (r) => (r.tfs_schedule || '').toLowerCase(),
+    tfs_room: (r) => (r.tfs_room_name || r.tfs_room_id || '').toLowerCase(),
+    status: (r) => ((r.merged === true || r.merged === 'true') ? 'merged' : ''),
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!sortCol || !SORT_KEYS[sortCol]) return rows;
+    const fn = SORT_KEYS[sortCol];
+    return [...rows].sort((a, b) => {
+      const av = fn(a);
+      const bv = fn(b);
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [rows, sortCol, sortDir]);
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sortedRows;
+    return sortedRows.filter((row) => {
+      const haystack = [
+        row.code,
+        row.course_no,
+        row.section,
+        row.descriptive_title,
+        row.mth_schedule,
+        row.mth_room_name || row.mth_room_id,
+        row.tfs_schedule,
+        row.tfs_room_name || row.tfs_room_id,
+        row.department_name,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [sortedRows, searchQuery]);
+
+  function SortIcon({ col }) {
+    if (sortCol !== col) return <span className="ml-1 opacity-30">↕</span>;
+    return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
+  function Th({ col, children }) {
+    return (
+      <th
+        className="px-4 py-3 text-left font-bold text-on-surface cursor-pointer select-none hover:bg-white/40 transition-colors whitespace-nowrap"
+        onClick={() => handleSort(col)}
+      >
+        {children}<SortIcon col={col} />
+      </th>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -122,24 +312,38 @@ function ScheduleTable({ rows, loading }) {
 
   return (
     <div className="overflow-x-auto">
+      <div className="px-4 pt-4 pb-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by code, course, section, title, room…"
+          className="w-full max-w-sm rounded-lg border border-white/40 bg-white/50 px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+        {searchQuery && (
+          <span className="ml-3 text-xs text-on-surface-variant">
+            {filteredRows.length} of {rows.length} rows
+          </span>
+        )}
+      </div>
       <table className="w-full text-sm">
         <thead className="bg-white/60 border-b border-white/50">
           <tr>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Code</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Course No.</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Section</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Title</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Lec Hrs</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Lab Hrs</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">MTH Schedule</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">MTH Room</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">TFS Schedule</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">TFS Room</th>
-            <th className="px-4 py-3 text-left font-bold text-on-surface">Status</th>
+            <Th col="code">Code</Th>
+            <Th col="course_no">Course No.</Th>
+            <Th col="section">Section</Th>
+            <Th col="title">Title</Th>
+            <Th col="lec_hrs">Lec Hrs</Th>
+            <Th col="lab_hrs">Lab Hrs</Th>
+            <Th col="mth_schedule">MTH Schedule</Th>
+            <Th col="mth_room">MTH Room</Th>
+            <Th col="tfs_schedule">TF Schedule</Th>
+            <Th col="tfs_room">TF Room</Th>
+            <Th col="status">Status</Th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
+          {filteredRows.map((row, idx) => (
             <tr key={idx} className="border-b border-white/30 hover:bg-white/40 transition-colors">
               <td className="px-4 py-3 text-on-surface font-medium">{row.code || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.course_no || '—'}</td>
@@ -147,14 +351,53 @@ function ScheduleTable({ rows, loading }) {
               <td className="px-4 py-3 text-on-surface max-w-xs truncate" title={row.descriptive_title}>{row.descriptive_title || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.lec_hrs || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.lab_hrs || '—'}</td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.mth_schedule || '—'}</td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.mth_room_id || '—'}</td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.tfs_schedule || '—'}</td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.tfs_room_id || '—'}</td>
+              <td className="px-4 py-3 text-on-surface text-xs">
+                {row.mth_schedule ? (
+                  <span className="inline-flex items-center gap-1">
+                    {formatScheduleTimeDisplay(row.mth_schedule)}
+                    {getScheduleAmPm(row.mth_schedule) && (
+                      <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(row.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {getScheduleAmPm(row.mth_schedule)}
+                      </span>
+                    )}
+                  </span>
+                ) : '—'}
+              </td>
+              <td className="px-4 py-3 text-on-surface text-xs">{row.mth_room_name || row.mth_room_id || '—'}</td>
+              <td className="px-4 py-3 text-on-surface text-xs">
+                {row.tfs_schedule ? (
+                  <span className="inline-flex items-center gap-1">
+                    {formatScheduleTimeDisplay(row.tfs_schedule)}
+                    {getScheduleAmPm(row.tfs_schedule) && (
+                      <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(row.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {getScheduleAmPm(row.tfs_schedule)}
+                      </span>
+                    )}
+                  </span>
+                ) : '—'}
+              </td>
+              <td className="px-4 py-3 text-on-surface text-xs">{row.tfs_room_name || row.tfs_room_id || '—'}</td>
               <td className="px-4 py-3">
-                <span className={`px-2 py-1 rounded text-xs font-semibold ${row.merged ? 'bg-blue-100/80 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                  {row.merged ? 'Merged' : 'New'}
-                </span>
+                {(() => {
+                  const isMerged = row.merged === true || row.merged === 'true';
+                  if (!isMerged) {
+                    return <span className="text-xs text-on-surface-variant">—</span>;
+                  }
+                  const key = `${normalizeKey(row.code)}|||${normalizeKey(row.course_no)}|||${normalizeKey(row.section)}`;
+                  const allDepts = deptsByKey.get(key) || [];
+                  const abbrevList = allDepts.map(abbreviateDept).join(', ');
+                  const fullList = allDepts.join(', ');
+                  return (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100/80 text-blue-700 self-start">Merged</span>
+                      {abbrevList && (
+                        <span className="text-xs text-blue-500 pl-1" title={fullList}>
+                          → {abbrevList}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </td>
             </tr>
           ))}
@@ -164,7 +407,7 @@ function ScheduleTable({ rows, loading }) {
   );
 }
 
-export default function ScheduleView() {
+export default function ScheduleView({ onNavigate }) {
   const [preflight, setPreflight] = useState(null);
   const [result, setResult] = useState(null);
   const [loadingPreflight, setLoadingPreflight] = useState(true);
@@ -178,7 +421,8 @@ export default function ScheduleView() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [backupEnabled, setBackupEnabled] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [updateMode, setUpdateMode] = useState(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE);
 
   async function loadPreflight() {
     try {
@@ -242,23 +486,36 @@ export default function ScheduleView() {
     try {
       setRunning(true);
       setError('');
+      setNotice('');
       const response = await runAutomaticScheduler({ dryRun });
       setResult(response);
 
       const fitness = Number(response?.fitness_overall || 0);
+      const unresolvedIssues = normalizeUnresolvedIssues(response);
       const summary = {
         generatedAt: formatDateTimeStandard(new Date()),
         quality: fitnessToQuality(fitness),
         fitness,
-        schedulesGenerated: response?.schedules_generated || 0,
-        conflictsResolved: response?.conflicts_resolved || 0,
+        schedulesGenerated: Array.isArray(response?.assignments) ? response.assignments.length : 0,
+        unresolvedCount: unresolvedIssues.length,
         runId: response?.run_id || 'n/a',
         dryRun,
       };
       setLastRunSummary(summary);
       localStorage.setItem(LAST_SCHEDULER_RUN_KEY, JSON.stringify(summary));
+      setNotice(
+        fitness === 100 && unresolvedIssues.length === 0
+          ? 'Schedule reached a verified state. You can export it or update Course Offering, then proceed to Faculty Loading.'
+          : 'Schedule generated, but unresolved issues still need manual review before continuing to Faculty Loading.'
+      );
       await loadPreflight();
-      await loadRows();
+      if (dryRun) {
+        // Dry run does not persist to DB — show the generated assignments directly from the response
+        const dryRunRows = Array.isArray(response?.assignments) ? response.assignments : [];
+        setRows(dryRunRows);
+      } else {
+        await loadRows();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scheduler run failed.');
     } finally {
@@ -270,15 +527,10 @@ export default function ScheduleView() {
     try {
       setExporting(true);
       setError('');
+      setNotice('');
       const data = await exportAutomaticSchedulerRows();
-      // Trigger download
-      const element = document.createElement('a');
-      element.setAttribute('href', 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2)));
-      element.setAttribute('download', 'schedule_export.json');
-      element.style.display = 'none';
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
+      downloadJsonFile('automatic_scheduler_export.json', data);
+      setNotice('Schedule export downloaded. Keep it as your backup or import source for Course Offering.');
       setShowExportModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed.');
@@ -291,9 +543,24 @@ export default function ScheduleView() {
     try {
       setUpdating(true);
       setError('');
-      const response = await updateCourseOfferingFromScheduler({ backup: backupEnabled });
-      // Show success
-      alert(`Course offerings updated successfully! ${response?.persisted || 0} rows persisted.`);
+      setNotice('');
+      const response = await updateCourseOfferingFromScheduler({ mode: updateMode });
+
+      if (response?.backup_created && Array.isArray(response?.backup_export)) {
+        downloadJsonFile(
+          `course_offering_backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`,
+          {
+            exported_at: new Date().toISOString(),
+            rows: response.backup_export,
+          }
+        );
+      }
+
+      setNotice(
+        response?.backup_created
+          ? `Course Offering replaced with ${response?.updated || 0} schedule rows. A backup export was downloaded first.`
+          : `Course Offering replaced with ${response?.updated || 0} schedule rows without creating a backup.`
+      );
       setShowUpdateModal(false);
       await loadPreflight();
       await loadRows();
@@ -304,10 +571,16 @@ export default function ScheduleView() {
     }
   }
 
-  const unresolvedList = result?.unresolved || result?.unresolved_issues || result?.report?.unresolved_issues || [];
-  const unresolvedCount = Array.isArray(unresolvedList) ? unresolvedList.length : 0;
-  const hasConflicts = unresolvedCount > 0 || (result && Number(result.fitness_overall || 0) < 100);
-  const isFixed = result && Number(result.fitness_overall || 0) >= 95 && unresolvedCount === 0;
+  const unresolvedList = normalizeUnresolvedIssues(result);
+  const unresolvedCount = unresolvedList.length;
+  const fitnessScore = Number(result?.fitness_overall || 0);
+  const isFixed = Boolean(result) && fitnessScore === 100 && unresolvedCount === 0;
+  const needsManualResolution = Boolean(result) && !isFixed;
+  const unresolvedCards = unresolvedList.map((issue) => ({
+    ...issue,
+    categories: issueCategories(issue),
+    recommendations: buildIssueRecommendations(issue, roomCount),
+  }));
 
   const groupedIssues = issues.reduce((acc, issue) => {
     const bucket = issue.severity || 'low';
@@ -337,6 +610,13 @@ export default function ScheduleView() {
         <div className="rounded-2xl border border-error/20 bg-error-container/35 p-4 text-sm text-error flex items-start gap-3">
           <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {notice && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900 flex items-start gap-3">
+          <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0" />
+          <span>{notice}</span>
         </div>
       )}
 
@@ -409,8 +689,8 @@ export default function ScheduleView() {
               <p className="mt-2 text-2xl font-bold text-on-surface">{lastRunSummary.schedulesGenerated}</p>
             </div>
             <div className="rounded-xl bg-white/60 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.1em] text-on-surface-variant">Conflicts Resolved</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface">{lastRunSummary.conflictsResolved}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.1em] text-on-surface-variant">Unresolved Issues</p>
+              <p className="mt-2 text-2xl font-bold text-on-surface">{lastRunSummary.unresolvedCount}</p>
             </div>
           </div>
         </div>
@@ -423,7 +703,7 @@ export default function ScheduleView() {
             <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-1" size={24} />
             <div className="flex-1">
               <h3 className="font-bold text-emerald-900">Schedule Verified Successfully</h3>
-              <p className="mt-1 text-sm text-emerald-800">No conflicts detected. Fitness score indicates optimal or near-optimal schedule.</p>
+              <p className="mt-1 text-sm text-emerald-800">No conflicts detected and the fitness score reached 100. You can safely export this schedule, update Course Offering, and continue to Faculty Loading.</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button onClick={() => setShowExportModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
                   <Download size={16} />
@@ -433,6 +713,10 @@ export default function ScheduleView() {
                   <ArrowRight size={16} />
                   Update Course Offering
                 </button>
+                <button onClick={() => onNavigate?.('faculty-loading')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors">
+                  <Sparkles size={16} />
+                  Proceed to Faculty Loading
+                </button>
               </div>
             </div>
           </div>
@@ -440,26 +724,138 @@ export default function ScheduleView() {
       )}
 
       {/* Issues State */}
-      {hasConflicts && !isFixed && result && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel rounded-2xl p-6 border border-amber-200 bg-amber-50/50">
-          <div className="flex items-start gap-4">
-            <AlertTriangle className="text-amber-600 flex-shrink-0 mt-1" size={24} />
-            <div className="flex-1">
-              <h3 className="font-bold text-amber-900">Schedule Has Conflicts</h3>
-              <p className="mt-1 text-sm text-amber-800">The GA detected conflicts that need manual review and adjustment.</p>
-              {Array.isArray(unresolvedList) && unresolvedList.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {unresolvedList.slice(0, 8).map((issue, idx) => (
-                    <div key={idx} className="text-sm text-amber-700 bg-white/50 rounded p-3">
-                      <div><strong>{issue.descriptive_title || issue.course_no || issue.code || 'Subject'}</strong> {issue.section ? `(${issue.section})` : ''}</div>
-                      <div className="text-xs mt-1"><strong>Reason:</strong> {Array.isArray(issue.reasons) ? issue.reasons.join('; ') : issue.reasons || issue.reason || issue.problem}</div>
-                      {issue.suggestions && <div className="text-xs mt-1"><strong>Suggestion:</strong> {issue.suggestions.room_conflict || issue.suggestions.time_conflict}</div>}
-                    </div>
-                  ))}
-                  {unresolvedList.length > 8 && <div className="text-sm text-amber-700">+{unresolvedList.length - 8} more unresolved items...</div>}
+      {needsManualResolution && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel rounded-2xl border border-amber-200 bg-amber-50/50 p-6">
+          <div className="flex flex-col gap-6">
+            <div className="flex items-start gap-4">
+              <AlertTriangle className="mt-1 flex-shrink-0 text-amber-600" size={24} />
+              <div className="flex-1">
+                <h3 className="font-bold text-amber-900">Manual Resolution Required</h3>
+                <p className="mt-1 text-sm text-amber-800">The scheduler is not yet verified. Resolve the remaining issues below before updating Course Offering or moving to Faculty Loading.</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Fitness</div>
+                    <div className="mt-1 text-2xl font-bold">{fitnessScore.toFixed(2)}%</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Persistent Issues</div>
+                    <div className="mt-1 text-2xl font-bold">{unresolvedCount}</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Decision</div>
+                    <div className="mt-1 font-semibold">Manual edit first</div>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button onClick={() => onNavigate?.('subjects')} className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white/80 px-4 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100">
+                <BookOpen size={16} />
+                Review Subjects
+              </button>
+              <button onClick={() => onNavigate?.('rooms')} className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white/80 px-4 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100">
+                <DoorOpen size={16} />
+                Review Rooms
+              </button>
+            </div>
+
+            {unresolvedCards.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {unresolvedCards.map((issue, idx) => (
+                  <div key={`${issue.subject_id || issue.code || 'issue'}-${idx}`} className="rounded-2xl border border-amber-200/80 bg-white/75 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold text-on-surface">{issue.descriptive_title || issue.course_no || issue.code || 'Subject needs manual review'}</h4>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          {[issue.code, issue.course_no, issue.section].filter(Boolean).join(' • ') || 'Unassigned subject'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {issue.categories.map((category) => (
+                          <span key={category} className="rounded-full border border-amber-200 bg-amber-100/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-800">
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-xl bg-amber-50/80 p-3 text-sm text-amber-900">
+                      <div className="font-semibold">Persistent issue</div>
+                      <div className="mt-1 text-xs leading-5">
+                        {Array.isArray(issue.reasons) && issue.reasons.length > 0
+                          ? issue.reasons.join('; ')
+                          : issue.reason || issue.problem || 'No detailed reason returned by the GA.'}
+                      </div>
+                    </div>
+
+                    {/* Available rooms from the GA diagnosis */}
+                    {Array.isArray(issue.available_rooms) && issue.available_rooms.length > 0 ? (
+                      <div className="mt-3">
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500">
+                          Available Rooms ({issue.available_rooms.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {issue.available_rooms.map((room) => (
+                            <span key={room.room_id} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                              <DoorOpen size={11} />{room.room_name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : issue.rooms_exhausted === true ? (
+                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-error/20 bg-error-container/20 p-3 text-xs text-error">
+                        <DoorOpen size={14} className="flex-shrink-0" />
+                        <span>No available rooms — add more rooms to the system before rerunning.</span>
+                      </div>
+                    ) : null}
+
+                    {/* Free time windows from the GA diagnosis */}
+                    {Array.isArray(issue.available_time_slots) && issue.available_time_slots.length > 0 ? (
+                      <div className="mt-3">
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500">
+                          Free Time Windows
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {issue.available_time_slots.map((slot) => (
+                            <span key={slot.label} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                              <Clock3 size={11} />{slot.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : issue.section_blocked === true ? (
+                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900">
+                        <Clock3 size={14} className="flex-shrink-0" />
+                        <span>Section is fully booked — manually reschedule another class in this section to free a slot.</span>
+                      </div>
+                    ) : null}
+
+                    {/* Next-step action guidance */}
+                    {issue.recommendations.length > 0 && (
+                      <div className="mt-3 space-y-2 text-sm text-on-surface-variant">
+                        {issue.recommendations.map((recommendation) => (
+                          <div key={recommendation} className="flex items-start gap-2 rounded-xl bg-slate-50/80 p-3">
+                            {recommendation.toLowerCase().includes('room') ? (
+                              <DoorOpen size={15} className="mt-0.5 flex-shrink-0 text-slate-500" />
+                            ) : recommendation.toLowerCase().includes('time') || recommendation.toLowerCase().includes('slot') || recommendation.toLowerCase().includes('reschedule') ? (
+                              <Clock3 size={15} className="mt-0.5 flex-shrink-0 text-slate-500" />
+                            ) : (
+                              <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-slate-500" />
+                            )}
+                            <span>{recommendation}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-white/70 p-4 text-sm text-amber-900">
+                The fitness score is below 100 even though the GA did not return explicit unresolved items. Review subject times and room allocation manually, then rerun the scheduler.
+              </div>
+            )}
           </div>
         </motion.div>
       )}
@@ -500,41 +896,19 @@ export default function ScheduleView() {
                   <h4 className="font-semibold text-amber-700">Medium Severity Issues ({groupedIssues['medium'].length})</h4>
                 </div>
                 <div className="space-y-2 max-h-56 overflow-y-auto">
-                  {groupedIssues['medium'].slice(0, 10).map((issue, idx) => {
+                  {groupedIssues['medium'].map((issue, idx) => {
                     const text = issue.message || issue.description || issue.problem || issue.title || JSON.stringify(issue);
-                    const subjectId = issue.source_subject_id || issue.entity_id || issue.subject_id || issue.id;
                     return (
-                      <div key={idx} className="bg-white/60 rounded p-3 text-sm text-amber-900 flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="font-medium">{text}</div>
-                          <div className="text-xs mt-1 text-on-surface-variant">
-                            {issue.entity_label && <span className="block">Subject: {issue.entity_label}</span>}
-                            {issue.department_name && <span className="block">Department: {issue.department_name}</span>}
-                            {issue.suggestion && <span className="block">Suggestion: {issue.suggestion}</span>}
-                          </div>
-                        </div>
-                        <div className="flex-shrink-0 ml-3 flex flex-col items-end gap-2">
-                          {subjectId && (
-                            <button
-                              onClick={() => { window.location.href = `/subjects/${subjectId}/edit`; }}
-                              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
-                            >
-                              Edit
-                            </button>
-                          )}
-                          <button
-                            onClick={() => navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(issue, null, 2))}
-                            className="rounded-md border border-outline-variant bg-white px-3 py-1 text-xs text-on-surface hover:bg-gray-50"
-                          >
-                            Copy JSON
-                          </button>
+                      <div key={idx} className="bg-white/60 rounded p-3 text-sm text-amber-900">
+                        <div className="font-medium">{text}</div>
+                        <div className="text-xs mt-1 text-on-surface-variant">
+                          {issue.entity_label && <span className="block">Subject: {issue.entity_label}</span>}
+                          {issue.department_name && <span className="block">Department: {issue.department_name}</span>}
+                          {issue.suggestion && <span className="block">Suggestion: {issue.suggestion}</span>}
                         </div>
                       </div>
                     );
                   })}
-                  {groupedIssues['medium'].length > 10 && (
-                    <div className="text-xs text-amber-700 italic">+{groupedIssues['medium'].length - 10} more...</div>
-                  )}
                 </div>
               </div>
             )}
@@ -588,7 +962,7 @@ export default function ScheduleView() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-on-surface mb-4">Export Schedule</h3>
-            <p className="text-on-surface-variant mb-6">Download the current schedule as a JSON file. This can be imported back later.</p>
+            <p className="text-on-surface-variant mb-6">Download the verified automatic scheduler output as JSON. Use this when you want a backup without changing Course Offering yet.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowExportModal(false)} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
                 Cancel
@@ -607,15 +981,41 @@ export default function ScheduleView() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-on-surface mb-4">Update Course Offering</h3>
-            <p className="text-on-surface-variant mb-6">Apply the generated schedule to the Course Offering table.</p>
-            <div className="mb-6 flex items-center gap-3 rounded-lg bg-blue-50 p-3 border border-blue-200">
-              <input 
-                type="checkbox" 
-                checked={backupEnabled} 
-                onChange={(e) => setBackupEnabled(e.target.checked)}
-                className="w-4 h-4 cursor-pointer"
-              />
-              <label className="cursor-pointer flex-1 text-sm font-medium text-blue-900">Create backup before updating</label>
+            <p className="text-on-surface-variant mb-6">Choose how the verified schedule should update Course Offering. Both choices clear and replace the current Course Offering table with the scheduler output.</p>
+            <div className="mb-6 space-y-3">
+              <button
+                onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE)}
+                className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                  updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE
+                    ? 'border-primary bg-primary-container/20'
+                    : 'border-outline-variant bg-slate-50/80 hover:bg-white'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-on-surface">Choice 1: Backup export first, then update</div>
+                    <p className="mt-1 text-sm text-on-surface-variant">Downloads a backup of the current Course Offering table before the scheduler replaces it.</p>
+                  </div>
+                  {updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE && <CheckCircle2 size={18} className="text-primary flex-shrink-0" />}
+                </div>
+              </button>
+
+              <button
+                onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP)}
+                className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                  updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP
+                    ? 'border-amber-300 bg-amber-50/80'
+                    : 'border-outline-variant bg-slate-50/80 hover:bg-white'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-on-surface">Choice 2: Proceed with no backup</div>
+                    <p className="mt-1 text-sm text-on-surface-variant">Immediately clears and replaces the Course Offering table with no exported backup.</p>
+                  </div>
+                  {updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP && <CheckCircle2 size={18} className="text-amber-600 flex-shrink-0" />}
+                </div>
+              </button>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setShowUpdateModal(false)} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
@@ -623,7 +1023,7 @@ export default function ScheduleView() {
               </button>
               <button onClick={handleUpdateCourseOffering} disabled={updating} className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2">
                 {updating ? <RefreshCcw size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                {updating ? 'Updating...' : 'Update'}
+                {updating ? 'Updating...' : updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE ? 'Backup and Update' : 'Clear and Replace'}
               </button>
             </div>
           </motion.div>
