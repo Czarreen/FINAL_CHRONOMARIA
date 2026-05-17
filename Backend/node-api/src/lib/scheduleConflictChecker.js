@@ -27,7 +27,7 @@ function normalizeUpper(value) {
   return String(value ?? '').trim().toUpperCase();
 }
 
-export function parseScheduleString(scheduleText) {
+export function parseScheduleString(scheduleText, scheduleType = null) {
   if (!scheduleText || scheduleText.trim() === '') {
     return null;
   }
@@ -68,7 +68,16 @@ export function parseScheduleString(scheduleText) {
   }
 
   if (days.size === 0) {
-    return null;
+    if (timeRange?.startTime && scheduleType === 'mth') {
+      days.add('MON');
+      days.add('THU');
+    } else if (timeRange?.startTime && scheduleType === 'tfs') {
+      days.add('TUE');
+      days.add('FRI');
+      days.add('SAT');
+    } else {
+      return null;
+    }
   }
 
   return {
@@ -154,6 +163,11 @@ function isGymRoomValue(roomValue, gymRoomIds) {
 // Two offerings at the exact same time in the same room are the same physical class
 // (merged/cross-listed), regardless of code, course_no, title, dept, or curriculum.
 function isMergedSubject(entity, other) {
+  // Different course numbers means different courses — cannot be the same physical class.
+  const courseNo = String(entity.course_no || entity.subject_course_no || '').trim().toUpperCase();
+  const otherCourseNo = String(other.course_no || other.subject_course_no || '').trim().toUpperCase();
+  if (courseNo && otherCourseNo && courseNo !== otherCourseNo) return false;
+
   const norm = (s) => String(s || '').trim().toUpperCase();
 
   const mthA = norm(entity.mth_schedule);
@@ -205,8 +219,8 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
   const conflictingEntities = [];
 
-  const mthSchedule = parseScheduleString(entity.mth_schedule);
-  const tfsSchedule = parseScheduleString(entity.tfs_schedule);
+  const mthSchedule = parseScheduleString(entity.mth_schedule, 'mth');
+  const tfsSchedule = parseScheduleString(entity.tfs_schedule, 'tfs');
   const mthRoom = entity.mth_room_id || entity.mth_room;
   const tfsRoom = entity.tfs_room_id || entity.tfs_room;
 
@@ -233,7 +247,7 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
     // Same-type: entity's MTH room vs other's MTH room
     if (mthRoom && !isOtherMthGym && roomsShareId(mthRoom, other.mth_room_id || other.mth_room)) {
-      const otherMthSchedule = parseScheduleString(other.mth_schedule);
+      const otherMthSchedule = parseScheduleString(other.mth_schedule, 'mth');
       const conflict = schedulesConflict(mthSchedule, otherMthSchedule);
       if (conflict.conflicts) {
         conflictingEntities.push({
@@ -248,7 +262,7 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
     // Same-type: entity's TFS room vs other's TFS room
     if (tfsRoom && !isOtherTfsGym && roomsShareId(tfsRoom, other.tfs_room_id || other.tfs_room)) {
-      const otherTfsSchedule = parseScheduleString(other.tfs_schedule);
+      const otherTfsSchedule = parseScheduleString(other.tfs_schedule, 'tfs');
       const conflict = schedulesConflict(tfsSchedule, otherTfsSchedule);
       if (conflict.conflicts) {
         conflictingEntities.push({
@@ -263,7 +277,7 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
     // Cross-type: entity's MTH room vs other's TFS room (handles non-standard day combos)
     if (mthRoom && !isOtherTfsGym && roomsShareId(mthRoom, other.tfs_room_id || other.tfs_room)) {
-      const otherTfsSchedule = parseScheduleString(other.tfs_schedule);
+      const otherTfsSchedule = parseScheduleString(other.tfs_schedule, 'tfs');
       const conflict = schedulesConflict(mthSchedule, otherTfsSchedule);
       if (conflict.conflicts) {
         conflictingEntities.push({
@@ -278,7 +292,7 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
 
     // Cross-type: entity's TFS room vs other's MTH room (handles non-standard day combos)
     if (tfsRoom && !isOtherMthGym && roomsShareId(tfsRoom, other.mth_room_id || other.mth_room)) {
-      const otherMthSchedule = parseScheduleString(other.mth_schedule);
+      const otherMthSchedule = parseScheduleString(other.mth_schedule, 'mth');
       const conflict = schedulesConflict(tfsSchedule, otherMthSchedule);
       if (conflict.conflicts) {
         conflictingEntities.push({
