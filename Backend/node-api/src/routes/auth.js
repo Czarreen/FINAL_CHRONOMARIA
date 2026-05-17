@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { recordAuditLog } from '../lib/auditLogger.js';
 
 const router = Router();
 
@@ -46,18 +47,67 @@ router.post('/login', async (req, res) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
+        await recordAuditLog(req, {
+          username,
+          action: 'login',
+          module: 'authentication',
+          status: 'failed',
+          description: 'Login failed for unknown username',
+        });
         return res.status(401).json({ error: 'Invalid username or password' });
       }
       return res.status(500).json({ error: error.message });
     }
 
     if (String(data.status || '').toLowerCase() !== 'active') {
+      await recordAuditLog(req, {
+        username: data.username,
+        role: data.role,
+        action: 'login',
+        module: 'authentication',
+        status: 'failed',
+        description: 'Login blocked for inactive account',
+        changes_after: {
+          user_id: data.user_id,
+          username: data.username,
+          role: data.role,
+          status: data.status,
+        },
+      });
       return res.status(403).json({ error: 'Login failed. Account is Inactive' });
     }
 
     if (!verifyPassword(password, data.password_hash)) {
+      await recordAuditLog(req, {
+        username: data.username,
+        role: data.role,
+        action: 'login',
+        module: 'authentication',
+        status: 'failed',
+        description: 'Login failed due to invalid password',
+        changes_after: {
+          user_id: data.user_id,
+          username: data.username,
+          role: data.role,
+          status: data.status,
+        },
+      });
       return res.status(401).json({ error: 'Invalid username or password' });
     }
+
+    await recordAuditLog(req, {
+      username: data.username,
+      role: data.role,
+      action: 'login',
+      module: 'authentication',
+      description: 'User logged in',
+      changes_after: {
+        user_id: data.user_id,
+        username: data.username,
+        role: data.role,
+        status: data.status,
+      },
+    });
 
     return res.json({
       user: {

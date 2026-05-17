@@ -12,6 +12,8 @@ import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
 import SettingsView from './pages/SettingsView';
 import { clearAllNotifications, rescanAllSubjectNotifications } from './services/notificationsApi';
+import { recordLogout } from './services/auditLogsApi.js';
+import { clearCurrentAuthUser, setCurrentAuthUser } from './services/authContext.js';
 import { RowHighlightProvider } from './hooks/RowHighlightProvider.jsx';
 
 export default function App() {
@@ -25,8 +27,18 @@ export default function App() {
     setCurrentView('settings');
   };
 
+  const handleViewChange = (view) => {
+    setCurrentView(view);
+  };
+
+  const handleCurrentUserUpdate = (user) => {
+    setCurrentUser(user);
+    setCurrentAuthUser(user);
+  };
+
   const handleLogin = async (user) => {
     setCurrentUser(user);
+    setCurrentAuthUser(user);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(true);
@@ -40,10 +52,17 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      await recordLogout();
+    } catch (err) {
+      console.error('Failed to record logout audit log:', err);
+    }
+
+    try {
       await clearAllNotifications();
     } catch (err) {
       console.error('Failed to clear notifications on logout:', err);
     }
+    clearCurrentAuthUser();
     setCurrentUser(null);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
@@ -63,7 +82,7 @@ export default function App() {
       case 'schedule': return <ScheduleView />;
       case 'faculty-loading': return <FacultyLoadingView />;
       case 'course-offering': return <CourseOfferingView onSubjectMutated={() => setSubjectMutationKey((k) => k + 1)} />;
-      case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={setCurrentUser} />;
+      case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={handleCurrentUserUpdate} />;
       default: return <DashboardView />;
     }
   };
@@ -83,8 +102,9 @@ export default function App() {
         <div className="min-h-screen flex">
           <Sidebar
             currentView={currentView}
-            onViewChange={setCurrentView}
+            onViewChange={handleViewChange}
             onLogout={handleLogout}
+            currentUser={currentUser}
           />
 
           <main className="flex-1 min-h-screen ml-[260px] pt-16">
@@ -104,7 +124,7 @@ export default function App() {
                   transition={{ duration: 0.28, ease: 'easeOut' }}
                 >
                   {currentView === 'dashboard' ? (
-                    <DashboardView onNavigate={setCurrentView} />
+                    <DashboardView onNavigate={handleViewChange} />
                   ) : (
                     renderView()
                   )}

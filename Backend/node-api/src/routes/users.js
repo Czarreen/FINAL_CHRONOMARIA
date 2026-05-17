@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { recordAuditLog } from '../lib/auditLogger.js';
 
 const router = Router();
 const ALLOWED_ROLES = new Set(['super-admin', 'admin']);
@@ -105,6 +106,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
+    await recordAuditLog(req, {
+      action: 'user_created',
+      module: 'users',
+      description: `Added user ${data.username}`,
+      changes_after: data,
+    });
+
     return res.status(201).json(normalizeUserRow(data));
   } catch (err) {
     console.error('Create user error:', err);
@@ -150,6 +158,22 @@ router.patch('/:user_id', async (req, res) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
+    const { data: existingUserRows, error: existingUserError } = await supabaseAdmin
+      .from('users')
+      .select('user_id, username, email, role, status, created_at, updated_at')
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (existingUserError) {
+      return res.status(500).json({ error: existingUserError.message });
+    }
+
+    if (!existingUserRows || existingUserRows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const existingUser = existingUserRows[0];
+
     const updateData = {};
     if (typeof req.body?.username === 'string' && req.body.username.trim()) updateData.username = req.body.username.trim();
     if (typeof req.body?.email === 'string') updateData.email = req.body.email.trim() || null;
@@ -184,6 +208,26 @@ router.patch('/:user_id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    let action = 'user_updated';
+    let description = `Edited user ${data.username}`;
+
+    if (existingUser.role !== data.role) {
+      action = 'role_changed';
+      description = `Changed ${data.username}'s role from ${existingUser.role || 'none'} to ${data.role || 'none'}`;
+    } else if (existingUser.status !== data.status) {
+      const normalizedStatus = String(data.status || '').toLowerCase();
+      action = normalizedStatus === 'active' ? 'account_activated' : 'account_deactivated';
+      description = `Changed ${data.username}'s account status from ${existingUser.status || 'none'} to ${data.status || 'none'}`;
+    }
+
+    await recordAuditLog(req, {
+      action,
+      module: 'users',
+      description,
+      changes_before: existingUser,
+      changes_after: data,
+    });
+
     return res.json(normalizeUserRow(data));
   } catch (err) {
     console.error('Update user error:', err);
@@ -202,7 +246,7 @@ router.delete('/:user_id', async (req, res) => {
       .from('users')
       .delete()
       .eq('user_id', userId)
-      .select('user_id');
+      .select('user_id, username, email, role, status');
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -211,6 +255,13 @@ router.delete('/:user_id', async (req, res) => {
     if (!data || data.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    await recordAuditLog(req, {
+      action: 'user_deleted',
+      module: 'users',
+      description: `Deleted user ${data[0]?.username || `#${userId}`}`,
+      changes_before: data[0],
+    });
 
     return res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {

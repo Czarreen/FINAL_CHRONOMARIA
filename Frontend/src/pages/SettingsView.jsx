@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Edit3, Eye, EyeOff, Search, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Edit3, Eye, EyeOff, FileClock, Search, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import AuditLogsView from './AuditLogsView.jsx';
 import { createUser, deleteUser, fetchUsers, updateUser } from '../services/usersApi.js';
 
 const EMPTY_USER = {
@@ -47,6 +48,7 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
   const [showModalConfirmPassword, setShowModalConfirmPassword] = useState(false);
   const [modalConfirmPassword, setModalConfirmPassword] = useState('');
   const [modalError, setModalError] = useState('');
+  const [activeSettingsPanel, setActiveSettingsPanel] = useState('users');
 
   const isAdmin = currentUser?.role === 'admin';
   const isSuperAdmin = currentUser?.role === 'super-admin';
@@ -250,6 +252,12 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
       setShowConfirmPassword(false);
     }
   };
+
+  const isUsersPanel = activeSettingsPanel === 'users';
+  const settingsTitle = isUsersPanel ? 'User Administration' : 'Audit Logs';
+  const settingsDescription = isUsersPanel
+    ? 'Manage app users, update credentials, change roles, and deactivate accounts from one place.'
+    : 'Review authentication and user administration activity from the existing audit log.';
 
   // Admin personalized settings view
   if (isAdmin) {
@@ -473,22 +481,56 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-on-surface-variant/60">Settings</p>
-          <h2 className="mt-2 text-headline-xl font-headline-xl text-on-surface">User Administration</h2>
+          <h2 className="mt-2 text-headline-xl font-headline-xl text-on-surface">{settingsTitle}</h2>
           <p className="mt-1 max-w-2xl text-body-md text-on-surface-variant">
-            Manage app users, update credentials, change roles, and deactivate accounts from one place.
+            {settingsDescription}
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
-        >
-          <UserPlus size={18} />
-          Add User
-        </button>
+        {isUsersPanel && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <UserPlus size={18} />
+            Add User
+          </button>
+        )}
       </div>
 
+      <div className="glass-panel rounded-2xl p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSettingsPanel('users')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+              isUsersPanel ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-white/70'
+            }`}
+          >
+            <Users size={16} />
+            Current Users
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closeModals();
+              setActiveSettingsPanel('audit-logs');
+            }}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+              activeSettingsPanel === 'audit-logs' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-white/70'
+            }`}
+          >
+            <FileClock size={16} />
+            Audit Logs
+          </button>
+        </div>
+      </div>
+
+      {activeSettingsPanel === 'audit-logs' ? (
+        <AuditLogsView currentUser={currentUser} embedded />
+      ) : (
+        <>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="glass-panel rounded-2xl p-5">
           <div className="flex items-center gap-3 text-on-surface-variant">
@@ -626,7 +668,10 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
         </div>
       </div>
 
-      {(showAddModal || editingUser) && (
+        </>
+      )}
+
+      {isUsersPanel && (showAddModal || editingUser) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-3xl border border-white/60 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -763,7 +808,7 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
         </div>
       )}
 
-      {deleteTarget && (
+      {isUsersPanel && deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white p-6 shadow-2xl">
             <div className="flex items-start gap-3">
