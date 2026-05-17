@@ -1954,9 +1954,9 @@ async function persistAutomaticScheduler(assignments) {
           row.lec_hrs,
           row.lab_hrs,
           row.mth_schedule,
-          row.mth_room_id,
+          row.mth_room_name || row.mth_room_id,
           row.tfs_schedule,
-          row.tfs_room_id,
+          row.tfs_room_name || row.tfs_room_id,
           String(Boolean(row.merged)),
         );
       });

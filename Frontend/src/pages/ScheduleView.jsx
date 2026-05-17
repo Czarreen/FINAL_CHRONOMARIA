@@ -120,6 +120,49 @@ function downloadJsonFile(filename, payload) {
   URL.revokeObjectURL(objectUrl);
 }
 
+function escapeCsvCell(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  const escaped = text.replace(/"/g, '""');
+  return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+function buildCsvFromRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+
+  const headers = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    Object.keys(row).forEach((key) => {
+      if (!headers.includes(key)) headers.push(key);
+    });
+  }
+
+  if (headers.length === 0) return '';
+
+  const headerLine = headers.map((h) => escapeCsvCell(h)).join(',');
+  const dataLines = rows.map((row) => headers.map((h) => escapeCsvCell(row?.[h])).join(','));
+  return [headerLine, ...dataLines].join('\r\n');
+}
+
+function downloadCsvFile(filename, rows) {
+  const csv = buildCsvFromRows(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+function timestampForFileName(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
+
 function normalizeUnresolvedIssues(result) {
   const list = result?.unresolved || result?.unresolved_issues || result?.report?.unresolved_issues || [];
   return Array.isArray(list) ? list : [];
@@ -206,7 +249,7 @@ function isGymRoom(roomName) {
   return /gym/i.test(roomName || '');
 }
 
-function ScheduleTable({ rows, loading }) {
+function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
   const normalizeKey = (v) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -321,19 +364,37 @@ function ScheduleTable({ rows, loading }) {
 
   return (
     <div className="overflow-x-auto">
-      <div className="px-4 pt-4 pb-2">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by code, course, section, title, room…"
-          className="w-full max-w-sm rounded-lg border border-white/40 bg-white/50 px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        {searchQuery && (
-          <span className="ml-3 text-xs text-on-surface-variant">
-            {filteredRows.length} of {rows.length} rows
-          </span>
-        )}
+      <div className="px-4 pt-4 pb-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by code, course, section, title, room..."
+            className="w-full max-w-sm rounded-lg border border-white/40 bg-white/50 px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          {searchQuery && (
+            <span className="text-xs text-on-surface-variant">
+              {filteredRows.length} of {rows.length} rows
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onExportClick}
+            className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-white"
+          >
+            <Download size={14} />
+            Export CSV
+          </button>
+          <button
+            onClick={onUpdateClick}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90"
+          >
+            <ArrowRight size={14} />
+            Update Course Offering
+          </button>
+        </div>
       </div>
       <table className="w-full text-sm">
         <thead className="bg-white/60 border-b border-white/50">
@@ -573,8 +634,9 @@ export default function ScheduleView({ onNavigate }) {
       setError('');
       setNotice('');
       const data = await exportAutomaticSchedulerRows();
-      downloadJsonFile('automatic_scheduler_export.json', data);
-      setNotice('Schedule export downloaded. Keep it as your backup or import source for Course Offering.');
+      const exportRows = Array.isArray(data?.rows) ? data.rows : [];
+      downloadCsvFile(`automatic_scheduler_export_${timestampForFileName()}.csv`, exportRows);
+      setNotice('Schedule export downloaded as CSV. You can import it back to Course Offering.');
       setShowExportModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed.');
@@ -754,14 +816,6 @@ export default function ScheduleView({ onNavigate }) {
               <h3 className="font-bold text-emerald-900">Schedule Verified Successfully</h3>
               <p className="mt-1 text-sm text-emerald-800">No conflicts detected and the fitness score reached 100. You can safely export this schedule, update Course Offering, and continue to Faculty Loading.</p>
               <div className="mt-4 flex flex-wrap gap-3">
-                <button onClick={() => setShowExportModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
-                  <Download size={16} />
-                  Export Only
-                </button>
-                <button onClick={() => setShowUpdateModal(true)} className="inline-flex items-center gap-2 rounded-lg border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 transition-colors">
-                  <ArrowRight size={16} />
-                  Update Course Offering
-                </button>
                 <button onClick={() => onNavigate?.('faculty-loading')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors">
                   <Sparkles size={16} />
                   Proceed to Faculty Loading
@@ -780,7 +834,7 @@ export default function ScheduleView({ onNavigate }) {
               <AlertTriangle className="mt-1 flex-shrink-0 text-amber-600" size={24} />
               <div className="flex-1">
                 <h3 className="font-bold text-amber-900">Manual Resolution Required</h3>
-                <p className="mt-1 text-sm text-amber-800">The scheduler is not yet verified. Resolve the remaining issues below before updating Course Offering or moving to Faculty Loading.</p>
+                <p className="mt-1 text-sm text-amber-800">The scheduler is not yet verified. You can still export or update Course Offering, but review the unresolved issues below first.</p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Fitness</div>
@@ -796,7 +850,7 @@ export default function ScheduleView({ onNavigate }) {
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Decision</div>
-                    <div className="mt-1 font-semibold">Manual edit first</div>
+                    <div className="mt-1 font-semibold">User verification required</div>
                   </div>
                 </div>
               </div>
@@ -1056,7 +1110,12 @@ export default function ScheduleView({ onNavigate }) {
             action={null}
           />
         </div>
-        <ScheduleTable rows={rows} loading={loadingRows} />
+        <ScheduleTable
+          rows={rows}
+          loading={loadingRows}
+          onExportClick={() => setShowExportModal(true)}
+          onUpdateClick={() => setShowUpdateModal(true)}
+        />
       </div>
 
       {/* Empty State */}
@@ -1087,7 +1146,7 @@ export default function ScheduleView({ onNavigate }) {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-on-surface mb-4">Export Schedule</h3>
-            <p className="text-on-surface-variant mb-6">Download the verified automatic scheduler output as JSON. Use this when you want a backup without changing Course Offering yet.</p>
+            <p className="text-on-surface-variant mb-6">Download the automatic scheduler output as CSV. This can be imported back to Course Offering.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowExportModal(false)} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
                 Cancel
@@ -1106,7 +1165,7 @@ export default function ScheduleView({ onNavigate }) {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-on-surface mb-4">Update Course Offering</h3>
-            <p className="text-on-surface-variant mb-6">Choose how the verified schedule should update Course Offering. Both choices clear and replace the current Course Offering table with the scheduler output.</p>
+            <p className="text-on-surface-variant mb-6">Choose how to update Course Offering. Both choices clear and replace the current Course Offering table with the scheduler output.</p>
             <div className="mb-6 space-y-3">
               <button
                 onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE)}
