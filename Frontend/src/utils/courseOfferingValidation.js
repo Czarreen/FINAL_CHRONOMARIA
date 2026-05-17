@@ -1,5 +1,24 @@
 export const REQUIRED_FIELDS = ['code', 'course_no', 'section', 'department_id', 'curr_id'];
 
+// Time boundaries (in minutes from midnight)
+const EARLIEST_START_MIN = 7 * 60 + 30; // 7:30 AM
+const LATEST_END_MIN = 20 * 60;          // 8:00 PM
+
+/**
+ * Validate that a schedule string falls within allowed time boundaries.
+ * Returns null if valid or no time found, otherwise an error string.
+ */
+export function validateTimeBoundaries(scheduleStr) {
+  if (!scheduleStr || typeof scheduleStr !== 'string') return null;
+  const match = scheduleStr.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const startMin = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  const endMin = parseInt(match[3], 10) * 60 + parseInt(match[4], 10);
+  if (startMin < EARLIEST_START_MIN) return 'Classes must start no earlier than 7:30 AM';
+  if (endMin > LATEST_END_MIN) return 'Classes must end no later than 8:00 PM';
+  return null;
+}
+
 export function isEmptyValue(value) {
   return !value || (typeof value === 'string' && value.trim() === '');
 }
@@ -33,6 +52,11 @@ export function validateSchedulePair(schedule, room) {
 
   if (!hasSchedule && hasRoom) {
     return { valid: false, error: 'Schedule required for this room' };
+  }
+
+  if (hasSchedule) {
+    const boundaryError = validateTimeBoundaries(schedule);
+    if (boundaryError) return { valid: false, error: boundaryError };
   }
 
   return { valid: true, error: null };

@@ -19,6 +19,7 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import { fetchGaPreFlight, runFacultyLoading } from '../services/gaApi.js';
+import { formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils.js';
 
 const LAST_FACULTY_LOADING_RUN_KEY = 'facultyLoadingLastRun';
 
@@ -444,8 +445,26 @@ export default function FacultyLoadingView() {
                       <td className="px-4 py-3 text-on-surface">{item.course_no || '-'}</td>
                       <td className="px-4 py-3 text-on-surface">{item.descriptive_title || '-'}</td>
                       <td className="px-4 py-3 text-on-surface">{item.units ?? '-'}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">{item.mth_schedule || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">{item.tfs_schedule || '-'}</td>
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          {formatScheduleTimeDisplay(item.mth_schedule) || '-'}
+                          {getScheduleAmPm(item.mth_schedule) && (
+                            <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {getScheduleAmPm(item.mth_schedule)}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          {formatScheduleTimeDisplay(item.tfs_schedule) || '-'}
+                          {getScheduleAmPm(item.tfs_schedule) && (
+                            <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {getScheduleAmPm(item.tfs_schedule)}
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-on-surface">{item.department_name || 'Unassigned department'}</td>
                       <td className="px-4 py-3 text-on-surface">{item.faculty_name || '-'}</td>
                       <td className="px-4 py-3 text-on-surface-variant">{item.merged ? 'Merged' : ''}</td>

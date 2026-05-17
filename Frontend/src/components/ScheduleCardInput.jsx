@@ -15,8 +15,14 @@ const MODES = {
   ],
 };
 
-// Hours 06–21
-const HOURS = Array.from({ length: 16 }, (_, i) => String(i + 6).padStart(2, '0'));
+// Earliest start: 7:30 AM  |  Latest end: 8:00 PM
+const EARLIEST_START = 7 * 60 + 30; // 450 min
+const LATEST_END = 20 * 60;         // 1200 min
+
+// Start hours 07–19 (20 as start would need end > 20:00)
+const START_HOURS = Array.from({ length: 13 }, (_, i) => String(i + 7).padStart(2, '0'));
+// End hours 07–20
+const END_HOURS = Array.from({ length: 14 }, (_, i) => String(i + 7).padStart(2, '0'));
 const MINUTES = ['00', '15', '30', '45'];
 
 const SLOT_LABELS = {
@@ -205,25 +211,34 @@ export default function ScheduleCardInput({
             <select
               value={value.startH || '07'}
               disabled={disabled}
-              onChange={(e) => update({ startH: e.target.value })}
+              onChange={(e) => {
+                const h = e.target.value;
+                // Auto-correct minute when moving to 07 and current minute < 30
+                const m = h === '07' && parseInt(value.startM || '00', 10) < 30 ? '30' : (value.startM || '00');
+                update({ startH: h, startM: m });
+              }}
               className={selectClass}
               aria-label="Start hour"
             >
-              {HOURS.map((h) => (
+              {START_HOURS.map((h) => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
             <span className="text-lg font-bold text-on-surface-variant">:</span>
             <select
-              value={value.startM || '00'}
+              value={value.startM || '30'}
               disabled={disabled}
               onChange={(e) => update({ startM: e.target.value })}
               className={selectClass}
               aria-label="Start minute"
             >
-              {MINUTES.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+              {MINUTES.map((m) => {
+                const h = parseInt(value.startH || '07', 10);
+                const disabled_opt = h === 7 && parseInt(m, 10) < 30;
+                return (
+                  <option key={m} value={m} disabled={disabled_opt}>{m}</option>
+                );
+              })}
             </select>
           </div>
         </div>
@@ -237,11 +252,16 @@ export default function ScheduleCardInput({
             <select
               value={value.endH || '10'}
               disabled={disabled}
-              onChange={(e) => update({ endH: e.target.value })}
+              onChange={(e) => {
+                const h = e.target.value;
+                // Auto-correct minute when moving to 20 and current minute > 0
+                const m = h === '20' && parseInt(value.endM || '00', 10) > 0 ? '00' : (value.endM || '00');
+                update({ endH: h, endM: m });
+              }}
               className={selectClass}
               aria-label="End hour"
             >
-              {HOURS.map((h) => (
+              {END_HOURS.map((h) => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
@@ -253,9 +273,13 @@ export default function ScheduleCardInput({
               className={selectClass}
               aria-label="End minute"
             >
-              {MINUTES.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+              {MINUTES.map((m) => {
+                const h = parseInt(value.endH || '10', 10);
+                const disabled_opt = h === 20 && parseInt(m, 10) > 0;
+                return (
+                  <option key={m} value={m} disabled={disabled_opt}>{m}</option>
+                );
+              })}
             </select>
           </div>
         </div>

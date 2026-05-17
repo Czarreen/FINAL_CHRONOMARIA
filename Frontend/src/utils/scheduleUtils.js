@@ -151,6 +151,33 @@ export function timesOverlap(startA, endA, startB, endB) {
 }
 
 /**
+ * Derive AM/PM from a schedule string based on the start hour.
+ * Not stored in DB — display only.
+ * Handles both "4:30 PM-6:00 PM" (explicit meridiem) and "16:30-18:00" (24-hour).
+ * For ambiguous 12-hour times without meridiem, hours 1–6 are treated as PM
+ * because classes cannot start before 7:30 AM.
+ * @param {string} scheduleStr
+ * @returns {'AM'|'PM'|null}
+ */
+export function getScheduleAmPm(scheduleStr) {
+  if (!scheduleStr) return null;
+  const s = String(scheduleStr);
+  // Check for explicit AM/PM marker attached to the start time (e.g. "7:30 AM-", "4:30 PM-")
+  const meridiemMatch = s.match(/\d{1,2}:\d{2}\s*(AM|PM)\s*[-–]/i);
+  if (meridiemMatch) return meridiemMatch[1].toUpperCase();
+  // Fall back to hour-based heuristic
+  const hourMatch = s.match(/(\d{1,2}):\d{2}\s*-/);
+  if (!hourMatch) return null;
+  const hour = Number(hourMatch[1]);
+  // Hours >= 12 are always PM (24-hour or 12-hour noon+)
+  if (hour >= 12) return 'PM';
+  // Hours 1–6 must be PM — AM classes cannot start before 7:30 AM
+  if (hour < 7) return 'PM';
+  // Hours 7–11: AM
+  return 'AM';
+}
+
+/**
  * Extract the start/end time (in minutes) from a schedule string.
  * Works with both "HH:MM-HH:MM ..." and "DAY HH:MM-HH:MM ..." formats.
  * @param {string} scheduleStr
@@ -167,6 +194,21 @@ export function getScheduleTimeRange(scheduleStr) {
 }
 
 /**
+ * Extract and format just the time range from a schedule string for display.
+ * Handles all DB formats: "MTH 7:30AM-10:30AM", "07:30-10:30 Lec", "7:30-9:00 M Lec", etc.
+ * Returns "H:MM-H:MM" (e.g. "7:30-10:30") or null if no time range found.
+ * @param {string} scheduleStr
+ * @returns {string|null}
+ */
+export function formatScheduleTimeDisplay(scheduleStr) {
+  if (!scheduleStr) return null;
+  const match = String(scheduleStr).match(/(\d{1,2}:\d{2})\s*(?:AM|PM)?\s*[-–]\s*(\d{1,2}:\d{2})\s*(?:AM|PM)?/i);
+  if (!match) return scheduleStr;
+  const stripLeadingZero = (t) => t.replace(/^0(\d)/, '$1');
+  return `${stripLeadingZero(match[1])}-${stripLeadingZero(match[2])}`;
+}
+
+/**
  * Default empty card state for a given slot.
  * @param {string} slot - 'mth' | 'tfs'
  * @returns {{ enabled, mode, startH, startM, endH, endM, type }}
@@ -176,7 +218,7 @@ export function emptyCardState(slot) {
     enabled: false,
     mode: 'pair',
     startH: '07',
-    startM: '00',
+    startM: '30',
     endH: '10',
     endM: '00',
     type: 'lec',

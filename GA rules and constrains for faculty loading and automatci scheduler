@@ -1,11 +1,6 @@
 important note read the rules and constrains below carefully and logically make sure all are met.
-another note some of this functions are already in the code you might doublecheck the logic and function before updating, removing or add new code function.
-AUTOMATIC SCHEDULER - PAGE
 
-UI:
-You decide what the best or appropriate UI/UX for the Automatic Scheduler page.
-Apply basic HCI principles.
-i want at least a list just like the facultyloading to show the automatic_scheduler table from the db. the rest you decide 
+AUTOMATIC SCHEDULER - PAGE
 
 Use existing page:
 scheduleview.jsx
@@ -155,11 +150,11 @@ TIME BOUNDARY
 ================================================================================
 PRE-SCHEDULING FILTERS (Applied once before GA runs)
 ================================================================================
-PRE-1 — [FIXED] All subjects are included in the automated scheduling regardless of subject_status. The GA targets and fixes subjects with missing fields or conflicted schedules. Only merged subjects are disregarded.
+PRE-1 — All subjects are included in the automated scheduling regardless of subject_status. The GA targets and fixes subjects with missing fields or conflicted schedules. Only merged subjects are disregarded.
 PRE-2 — Remove all rooms where room_status = inactive.
-PRE-3 — [FIXED] General subjects (is_general = true) are excluded from automated scheduling. Left blank for user to fill manually.
-PRE-4 — [FIXED] Merged subjects are detected before GA runs. Schedule and room assignment are left as-is for merged subjects. Only flagged for review if conflict is detected. 
-MERGED SUBJECT DETECTION LOGIC [FIXED]
+PRE-3 — General subjects (is_general = true) are excluded from automated scheduling. Left blank for user to fill manually.
+PRE-4 — Merged subjects are detected before GA runs. Schedule and room assignment are left as-is for merged subjects. Only flagged for review if conflict is detected. 
+MERGED SUBJECT DETECTION LOGIC 
   if (Course Number AND Descriptive Title == Course Number AND Descriptive Title)
     if (Schedule AND Room Assignment == Schedule AND Room Assignment)
        Row = Merged →  disregard in schedule automation, leave as-is
@@ -172,9 +167,9 @@ ROOM CONSTRAINTS (R)
 
 HARD CONSTRAINTS
 R-H1 — No Overlapping Times: Two classes or events cannot be assigned to the exact same room at the same time.
-R-H2 — [FIXED] Laboratory type subjects have priority over laboratory type rooms. Lecture subjects are assigned to lecture rooms first. If lecture rooms are exhausted, lecture subjects may overflow into laboratory rooms.
-R-H3 — [FIXED] Laboratory rooms can also serve as lecture rooms but are always taken first by laboratory type subjects.
-R-H4 — [FIXED] A subject can have both laboratory and lecture hours assigned to the same room within the same MTH or TF schedule if needed.
+R-H2 — Laboratory type subjects have priority over laboratory type rooms. Lecture subjects are assigned to lecture rooms first. If lecture rooms are exhausted, lecture subjects may overflow into laboratory rooms.
+R-H3 — Laboratory rooms can also serve as lecture rooms but are always taken first by laboratory type subjects.
+R-H4 — A subject can have both laboratory and lecture hours assigned to the same room within the same MTH or TF schedule if needed.
 R-H5 — A room with room_status = inactive must not be assigned to any class.
 
 SOFT CONSTRAINTS
@@ -186,27 +181,27 @@ SUBJECT CONSTRAINTS (S)
 ================================================================================
 
 HARD CONSTRAINTS
-S-H1 — [FIXED] Classes can only be scheduled on Monday, Tuesday, Thursday, and Friday. Saturday is excluded from automation and is user-defined only.
+S-H1 — Classes can only be scheduled on Monday, Tuesday, Thursday, and Friday. Saturday is excluded from automation and is user-defined only.
 S-H2 — A subject assigned to MTH pattern can only be scheduled on Monday and Thursday.
-S-H3 — [FIXED] A subject assigned to TF pattern can only be scheduled on Tuesday and Friday. Saturday is excluded from automation.
+S-H3 — A subject assigned to TF pattern can only be scheduled on Tuesday and Friday. Saturday is excluded from automation.
 S-H4 — Classes must start no earlier than 7:30 AM.
 S-H5 — Classes must end no later than 8:00 PM (to be confirmed).
-S-H6 — [FIXED] A subject with subject_lec_hrs greater than 0 must be assigned a lecture room first. If lecture rooms are exhausted it may overflow to a laboratory room.
-S-H7 — [FIXED] A subject with subject_lab_hrs greater than 0 must be assigned a laboratory room with priority. Laboratory rooms are taken first by lab type subjects.
-S-H8 — [FIXED] Lecture hours and laboratory hours are always split equally across the two days of the pattern based on max hours (subject_lec_hrs + subject_lab_hrs). Each day gets half of the total hours. Example: 3 hrs on MTH = 1.5 hrs Monday + 1.5 hrs Thursday.
-S-H9 — [FIXED] Subject hours must never split across MTH and TF patterns. All hours of a subject stay within its assigned pattern. Exception: user may manually override. While inputting, the system must detect and flag conflicts automatically in real time.
-S-H10 — [FIXED] The GA targets all subjects including those with missing fields or conflicted schedules for fixing. Refer to PRE-1.
+S-H6 — A subject with subject_lec_hrs greater than 0 must be assigned a lecture room first. If lecture rooms are exhausted it may overflow to a laboratory room.
+S-H7 — A subject with subject_lab_hrs greater than 0 must be assigned a laboratory room with priority. Laboratory rooms are taken first by lab type subjects.
+S-H8 — Lecture hours and laboratory hours are always split equally across the two days of the pattern based on max hours (subject_lec_hrs + subject_lab_hrs). Each day gets half of the total hours. Example: 3 hrs on MTH = 1.5 hrs Monday + 1.5 hrs Thursday.
+S-H9 — Subject hours must never split across MTH and TF patterns. All hours of a subject stay within its assigned pattern. Exception: user may manually override. While inputting, the system must detect and flag conflicts automatically in real time.
+S-H10 — The GA targets all subjects including those with missing fields or conflicted schedules for fixing. Refer to PRE-1.
 S-H11 — The same section must not have two subjects scheduled at the same time on the same day (section conflict).
-S-H12 — [FIXED] Schedule splitting is always applied. Hours are divided equally across the two days of the pattern. Example: Max hours = 3 on MTH → Monday gets 1.5 hrs, Thursday gets 1.5 hrs. By end of week the total quota of 3 hrs is met.
+S-H12 — Schedule splitting is always applied. Hours are divided equally across the two days of the pattern. Example: Max hours = 3 on MTH → Monday gets 1.5 hrs, Thursday gets 1.5 hrs. By end of week the total quota of 3 hrs is met.
 
 SOFT CONSTRAINTS
 S-S1 — [HIGH] Prioritize scheduling time slots as close to 7:30 AM as possible. Earlier time slots should be filled first before pushing classes later in the day to avoid unnecessary late scheduling.
 
-S-S3 — [HIGH] [FIXED] Hours are always divided equally across the two days of the assigned pattern only (MTH = Mon + Thu, TF = Tue + Fri). Never split across MTH and TF.
+S-S3 — [HIGH] Hours are always divided equally across the two days of the assigned pattern only (MTH = Mon + Thu, TF = Tue + Fri). Never split across MTH and TF.
 S-S4 — [LOW] There should be at least a 30-minute break between consecutive classes for the same section.
 S-S5 — [MEDIUM] A section should not exceed 5 consecutive hours of class in a single day without a break.
-S-S6 — [MEDIUM] [FIXED] A section should not have more than 8 to 10 hours of total class time in a single day.
-S-S7 — [MEDIUM] [FIXED] Subjects with both lecture and laboratory components should prefer lecture on the first day and lab on the second day of the pattern. This can be swapped vice versa to give room opening to lab or lecture rooms. Example: Subject A → Monday Lecture Room 1 / Thursday Lab Room 2 Subject B → Monday Lab Room 2 / Thursday Lecture Room 1
+S-S6 — [MEDIUM] A section should not have more than 10 hours of total class time in a single day.
+S-S7 — [MEDIUM] Subjects with both lecture and laboratory components should prefer lecture on the first day and lab on the second day of the pattern. This can be swapped vice versa to give room opening to lab or lecture rooms. Example: Subject A → Monday Lecture Room 1 / Thursday Lab Room 2 Subject B → Monday Lab Room 2 / Thursday Lecture Room 1
 S-S8 — [LOW] Prefer scheduling major or difficult subjects earlier in the day.
 
 S-S10 — [LOW] Subjects under the same curriculum (curr_id) should be spread across the week rather than packed into a single day.
