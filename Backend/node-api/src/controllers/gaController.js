@@ -375,6 +375,76 @@ function buildOfferingKey(offering) {
   ].join('|');
 }
 
+function buildAutomaticAssignmentKey(row) {
+  return [
+    normalizeUpper(row.code),
+    normalizeUpper(row.course_no),
+    toNumber(row.department_id) ?? '',
+    normalizeUpper(row.section),
+  ].join('|');
+}
+
+function resolveRoomNamesFromIdText(roomIdText, roomLookup) {
+  const roomTokens = splitList(roomIdText);
+  if (roomTokens.length === 0) return null;
+
+  const names = [];
+  for (const token of roomTokens) {
+    const numericId = toNumber(token);
+    if (numericId === null) continue;
+    const room = roomLookup.byId.get(numericId);
+    const roomName = normalizeText(room?.room_name);
+    if (roomName && !names.includes(roomName)) {
+      names.push(roomName);
+    }
+  }
+
+  return names.length > 0 ? names.join(' / ') : null;
+}
+
+function enrichAutomaticAssignments(assignments, assignableSubjects, activeRooms) {
+  const roomLookup = buildRoomLookup(activeRooms);
+  const subjectById = new Map();
+  const subjectByKey = new Map();
+
+  for (const subject of Array.isArray(assignableSubjects) ? assignableSubjects : []) {
+    const subjectId = toNumber(subject.subject_id);
+    if (subjectId !== null) {
+      subjectById.set(subjectId, subject);
+    }
+    subjectByKey.set(buildAutomaticAssignmentKey(subject), subject);
+  }
+
+  return (Array.isArray(assignments) ? assignments : []).map((row) => {
+    const sourceSubjectId = toNumber(row?.source_subject_id ?? row?.subject_id);
+    const subject =
+      (sourceSubjectId !== null ? subjectById.get(sourceSubjectId) : null) ||
+      subjectByKey.get(buildAutomaticAssignmentKey(row)) ||
+      null;
+
+    const departmentId = toNumber(row?.department_id ?? subject?.department_id);
+    const explicitDepartmentName = normalizeText(row?.department_name);
+    const derivedDepartmentName = normalizeText(subject?.department_name);
+    const departmentName = explicitDepartmentName || derivedDepartmentName || (departmentId !== null ? `Department ${departmentId}` : null);
+
+    const rawMthRoomName = normalizeText(row?.mth_room_name);
+    const rawTfsRoomName = normalizeText(row?.tfs_room_name);
+    const mthRoomId = normalizeText(row?.mth_room_id);
+    const tfsRoomId = normalizeText(row?.tfs_room_id);
+
+    const mthRoomName = rawMthRoomName || resolveRoomNamesFromIdText(mthRoomId, roomLookup) || null;
+    const tfsRoomName = rawTfsRoomName || resolveRoomNamesFromIdText(tfsRoomId, roomLookup) || null;
+
+    return {
+      ...row,
+      department_id: departmentId,
+      department_name: departmentName,
+      mth_room_name: mthRoomName,
+      tfs_room_name: tfsRoomName,
+    };
+  });
+}
+
 function buildSubjectIndex(subjects) {
   const index = new Map();
   for (const subject of subjects) {
@@ -1231,23 +1301,30 @@ async function fetchAutomaticSchedulerRows() {
   const response = await query(`
     select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
            a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
-           (a.merged = 'true') as merged, d.department_name,
+           (a.merged = 'true') as merged,
+           coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name,
            case
-             when mr2.room_name is not null and mr2.room_name <> mr1.room_name
-               then mr1.room_name || ' / ' || mr2.room_name
-             else mr1.room_name
+             when nullif(trim(a.mth_room_id), '') is null then null
+             else coalesce(mr.room_names, a.mth_room_id)
            end as mth_room_name,
            case
-             when tr2.room_name is not null and tr2.room_name <> tr1.room_name
-               then tr1.room_name || ' / ' || tr2.room_name
-             else tr1.room_name
+             when nullif(trim(a.tfs_room_id), '') is null then null
+             else coalesce(tr.room_names, a.tfs_room_id)
            end as tfs_room_name
     from public.automatic_scheduler a
     left join public.departments d on d.department_id = a.department_id
-    left join public.rooms mr1 on mr1.room_id = (case when split_part(a.mth_room_id, '/', 1) ~ '^[0-9]+$' then split_part(a.mth_room_id, '/', 1)::integer else null end)
-    left join public.rooms mr2 on mr2.room_id = (case when split_part(a.mth_room_id, '/', 2) ~ '^[0-9]+$' then split_part(a.mth_room_id, '/', 2)::integer else null end)
-    left join public.rooms tr1 on tr1.room_id = (case when split_part(a.tfs_room_id, '/', 1) ~ '^[0-9]+$' then split_part(a.tfs_room_id, '/', 1)::integer else null end)
-    left join public.rooms tr2 on tr2.room_id = (case when split_part(a.tfs_room_id, '/', 2) ~ '^[0-9]+$' then split_part(a.tfs_room_id, '/', 2)::integer else null end)
+    left join lateral (
+      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
+      from regexp_split_to_table(coalesce(a.mth_room_id, ''), '[^0-9]+') as token
+      join public.rooms r on r.room_id = token::integer
+      where token ~ '^[0-9]+$'
+    ) mr on true
+    left join lateral (
+      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
+      from regexp_split_to_table(coalesce(a.tfs_room_id, ''), '[^0-9]+') as token
+      join public.rooms r on r.room_id = token::integer
+      where token ~ '^[0-9]+$'
+    ) tr on true
     order by a.id asc
   `);
   return response.rows;
@@ -1283,6 +1360,7 @@ function toAutomaticCandidateFromSubject(subject, roomLookup) {
     code: normalizeText(subject.subject_code) || null,
     course_no: normalizeText(subject.subject_course_no) || null,
     department_id: toNumber(subject.department_id),
+    department_name: normalizeText(subject.department_name) || null,
     section: normalizeText(subject.subject_section) || null,
     descriptive_title: normalizeText(subject.subject_descriptive_title) || null,
     units,
@@ -1424,9 +1502,9 @@ function buildAutomaticSchedulerPreflight(snapshot) {
   const generalSubjects       = candidates.filter((row) => row.is_general);
   const mergedSubjects        = candidates.filter((row) => row.merged);
   const mergeConflictSubjects = candidates.filter((row) => row.merge_conflict);
-  // Exclude general, merged, and conflict subjects — none of them go to the GA
+  // General subjects are now included in the GA with lower priority.
+  // Only merged and conflict subjects are excluded.
   const excluded = new Set([
-    ...generalSubjects.map((row) => row.subject_id),
     ...mergedSubjects.map((row) => row.subject_id),
     ...mergeConflictSubjects.map((row) => row.subject_id),
   ]);
@@ -1474,7 +1552,7 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     suggested_next_step:
       status === 'blocked'
         ? 'Resolve high-severity data issues before running automatic scheduler.'
-        : 'Automatic scheduler can run. Excluded general/merged/conflict subjects remain user-managed.',
+        : 'Automatic scheduler can run. General subjects are included with lower scheduling priority; merged/conflict subjects remain user-managed.',
   };
 }
 
@@ -1876,9 +1954,9 @@ async function persistAutomaticScheduler(assignments) {
           row.lec_hrs,
           row.lab_hrs,
           row.mth_schedule,
-          row.mth_room_id,
+          row.mth_room_name || row.mth_room_id,
           row.tfs_schedule,
-          row.tfs_room_id,
+          row.tfs_room_name || row.tfs_room_id,
           String(Boolean(row.merged)),
         );
       });
@@ -1896,6 +1974,35 @@ async function persistAutomaticScheduler(assignments) {
   });
 
   return { persisted: assignments.length };
+}
+
+function normalizeRoomToken(value) {
+  return normalizeUpper(value).replace(/\s+/g, ' ').trim();
+}
+
+function toCourseOfferingRoomIdText(value, roomLookup) {
+  const tokens = splitList(value);
+  if (tokens.length === 0) return null;
+
+  const mappedIds = [];
+  for (const token of tokens) {
+    const numeric = toNumber(token);
+    if (numeric !== null && roomLookup.byId.has(numeric)) {
+      mappedIds.push(String(Number(numeric)));
+      continue;
+    }
+
+    const nameKey = normalizeRoomToken(token);
+    const room = roomLookup.byName.get(nameKey.replace(/[^A-Z0-9]/g, ''));
+    if (room?.room_id !== undefined && room?.room_id !== null) {
+      mappedIds.push(String(Number(room.room_id)));
+      continue;
+    }
+  }
+
+  const uniqueIds = [...new Set(mappedIds)];
+  if (uniqueIds.length > 0) return uniqueIds.join('/');
+  return normalizeText(value) || null;
 }
 
 async function buildAutomaticSchedulerExportRows() {
@@ -1924,6 +2031,13 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
   if (rows.length === 0) {
     return { updated: 0, backup: null };
   }
+
+  const roomResp = await query(`
+    select room_id, room_name
+    from public.rooms
+    order by room_id asc
+  `);
+  const roomLookup = buildRoomLookup(roomResp.rows || []);
 
   let backup = null;
 
@@ -1966,6 +2080,8 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
       rows.forEach((row, idx) => {
         const base = idx * columns.length;
         placeholders.push(`(${columns.map((_, cIdx) => `$${base + cIdx + 1}`).join(', ')})`);
+        const normalizedMthRoomId = toCourseOfferingRoomIdText(row.mth_room_id, roomLookup);
+        const normalizedTfsRoomId = toCourseOfferingRoomIdText(row.tfs_room_id, roomLookup);
         values.push(
           row.curr_id,
           row.code,
@@ -1977,9 +2093,9 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
           row.lec_hrs,
           row.lab_hrs,
           row.mth_schedule,
-          row.mth_room_id,
+          normalizedMthRoomId,
           row.tfs_schedule,
-          row.tfs_room_id,
+          normalizedTfsRoomId,
           String(Boolean(row.merged)),
         );
       });
@@ -2086,7 +2202,11 @@ export async function postRunAutomaticScheduler(req, res) {
 
     // Merged and conflict subjects are excluded from the GA and must NOT appear in the
     // generated schedule output — they are reported only in the preflight issues list.
-    const allAssignments = result.assignments;
+    const allAssignments = enrichAutomaticAssignments(
+      result.assignments,
+      preflight.assignable_subjects,
+      activeRooms
+    );
     console.log(`[run][automatic] total=${allAssignments.length}, scheduled=${allAssignments.length}, merged_excluded=${(preflight.excluded_merged_subjects || []).length}, conflict_excluded=${(preflight.excluded_conflict_subjects || []).length}, dry_run=${dryRun}, used_ga=${usedGA}`);
 
     let persistence = { persisted: 0, dry_run: true };

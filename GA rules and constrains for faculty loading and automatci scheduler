@@ -200,7 +200,7 @@ S-S1 — [HIGH] Prioritize scheduling time slots as close to 7:30 AM as possible
 S-S3 — [HIGH] Hours are always divided equally across the two days of the assigned pattern only (MTH = Mon + Thu, TF = Tue + Fri). Never split across MTH and TF.
 S-S4 — [LOW] There should be at least a 30-minute break between consecutive classes for the same section.
 S-S5 — [MEDIUM] A section should not exceed 5 consecutive hours of class in a single day without a break.
-S-S6 — [MEDIUM] A section should not have more than 8 to 10 hours of total class time in a single day.
+S-S6 — [MEDIUM] A section should not have more than 10 hours of total class time in a single day.
 S-S7 — [MEDIUM] Subjects with both lecture and laboratory components should prefer lecture on the first day and lab on the second day of the pattern. This can be swapped vice versa to give room opening to lab or lecture rooms. Example: Subject A → Monday Lecture Room 1 / Thursday Lab Room 2 Subject B → Monday Lab Room 2 / Thursday Lecture Room 1
 S-S8 — [LOW] Prefer scheduling major or difficult subjects earlier in the day.
 

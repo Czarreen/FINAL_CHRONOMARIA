@@ -198,6 +198,14 @@ function abbreviateDept(name) {
   return words.map((w) => w[0]?.toUpperCase() || '').join('');
 }
 
+function isPathFitSubject(courseNo) {
+  return /path\s*fit/i.test(courseNo || '');
+}
+
+function isGymRoom(roomName) {
+  return /gym/i.test(roomName || '');
+}
+
 function ScheduleTable({ rows, loading }) {
   const normalizeKey = (v) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
 
@@ -237,6 +245,7 @@ function ScheduleTable({ rows, loading }) {
     code: (r) => (r.code || '').toLowerCase(),
     course_no: (r) => (r.course_no || '').toLowerCase(),
     section: (r) => (r.section || '').toLowerCase(),
+    dept_name: (r) => (r.department_name || '').toLowerCase(),
     title: (r) => (r.descriptive_title || '').toLowerCase(),
     lec_hrs: (r) => Number(r.lec_hrs) || 0,
     lab_hrs: (r) => Number(r.lab_hrs) || 0,
@@ -332,6 +341,7 @@ function ScheduleTable({ rows, loading }) {
             <Th col="code">Code</Th>
             <Th col="course_no">Course No.</Th>
             <Th col="section">Section</Th>
+            <Th col="dept_name">Department</Th>
             <Th col="title">Title</Th>
             <Th col="lec_hrs">Lec Hrs</Th>
             <Th col="lab_hrs">Lab Hrs</Th>
@@ -346,8 +356,16 @@ function ScheduleTable({ rows, loading }) {
           {filteredRows.map((row, idx) => (
             <tr key={idx} className="border-b border-white/30 hover:bg-white/40 transition-colors">
               <td className="px-4 py-3 text-on-surface font-medium">{row.code || '—'}</td>
-              <td className="px-4 py-3 text-on-surface">{row.course_no || '—'}</td>
+              <td className="px-4 py-3 text-on-surface">
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <span>{row.course_no || '—'}</span>
+                  {isPathFitSubject(row.course_no) && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">PATH FIT</span>
+                  )}
+                </span>
+              </td>
               <td className="px-4 py-3 text-on-surface">{row.section || '—'}</td>
+              <td className="px-4 py-3 text-on-surface">{row.department_name || '—'}</td>
               <td className="px-4 py-3 text-on-surface max-w-xs truncate" title={row.descriptive_title}>{row.descriptive_title || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.lec_hrs || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.lab_hrs || '—'}</td>
@@ -363,7 +381,20 @@ function ScheduleTable({ rows, loading }) {
                   </span>
                 ) : '—'}
               </td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.mth_room_name || row.mth_room_id || '—'}</td>
+              <td className="px-4 py-3 text-on-surface text-xs">
+                {(() => {
+                  const name = row.mth_room_name || row.mth_room_id || '';
+                  if (!name) return '—';
+                  return (
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                      <span>{name}</span>
+                      {isGymRoom(name) && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">GYM</span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </td>
               <td className="px-4 py-3 text-on-surface text-xs">
                 {row.tfs_schedule ? (
                   <span className="inline-flex items-center gap-1">
@@ -376,7 +407,20 @@ function ScheduleTable({ rows, loading }) {
                   </span>
                 ) : '—'}
               </td>
-              <td className="px-4 py-3 text-on-surface text-xs">{row.tfs_room_name || row.tfs_room_id || '—'}</td>
+              <td className="px-4 py-3 text-on-surface text-xs">
+                {(() => {
+                  const name = row.tfs_room_name || row.tfs_room_id || '';
+                  if (!name) return '—';
+                  return (
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                      <span>{name}</span>
+                      {isGymRoom(name) && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">GYM</span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </td>
               <td className="px-4 py-3">
                 {(() => {
                   const isMerged = row.merged === true || row.merged === 'true';
@@ -574,7 +618,8 @@ export default function ScheduleView({ onNavigate }) {
   const unresolvedList = normalizeUnresolvedIssues(result);
   const unresolvedCount = unresolvedList.length;
   const fitnessScore = Number(result?.fitness_overall || 0);
-  const isFixed = Boolean(result) && fitnessScore === 100 && unresolvedCount === 0;
+  const gaConflicts = Array.isArray(result?.report?.ga_report?.conflicts) ? result.report.ga_report.conflicts : [];
+  const isFixed = Boolean(result) && fitnessScore === 100 && unresolvedCount === 0 && gaConflicts.length === 0;
   const needsManualResolution = Boolean(result) && !isFixed;
   const unresolvedCards = unresolvedList.map((issue) => ({
     ...issue,
@@ -692,6 +737,10 @@ export default function ScheduleView({ onNavigate }) {
               <p className="text-xs font-bold uppercase tracking-[0.1em] text-on-surface-variant">Unresolved Issues</p>
               <p className="mt-2 text-2xl font-bold text-on-surface">{lastRunSummary.unresolvedCount}</p>
             </div>
+            <div className="rounded-xl bg-white/60 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.1em] text-on-surface-variant">GA Conflicts</p>
+              <p className="mt-2 text-2xl font-bold text-on-surface">{gaConflicts.length}</p>
+            </div>
           </div>
         </div>
       )}
@@ -740,6 +789,10 @@ export default function ScheduleView({ onNavigate }) {
                   <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Persistent Issues</div>
                     <div className="mt-1 text-2xl font-bold">{unresolvedCount}</div>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700">GA Conflicts</div>
+                    <div className="mt-1 text-2xl font-bold">{gaConflicts.length}</div>
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-900">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Decision</div>
@@ -858,6 +911,78 @@ export default function ScheduleView({ onNavigate }) {
             )}
           </div>
         </motion.div>
+      )}
+
+      {/* GA Conflict Report */}
+      {gaConflicts.length > 0 && (
+        <div className="glass-panel rounded-2xl p-6">
+          <SectionHeader
+            title={`GA Conflict Report (${gaConflicts.length})`}
+            subtitle="Subjects scheduled by the GA but still in hard conflict. These are the exact violations reducing the fitness score."
+            action={null}
+          />
+          <div className="mt-4 space-y-3">
+            {gaConflicts.map((c, idx) => {
+              const isRoom = c.type === 'room_conflict';
+              const isOverload = c.type === 'section_overload';
+              const isGymExclusivity = c.type === 'gym_exclusivity';
+              const isGymCapacity = c.type === 'gym_capacity';
+              return (
+                <div key={idx} className={`rounded-2xl border p-4 ${
+                  isRoom
+                    ? 'border-rose-200 bg-rose-50/60'
+                    : isOverload
+                    ? 'border-amber-200 bg-amber-50/60'
+                    : isGymExclusivity || isGymCapacity
+                    ? 'border-purple-200 bg-purple-50/60'
+                    : 'border-orange-200 bg-orange-50/60'
+                }`}>
+                  <div className="flex items-start gap-3 flex-wrap">
+                    <span className={`mt-0.5 flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${
+                      isRoom
+                        ? 'bg-rose-100 text-rose-700'
+                        : isOverload
+                        ? 'bg-amber-100 text-amber-700'
+                        : isGymExclusivity
+                        ? 'bg-purple-100 text-purple-700'
+                        : isGymCapacity
+                        ? 'bg-violet-100 text-violet-700'
+                        : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {isRoom ? 'Room Conflict' : isOverload ? 'Daily Overload' : isGymExclusivity ? 'GYM Exclusivity' : isGymCapacity ? 'GYM Capacity' : 'Section Overlap'}
+                    </span>
+                    {c.day && <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 mt-1">{c.day}</span>}
+                    {isRoom && c.room && (
+                      <span className="text-[11px] font-semibold text-slate-500 mt-1">Room: {c.room}</span>
+                    )}
+                    {!isRoom && !isGymExclusivity && !isGymCapacity && c.section && (
+                      <span className="text-[11px] font-semibold text-slate-500 mt-1">Section: {c.section}</span>
+                    )}
+                    {isOverload && c.total_hours != null && (
+                      <span className="text-[11px] font-semibold text-amber-600 mt-1">{c.total_hours}h / 10h limit</span>
+                    )}
+                    {(isGymExclusivity || isGymCapacity) && c.room && (
+                      <span className="text-[11px] font-semibold text-purple-600 mt-1">Room: {c.room}</span>
+                    )}
+                  </div>
+                  {isGymExclusivity && c.subject && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700">{c.subject}</span>
+                    </div>
+                  )}
+                  <p className="mt-2 text-sm font-medium text-on-surface">{c.problem}</p>
+                  {Array.isArray(c.subjects) && c.subjects.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {c.subjects.map((sub, si) => (
+                        <span key={si} className="rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-700">{sub}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Issues Summary */}
