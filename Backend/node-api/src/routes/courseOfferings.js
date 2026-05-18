@@ -433,6 +433,10 @@ function extractRoomTokens(rawValue) {
 
 // Resolve a raw room cell to a slash-joined string of room IDs using the prebuilt lookup.
 // All rooms are guaranteed to exist in roomLookup by the time this is called.
+// Resolve a raw room cell value to a slash-joined string of room IDs.
+// Tokens that are pure numbers are validated against byId (treated as room_id references).
+// All other tokens are matched by name against byName.
+// Any token that does not match an existing room produces a hard validation error.
 function resolveRoomIds(roomValue, roomLookup) {
   const tokens = extractRoomTokens(roomValue);
   if (tokens.length === 0) return { roomIds: null, errors: [] };
@@ -441,13 +445,24 @@ function resolveRoomIds(roomValue, roomLookup) {
   const errors = [];
 
   for (const token of tokens) {
+    // Pure numeric token → treat as a direct room_id reference
+    if (/^\d+$/.test(token)) {
+      const numericId = Number(token);
+      if (roomLookup.byId.has(numericId)) {
+        roomIds.push(numericId);
+      } else {
+        errors.push(`Room ID ${numericId} does not exist in the rooms table.`);
+      }
+      continue;
+    }
+
+    // Text token → match by room name
     const lookupKey = normalizeLookupKey(token);
     const id = roomLookup.byName.get(lookupKey);
     if (id) {
       roomIds.push(id);
     } else {
-      // Should never happen after preloadRooms — log as warning, not hard error
-      errors.push(`Room not found in lookup: "${token}"`);
+      errors.push(`Room "${token}" was not found in the rooms table. Add it to the rooms list first.`);
     }
   }
 
@@ -458,78 +473,12 @@ function resolveRoomIds(roomValue, roomLookup) {
   };
 }
 
-// Scan every data row for room values, deduplicate room names, then bulk-upsert into
-// the rooms table. Returns a fully populated roomLookup { byId, byName }.
-// This runs BEFORE the main import loop so every room exists by the time we process rows.
-async function preloadRooms(dataRows, mapping) {
-  // Find the column indices that carry room values
-  const roomColumnIndices = mapping
-    .filter((entry) => entry.targetField === 'mth_room_id' || entry.targetField === 'tfs_room_id')
-    .map((entry) => entry.index);
-
-  // Collect every unique room name from all data rows
-  const uniqueRoomNames = new Set();
-  for (const rowCells of dataRows) {
-    for (const colIndex of roomColumnIndices) {
-      for (const token of extractRoomTokens(rowCells[colIndex])) {
-        // Skip bare numeric values — they are already IDs and handled by the ID path
-        if (!/^\d+$/.test(token)) {
-          uniqueRoomNames.add(token);
-        }
-      }
-    }
-  }
-
-  if (uniqueRoomNames.size === 0) {
-    // No room names in CSV — load existing rooms and return
-    return fetchRoomLookup();
-  }
-
-  // Load all rooms currently in the database
-  const { data: existingRooms, error: fetchError } = await supabaseAdmin
-    .from('rooms')
-    .select('room_id,room_name');
-
-  if (fetchError) {
-    throw new Error(`Failed to load rooms before import: ${fetchError.message}`);
-  }
-
-  const byId = new Map();
-  const byName = new Map();
-
-  for (const row of existingRooms ?? []) {
-    const id = Number(row.room_id);
-    const name = normalizeCell(row.room_name);
-    if (!Number.isFinite(id) || !name) continue;
-    byId.set(id, id);
-    byName.set(normalizeLookupKey(name), id);
-  }
-
-  // Determine which room names are new (not yet in DB)
-  const toInsert = [...uniqueRoomNames].filter(
-    (name) => !byName.has(normalizeLookupKey(name))
-  );
-
-  if (toInsert.length > 0) {
-    const { data: inserted, error: insertError } = await supabaseAdmin
-      .from('rooms')
-      .insert(toInsert.map((name) => ({ room_name: name, room_status: 'available' })))
-      .select('room_id,room_name');
-
-    if (insertError) {
-      throw new Error(`Failed to pre-populate rooms: ${insertError.message}`);
-    }
-
-    for (const row of inserted ?? []) {
-      const id = Number(row.room_id);
-      const name = normalizeCell(row.room_name);
-      if (!Number.isFinite(id) || !name) continue;
-      byId.set(id, id);
-      byName.set(normalizeLookupKey(name), id);
-    }
-  }
-
-  return { byId, byName };
+// Load all existing rooms from the database and return a read-only lookup { byId, byName }.
+// The rooms table is the source of truth and is never modified by the import.
+// Room names from the CSV are matched against this lookup; unmatched names produce
+// per-row validation errors in resolveRoomIds rather than creating new room records.
+async function preloadRooms(_dataRows, _mapping) {
+  return fetchRoomLookup();
 }
 
 function normalizeRoomFieldValue(value) {
@@ -1347,8 +1296,8 @@ router.post('/import-csv', async (req, res) => {
       warnings: [],
     };
 
-    // In replace mode: wipe subjects → rooms → course_offerings before inserting fresh data.
-    // roomLookup is built AFTER the deletes so it starts empty and rooms are recreated from CSV.
+    // In replace mode: wipe subjects → course_offerings before inserting fresh data.
+    // The rooms table is NOT touched — it is managed separately and is the source of truth.
     if (replaceMode) {
       const { error: delSubjectsError } = await supabaseAdmin
         .from('subjects')
@@ -1357,15 +1306,6 @@ router.post('/import-csv', async (req, res) => {
 
       if (delSubjectsError) {
         return res.status(500).json({ error: `Replace mode: failed to clear subjects: ${delSubjectsError.message}` });
-      }
-
-      const { error: delRoomsError } = await supabaseAdmin
-        .from('rooms')
-        .delete()
-        .neq('room_id', 0);
-
-      if (delRoomsError) {
-        return res.status(500).json({ error: `Replace mode: failed to clear rooms: ${delRoomsError.message}` });
       }
 
       const { error: delOfferingsError } = await supabaseAdmin
@@ -1378,10 +1318,10 @@ router.post('/import-csv', async (req, res) => {
       }
     }
 
-    // Pre-populate rooms table from CSV BEFORE processing course offering rows.
-    // This scans all room columns, deduplicates names (A101/A102 split into A101 and A102),
-    // bulk-inserts any new rooms, then returns a complete name→id lookup.
-    // In replace mode the rooms table was just cleared so all CSV rooms are treated as new.
+    // Load the rooms table into a lookup (name→id, id→id).
+    // The rooms table is the source of truth and is never modified by the import.
+    // Room names in the CSV are matched against existing rooms; unmatched names
+    // produce per-row validation errors rather than creating new room records.
     const roomLookup = await preloadRooms(dataRows, mapping);
 
     // Preload existing offerings into a Map for O(1) insert-vs-update decisions.
