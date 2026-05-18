@@ -37,6 +37,31 @@ def split_tokens(value: Any) -> List[str]:
     return [token.strip() for token in re.split(r"[,;/|]+", normalize_text(value)) if token.strip()]
 
 
+DAY_ALIASES = {
+    "M": "MON",
+    "MON": "MON",
+    "MONDAY": "MON",
+    "T": "TUE",
+    "TU": "TUE",
+    "TUE": "TUE",
+    "TUES": "TUE",
+    "TUESDAY": "TUE",
+    "TH": "THU",
+    "THU": "THU",
+    "THUR": "THU",
+    "THURS": "THU",
+    "THURSDAY": "THU",
+    "F": "FRI",
+    "FRI": "FRI",
+    "FRIDAY": "FRI",
+    "SAT": "SAT",
+    "SATURDAY": "SAT",
+    "S": "SAT",
+}
+
+AUTOMATED_DAYS = ("MON", "TUE", "THU", "FRI")
+
+
 def extract_keywords(value: Any) -> List[str]:
     keywords: List[str] = []
     for token in split_tokens(value):
@@ -86,6 +111,46 @@ def parse_time_range(schedule_text: Any) -> Optional[Dict[str, int]]:
     return {"start": start, "end": end, "duration": end - start}
 
 
+def parse_days_from_schedule(schedule_text: Any, group: str) -> List[str]:
+    text = normalize_upper(schedule_text)
+    compact = re.sub(r"[^A-Z]", " ", text).strip()
+    parts = compact.split() if compact else []
+    days: List[str] = []
+
+    def add_day(day: str) -> None:
+        if day not in days:
+            days.append(day)
+
+    for part in parts:
+        if part in DAY_ALIASES:
+            add_day(DAY_ALIASES[part])
+            continue
+        if part == "MTH":
+            add_day("MON")
+            add_day("THU")
+            continue
+        if part in ("TF", "TFS"):
+            add_day("TUE")
+            add_day("FRI")
+            continue
+        if "MON" in part:
+            add_day("MON")
+        if "TH" in part:
+            add_day("THU")
+        if "TUE" in part:
+            add_day("TUE")
+        if "FRI" in part:
+            add_day("FRI")
+
+    if not days:
+        if group == "MTH":
+            days = ["MON", "THU"]
+        elif group in ("TFS", "TF"):
+            days = ["TUE", "FRI"]
+
+    return days
+
+
 def build_schedule_blocks(offering: Dict[str, Any]) -> List[Dict[str, Any]]:
     blocks: List[Dict[str, Any]] = []
     for group in ("mth", "tfs"):
@@ -95,12 +160,69 @@ def build_schedule_blocks(offering: Dict[str, Any]) -> List[Dict[str, Any]]:
         parsed = parse_time_range(schedule_text)
         if not parsed:
             continue
-        blocks.append({"group": group.upper(), "schedule_text": schedule_text, **parsed})
+        group_name = group.upper()
+        days = parse_days_from_schedule(schedule_text, group_name)
+        blocks.append({"group": group_name, "days": days, "schedule_text": schedule_text, **parsed})
     return blocks
 
 
 def overlaps(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
     return left["start"] < right["end"] and right["start"] < left["end"]
+
+
+def blocks_overlap_with_days(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    left_days = set(left.get("days", []))
+    right_days = set(right.get("days", []))
+    if not left_days.intersection(right_days):
+        return False
+    return overlaps(left, right)
+
+
+def faculty_has_conflict(existing: Sequence[Dict[str, Any]], candidate: Sequence[Dict[str, Any]]) -> bool:
+    for left in existing:
+        for right in candidate:
+            if blocks_overlap_with_days(left, right):
+                return True
+    return False
+
+
+def consecutive_minutes_for_day(blocks: Sequence[Dict[str, Any]], day: str) -> float:
+    day_blocks = sorted([b for b in blocks if day in set(b.get("days", []))], key=lambda b: b["start"])
+    if not day_blocks:
+        return 0.0
+
+    max_run = 0.0
+    current_run = 0.0
+    previous: Optional[Dict[str, Any]] = None
+    for block in day_blocks:
+        if previous is None:
+            current_run = float(block.get("duration", 0.0))
+        else:
+            gap = max(0.0, float(block["start"]) - float(previous["end"]))
+            if gap < 30.0:
+                current_run += float(block.get("duration", 0.0))
+            else:
+                max_run = max(max_run, current_run)
+                current_run = float(block.get("duration", 0.0))
+        previous = block
+
+    return max(max_run, current_run)
+
+
+def daily_minutes(blocks: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    totals: Dict[str, float] = {day: 0.0 for day in AUTOMATED_DAYS}
+    for day in AUTOMATED_DAYS:
+        day_blocks = sorted([b for b in blocks if day in set(b.get("days", []))], key=lambda b: b["start"])
+        merged: List[Tuple[float, float]] = []
+        for b in day_blocks:
+            start = float(b["start"])
+            end = float(b["end"])
+            if not merged or start >= merged[-1][1]:
+                merged.append((start, end))
+            else:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        totals[day] = sum(end - start for start, end in merged)
+    return totals
 
 
 def normalize_role(role: Any) -> str:
@@ -182,8 +304,16 @@ def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any]
     return score
 
 
+def prep_key(offering: Dict[str, Any]) -> str:
+    return f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
+
+
 def count_preparations(assignments: Sequence[Dict[str, Any]]) -> int:
-    return len({f"{normalize_upper(assignment['offering'].get('code'))}|{normalize_upper(assignment['offering'].get('course_no'))}" for assignment in assignments})
+    return len({prep_key(assignment["offering"]) for assignment in assignments if assignment.get("offering")})
+
+
+def is_specialization_match(specialization_score: float) -> bool:
+    return specialization_score > 0.0
 
 
 def score_offering_difficulty(offering: Dict[str, Any], faculties: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]]) -> float:
@@ -206,7 +336,9 @@ def choose_best_faculty(
     current_assignments: Optional[Dict[int, List[Dict[str, Any]]]] = None,
 ) -> Optional[int]:
     matched_subject = subject_index.get(build_offering_key(offering))
-    scored: List[Tuple[int, float]] = []
+    base_candidates: List[Dict[str, Any]] = []
+    offering_blocks = build_schedule_blocks(offering)
+    candidate_prep = prep_key(offering)
 
     for index, faculty in enumerate(faculties):
         units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
@@ -232,52 +364,108 @@ def choose_best_faculty(
         # Hard constraint checks based on current assignments:
         assignments_for_faculty = (current_assignments or {}).get(index, [])
         # F-H8: preparations must not exceed 4
-        current_prep = count_preparations(assignments_for_faculty)
-        # if adding this offering increases preparations beyond 4 -> skip
-        new_prep = current_prep + (1 if offering else 0)
+        prep_set = {prep_key(a["offering"]) for a in assignments_for_faculty if a.get("offering")}
+        prep_set.add(candidate_prep)
+        new_prep = len(prep_set)
         if new_prep > 4:
             continue
 
-        # F-H7: no more than 4 consecutive hours (240 minutes)
-        # compute schedule blocks including the candidate offering
         existing_blocks: List[Dict[str, Any]] = []
         for a in assignments_for_faculty:
             existing_blocks.extend(build_schedule_blocks(a.get("offering") if isinstance(a, dict) and a.get("offering") else a))
-        # add candidate offering blocks
-        existing_blocks.extend(build_schedule_blocks(offering))
-        # sort and compute max consecutive run
-        if existing_blocks:
-            blocks_sorted = sorted(existing_blocks, key=lambda b: b["start"])
-            cons = 0.0
-            max_cons = 0.0
-            for i, b in enumerate(blocks_sorted):
-                if i == 0:
-                    cons = b.get("duration", 0)
-                else:
-                    gap = max(0.0, float(b.get("start", 0)) - float(blocks_sorted[i - 1].get("end", 0)))
-                    if gap < 30:
-                        cons += b.get("duration", 0)
-                    else:
-                        max_cons = max(max_cons, cons)
-                        cons = b.get("duration", 0)
-            max_cons = max(max_cons, cons)
-            if max_cons > 240:
-                continue
 
-        score = 0.0
-        # Priority ordering guidance from rules:
-        # specialization first, then department, then role, then load usage
-        score += specialization_score * 3.0
-        score += 80.0 if dept_match else 12.0
-        score += 28.0 if role == "FT" else 6.0 if role == "PT" else 0.0
-        score += (projected_units / max_units) * 14.0 if max_units > 0 else 0.0
-        score -= current_load * 0.4
+        # F-H1: strict no double-booking.
+        if faculty_has_conflict(existing_blocks, offering_blocks):
+            continue
 
-        scored.append((index, score))
+        combined_blocks = [*existing_blocks, *offering_blocks]
 
-    if not scored:
+        # F-H7: strict max 4 consecutive hours per day.
+        if any(consecutive_minutes_for_day(combined_blocks, day) > 240.0 for day in AUTOMATED_DAYS):
+            continue
+
+        # F-S3: keep daily teaching within 8-10 hour guidance (hard cap at 10h).
+        day_totals = daily_minutes(combined_blocks)
+        if any(total > 600.0 for total in day_totals.values()):
+            continue
+
+        base_candidates.append(
+            {
+                "index": index,
+                "role": role,
+                "dept_match": dept_match,
+                "specialization_score": specialization_score,
+                "projected_units": projected_units,
+                "max_units": max_units,
+                "current_load": current_load,
+                "day_totals": day_totals,
+                "combined_blocks": combined_blocks,
+            }
+        )
+
+    if not base_candidates:
         return None
 
+    # Priority 1 — specialization match wins.
+    specialized = [candidate for candidate in base_candidates if is_specialization_match(candidate["specialization_score"])]
+    priority_pool = specialized if specialized else base_candidates
+
+    # Priority 2 — same department first.
+    same_department = [candidate for candidate in priority_pool if candidate["dept_match"]]
+    if same_department:
+        priority_pool = same_department
+    elif not specialized:
+        # Priority 3 fallback for non-specialized cross-department is recommendation-only.
+        return None
+
+    # Priority 4 — full-time first at each stage.
+    full_time = [candidate for candidate in priority_pool if candidate["role"] == "FT"]
+    if full_time:
+        priority_pool = full_time
+
+    def candidate_soft_score(candidate: Dict[str, Any]) -> float:
+        score = 0.0
+        projected_units = float(candidate["projected_units"])
+        max_units = float(candidate["max_units"])
+        current_load = float(candidate["current_load"])
+        specialization_score = float(candidate["specialization_score"])
+        day_totals = candidate["day_totals"]
+        combined_blocks = candidate["combined_blocks"]
+
+        # F-S1: prioritize earlier schedules near 7:30 AM.
+        earliest_start = min((float(block["start"]) for block in combined_blocks), default=450.0)
+        score -= max(0.0, earliest_start - 450.0) * 0.02
+
+        # F-S2/F-S4: reward workable breaks and compact schedules.
+        for day in AUTOMATED_DAYS:
+            day_blocks = sorted([b for b in combined_blocks if day in set(b.get("days", []))], key=lambda b: b["start"])
+            for idx in range(1, len(day_blocks)):
+                gap = max(0.0, float(day_blocks[idx]["start"]) - float(day_blocks[idx - 1]["end"]))
+                if 0.0 < gap < 30.0:
+                    score -= 8.0
+                elif gap > 30.0:
+                    score -= gap / 20.0
+
+        # F-S7: distribute load across days.
+        daily_values = [float(day_totals[day]) for day in AUTOMATED_DAYS]
+        mean_daily = sum(daily_values) / max(1, len(daily_values))
+        variance = sum((value - mean_daily) ** 2 for value in daily_values) / max(1, len(daily_values))
+        score -= variance / 6000.0
+
+        # F-S3: discourage loads above 8h/day even if <=10h hard cap.
+        score -= sum(max(0.0, value - 480.0) for value in daily_values) * 0.04
+
+        # F-S8/F-S9/F-S10 signals.
+        score += 1.5 if candidate["role"] == "FT" else 0.0
+        score += (projected_units / max_units) * 2.0 if max_units > 0 else 0.0
+        score -= current_load * 0.03
+        score += specialization_score * 0.06
+        if candidate["dept_match"]:
+            score += 0.8
+
+        return score
+
+    scored = [(candidate["index"], candidate_soft_score(candidate)) for candidate in priority_pool]
     scored.sort(key=lambda pair: (-pair[1], pair[0], rng.random()))
     return scored[0][0]
 
@@ -292,6 +480,8 @@ def build_recommended_candidates(
     candidates: List[Tuple[float, Dict[str, Any]]] = []
 
     for index, faculty in enumerate(faculties):
+        if normalize_upper(faculty.get("faculty_status")) != "ACTIVE":
+            continue
         max_units = max(1.0, to_number(faculty.get("faculty_max_units")) or 1.0)
         current = loads.get(index, 0.0)
         available = max(0.0, max_units - current)
@@ -331,7 +521,7 @@ def build_initial_candidate(
     if initial_loads:
         # copy initial loads (keys are faculty indices)
         loads.update({int(k): float(v) for k, v in initial_loads.items()})
-    assignments = [-1 for _ in offerings]
+    assignments: List[int] = [-1 for _ in offerings]
     unassigned: List[Dict[str, Any]] = []
 
     ordering = sorted(
@@ -346,6 +536,22 @@ def build_initial_candidate(
     faculty_assignments: Dict[int, List[Dict[str, Any]]] = {}
 
     for index, offering, _difficulty in ordering:
+        offering_blocks = build_schedule_blocks(offering)
+        has_automated_days = any(set(block.get("days", [])).intersection(set(AUTOMATED_DAYS)) for block in offering_blocks)
+        if offering_blocks and not has_automated_days:
+            unassigned.append(
+                {
+                    "offering_id": offering.get("id"),
+                    "code": offering.get("code"),
+                    "course_no": offering.get("course_no"),
+                    "section": offering.get("section"),
+                    "descriptive_title": offering.get("descriptive_title"),
+                    "reason": "Saturday-only schedules are user-defined and excluded from automated faculty loading.",
+                    "recommended_candidates": [],
+                }
+            )
+            continue
+
         faculty_index = choose_best_faculty(offering, faculties, loads, subject_index, rng, current_assignments=faculty_assignments)
         if faculty_index is None:
             unassigned.append(
@@ -355,7 +561,7 @@ def build_initial_candidate(
                     "course_no": offering.get("course_no"),
                     "section": offering.get("section"),
                     "descriptive_title": offering.get("descriptive_title"),
-                    "reason": "No eligible faculty after specialization/department/units checks.",
+                    "reason": "No eligible faculty after specialization/department/role/units checks.",
                     "recommended_candidates": build_recommended_candidates(offering, faculties, loads, subject_index),
                 }
             )
@@ -388,9 +594,15 @@ def mutate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offeri
             continue
         current = next_candidate[index]
         units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
-        loads[current] = max(0.0, loads.get(current, 0.0) - units)
+        if current is not None and current >= 0:
+            loads[current] = max(0.0, loads.get(current, 0.0) - units)
+            if current in faculty_assignments:
+                faculty_assignments[current] = [
+                    item for item in faculty_assignments[current]
+                    if item.get("offering") is not offerings[index]
+                ]
         replacement = choose_best_faculty(offering, faculties, loads, subject_index, rng, current_assignments=faculty_assignments)
-        next_candidate[index] = replacement
+        next_candidate[index] = replacement if replacement is not None else -1
         # update loads and assignments maps
         if replacement is not None:
             loads[replacement] = loads.get(replacement, 0.0) + units
@@ -409,8 +621,21 @@ def create_rng(seed: Any) -> random.Random:
 
 def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, Any]], offerings: Sequence[Dict[str, Any]], subject_index: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     assignments: List[Dict[str, Any]] = []
+    unassigned_subjects: List[Dict[str, Any]] = []
     for offering_index, faculty_index in enumerate(candidate):
         offering = offerings[offering_index]
+        if faculty_index is None or faculty_index < 0 or faculty_index >= len(faculties):
+            unassigned_subjects.append(
+                {
+                    "offering_id": offering.get("id"),
+                    "code": offering.get("code"),
+                    "course_no": offering.get("course_no"),
+                    "section": offering.get("section"),
+                    "descriptive_title": offering.get("descriptive_title"),
+                    "reason": "No assigned faculty.",
+                }
+            )
+            continue
         faculty = faculties[faculty_index]
         assignments.append(
             {
@@ -475,44 +700,52 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
             hard_penalty += (prep_count - 4) * 120.0
             conflicts.append({"type": "preparations", "faculty_id": faculty_id, "problem": f"Faculty has {prep_count} preparations (exceeds 4)"})
 
-        blocks = sorted(block_map.get(faculty_id, []), key=lambda block: block["start"])
-        if len(blocks) >= 2:
+        blocks = block_map.get(faculty_id, [])
+        if len(blocks) >= 1:
+            day_totals = daily_minutes(blocks)
+            daily_values = [day_totals[day] for day in AUTOMATED_DAYS]
+
+            # Hard conflict checks per day.
+            for day in AUTOMATED_DAYS:
+                day_blocks = sorted([b for b in blocks if day in set(b.get("days", []))], key=lambda b: b["start"])
+                for idx in range(1, len(day_blocks)):
+                    if overlaps(day_blocks[idx - 1], day_blocks[idx]):
+                        hard_penalty += 40.0
+                        conflicts.append({"type": "time_conflict", "faculty_id": faculty_id, "problem": f"Faculty has overlapping schedule blocks on {day}"})
+
+                max_consecutive = consecutive_minutes_for_day(blocks, day)
+                if max_consecutive > 240.0:
+                    hard_penalty += (max_consecutive - 240.0) * 10.0
+                    conflicts.append({"type": "consecutive_hours", "faculty_id": faculty_id, "problem": f"Faculty has {max_consecutive/60:.2f} consecutive teaching hours (>4) on {day}"})
+
+            # F-S2/F-S4: gap penalties and schedule fragmentation.
             gap_total = 0.0
-            block_duration = 0.0
-            # detect consecutive teaching duration without >=30min break
-            consecutive_duration = 0.0
-            max_consecutive = 0.0
-            for idx, block in enumerate(blocks):
-                block_duration += block["duration"]
-                if idx > 0:
-                    gap = max(0.0, float(block["start"]) - float(blocks[idx - 1]["end"]))
+            gap_count = 0
+            for day in AUTOMATED_DAYS:
+                day_blocks = sorted([b for b in blocks if day in set(b.get("days", []))], key=lambda b: b["start"])
+                for idx in range(1, len(day_blocks)):
+                    gap = max(0.0, float(day_blocks[idx]["start"]) - float(day_blocks[idx - 1]["end"]))
                     gap_total += gap
-                    if overlaps(blocks[idx - 1], block):
-                        hard_penalty += 35.0
-                        conflicts.append({"type": "time_conflict", "faculty_id": faculty_id, "problem": "Faculty has overlapping schedule blocks"})
+                    gap_count += 1
+                    if 0.0 < gap < 30.0:
+                        soft_penalty += 8.0
 
-                    # consecutive calculation: if gap < 30, accumulate, else reset
-                    if gap < 30:
-                        consecutive_duration += block["duration"]
-                    else:
-                        max_consecutive = max(max_consecutive, consecutive_duration)
-                        consecutive_duration = block["duration"]
-                else:
-                    # first block starts a new consecutive run
-                    consecutive_duration = block["duration"]
-
-            # finalize max_consecutive
-            max_consecutive = max(max_consecutive, consecutive_duration)
-            if max_consecutive > 240:
-                hard_penalty += (max_consecutive - 240.0) * 10.0
-                conflicts.append({"type": "consecutive_hours", "faculty_id": faculty_id, "problem": f"Faculty has {max_consecutive/60:.2f} consecutive teaching hours (>4)"})
-
-            avg_gap = gap_total / max(1, len(blocks) - 1)
-            if avg_gap > 30:
+            avg_gap = gap_total / max(1, gap_count)
+            if avg_gap > 30.0:
                 soft_penalty += avg_gap / 8.0
                 fragmented_faculty.append(faculty_id)
-            if block_duration > 240:
-                soft_penalty += (block_duration - 240.0) / 6.0
+
+            # F-S3: discourage exceeding 8 hours/day (soft) and 10 hours/day (strong soft).
+            for value in daily_values:
+                if value > 480.0:
+                    soft_penalty += (value - 480.0) / 10.0
+                if value > 600.0:
+                    soft_penalty += (value - 600.0) / 4.0
+
+            # F-S7: day-balance preference.
+            mean_daily = sum(daily_values) / max(1, len(daily_values))
+            variance = sum((value - mean_daily) ** 2 for value in daily_values) / max(1, len(daily_values))
+            soft_penalty += variance / 5000.0
 
         if max_units > 0:
             utilization = total_units / max_units if max_units else 0.0
@@ -532,7 +765,24 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
                 soft_penalty += 22.0
                 conflicts.append({"type": "department_mismatch", "faculty_id": faculty_id, "offering_id": offering.get("id"), "problem": "Faculty department does not match course offering department"})
 
-    assignment_count = max(1, len(assignments))
+    # F-S10: keep loads fair within each department.
+    dept_loads: Dict[int, List[float]] = {}
+    for faculty in faculties:
+        dept_id = int(to_number(faculty.get("department_id")) or 0)
+        faculty_id = int(to_number(faculty.get("faculty_id")) or 0)
+        dept_loads.setdefault(dept_id, []).append(loads.get(faculty_id, 0.0))
+
+    for load_values in dept_loads.values():
+        if len(load_values) < 2:
+            continue
+        mean_load = sum(load_values) / len(load_values)
+        variance = sum((value - mean_load) ** 2 for value in load_values) / len(load_values)
+        soft_penalty += variance * 0.15
+
+    if unassigned_subjects:
+        hard_penalty += len(unassigned_subjects) * 140.0
+
+    assignment_count = max(1, len(assignments) + len(unassigned_subjects))
     normalized_hard_penalty = hard_penalty / assignment_count
     normalized_soft_penalty = soft_penalty / assignment_count
     hard_score = max(0.0, 100.0 - normalized_hard_penalty)
@@ -574,10 +824,10 @@ def summarize_candidate(candidate: Sequence[int], faculties: Sequence[Dict[str, 
         "fitness_hard": round(hard_score, 2),
         "fitness_soft": round(soft_score, 2),
         "report": {
-            "summary": f"Generated {len(assignments)} faculty loading assignment(s).",
+            "summary": f"Generated {len(assignments)} faculty loading assignment(s); {len(unassigned_subjects)} unassigned.",
             "faculty_load_balance": faculty_load_balance,
             "faculty_free_units": faculty_free_units,
-            "unassigned_subjects": [],
+            "unassigned_subjects": unassigned_subjects,
             "hard_violations": [item for item in conflicts if item["type"] in {"time_conflict", "room_conflict", "overload", "department_mismatch"}],
             "soft_penalties": [],
             "schedule_fragmentation": {"faculty_with_scattered_schedule": fragmented_faculty},
@@ -650,14 +900,84 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         fid = int(to_number(f.get("faculty_id")) or 0)
         faculty_id_to_index[fid] = idx
 
+    active_subject_units_by_key: Dict[str, float] = {}
+    for subject in active_subjects:
+        key = "|".join(
+            [
+                str(int(to_number(subject.get("department_id")) or 0)),
+                normalize_upper(subject.get("subject_code")),
+                normalize_upper(subject.get("subject_course_no")),
+                normalize_upper(subject.get("subject_section")),
+            ]
+        )
+        active_subject_units_by_key[key] = to_number(subject.get("subject_units")) or 0.0
+
     initial_loads_by_index: Dict[int, float] = {}
     for row in existing_loads_rows:
         fid = int(to_number(row.get("faculty_id")) or 0)
-        units = to_number(row.get("units")) or 0.0
+        row_key = "|".join(
+            [
+                str(int(to_number(row.get("department_id")) or 0)),
+                normalize_upper(row.get("code")),
+                normalize_upper(row.get("course_no")),
+                normalize_upper(row.get("section")),
+            ]
+        )
+        if row_key not in active_subject_units_by_key:
+            continue
+
+        units = active_subject_units_by_key.get(row_key, to_number(row.get("units")) or 0.0)
         idx = faculty_id_to_index.get(fid)
         if idx is None:
             continue
         initial_loads_by_index[idx] = initial_loads_by_index.get(idx, 0.0) + units
+
+    # PRE-1 / PRE-2 strict filtering applied once before GA loop.
+    filtered_faculties: List[Dict[str, Any]] = []
+    remapped_initial_loads: Dict[int, float] = {}
+    for old_idx, faculty in enumerate(faculties):
+        status = normalize_upper(faculty.get("faculty_status"))
+        max_units = to_number(faculty.get("faculty_max_units")) or 0.0
+        assigned_units = initial_loads_by_index.get(old_idx, 0.0)
+        available_units = max_units - assigned_units
+
+        if status != "ACTIVE":
+            continue
+        if max_units <= 0.0:
+            continue
+        if available_units <= 0.0:
+            continue
+
+        new_idx = len(filtered_faculties)
+        filtered_faculties.append({**faculty, "available_units": available_units, "already_assigned_units": assigned_units})
+        remapped_initial_loads[new_idx] = assigned_units
+
+    faculties = filtered_faculties
+    initial_loads_by_index = remapped_initial_loads
+
+    if not faculties:
+        return {
+            "assignments": [],
+            "fitness_overall": 0.0,
+            "fitness_hard": 0.0,
+            "fitness_soft": 0.0,
+            "generations": 0,
+            "runtime_ms": int((time.perf_counter() - started_at) * 1000),
+            "report": {
+                "summary": "No eligible active faculty with available units.",
+                "faculty_load_balance": [],
+                "faculty_free_units": [],
+                "hard_violations": [],
+                "soft_penalties": [],
+                "schedule_fragmentation": {"faculty_with_scattered_schedule": []},
+                "unassigned_subjects": [],
+                "explainability": [],
+                "conflicts": [],
+                "load_imbalance_score": 0.0,
+                "inactive_subjects": inactive_subjects_list,
+            },
+            "run_id": payload.get("run_id") or "empty",
+        }
 
     # Build initial population using initial loads
     assignments0, _ = build_initial_candidate(faculties, offerings, subject_index, rng, initial_loads=initial_loads_by_index)

@@ -278,7 +278,7 @@ function buildFacultyLoadingDisplayRows(snapshot, assignments, preflight) {
     const assignment = assignmentByOfferingId.get(offeringId);
     const problematic = problematicByOfferingId.get(offeringId);
     const isGeneral = Boolean(offering?.is_general);
-    const assignedFaculty = assignment?.faculty || null;
+    const assignedFaculty = isGeneral ? null : (assignment?.faculty || null);
 
     rows.push({
       id: offeringId,
@@ -298,7 +298,7 @@ function buildFacultyLoadingDisplayRows(snapshot, assignments, preflight) {
       faculty_id: assignedFaculty ? assignedFaculty.faculty_id ?? null : null,
       faculty_name: assignedFaculty ? normalizeText(assignedFaculty.faculty_name) || null : null,
       faculty_role: assignedFaculty ? normalizeText(assignedFaculty.faculty_role) || null : null,
-      load_status: assignment ? 'loaded' : isGeneral ? 'general' : problematic ? 'needs_attention' : 'unassigned',
+      load_status: isGeneral ? 'general' : assignment ? 'loaded' : problematic ? 'needs_attention' : 'unassigned',
       issue_reasons: problematic?.reasons || [],
       is_general: isGeneral,
       source: 'subject',
@@ -1191,7 +1191,6 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
 
   // New: Use assignable_offerings from preflight for partial loading instead of blocking
   const preflightAssignable = preFlight.assignable_offerings || [];
-  const preflightProblematic = preFlight.problematic_offerings || [];
   
   // Filter to non-general offerings from assignable list
   const validOfferings = preflightAssignable.filter((o) => !Boolean(o.is_general));
@@ -1216,9 +1215,53 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   // Use validOfferings from preflight categorization
   const assignableOfferings = validOfferings;
 
+  // PRE-1/PRE-2 + available-units computation done once before GA run.
+  const activeSubjectUnitsByKey = new Map();
+  for (const subject of Array.isArray(snapshot.subjects) ? snapshot.subjects : []) {
+    if (normalizeUpper(subject.subject_status) !== 'ACTIVE') continue;
+    const key = [
+      toNumber(subject.department_id) ?? 0,
+      normalizeUpper(subject.subject_code),
+      normalizeUpper(subject.subject_course_no),
+      normalizeUpper(subject.subject_section),
+    ].join('|');
+    activeSubjectUnitsByKey.set(key, toNumber(subject.subject_units) || 0);
+  }
+
+  const assignedUnitsByFaculty = new Map();
+  for (const row of Array.isArray(snapshot.faculty_loading) ? snapshot.faculty_loading : []) {
+    const key = [
+      toNumber(row.department_id) ?? 0,
+      normalizeUpper(row.code),
+      normalizeUpper(row.course_no),
+      normalizeUpper(row.section),
+    ].join('|');
+    if (!activeSubjectUnitsByKey.has(key)) continue;
+    const facultyId = toNumber(row.faculty_id);
+    if (facultyId === null) continue;
+    const units = activeSubjectUnitsByKey.get(key) ?? (toNumber(row.units) || 0);
+    assignedUnitsByFaculty.set(facultyId, (assignedUnitsByFaculty.get(facultyId) || 0) + units);
+  }
+
+  const gaFaculty = (Array.isArray(snapshot.faculty) ? snapshot.faculty : [])
+    .filter((faculty) => normalizeUpper(faculty.faculty_status) === 'ACTIVE')
+    .map((faculty) => {
+      const facultyId = toNumber(faculty.faculty_id);
+      const maxUnits = toNumber(faculty.faculty_max_units) || 0;
+      const alreadyAssignedUnits = facultyId === null ? 0 : (assignedUnitsByFaculty.get(facultyId) || 0);
+      const availableUnits = maxUnits - alreadyAssignedUnits;
+      return {
+        ...faculty,
+        already_assigned_units: alreadyAssignedUnits,
+        available_units: availableUnits,
+      };
+    })
+    .filter((faculty) => (toNumber(faculty.faculty_max_units) || 0) > 0)
+    .filter((faculty) => (toNumber(faculty.available_units) || 0) > 0);
+
   const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
-    faculty: snapshot.faculty,
+    faculty: gaFaculty,
     offerings: assignableOfferings,
     rooms: snapshot.rooms,
     subjects: snapshot.subjects,
@@ -1244,6 +1287,10 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   mergedResult.report = {
     ...(mergedResult.report || {}),
     generated_rows: generatedRows,
+    faculty_prefilter: {
+      input_count: Array.isArray(snapshot.faculty) ? snapshot.faculty.length : 0,
+      eligible_count: gaFaculty.length,
+    },
     assignable_offerings: preFlight.assignable_offerings || [],
     problematic_offerings: preFlight.problematic_offerings || [],
     general_offerings: preFlight.general_offerings || [],
