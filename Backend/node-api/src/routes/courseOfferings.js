@@ -173,13 +173,19 @@ function deriveDepartmentCodeCandidates(row) {
   push(row.department_name);
 
   if (row.department_name) {
-    const initials = String(row.department_name)
-      .split(/\s+/)
-      .filter(Boolean)
+    const words = String(row.department_name).split(/\s+/).filter(Boolean);
+
+    const initials = words.map((word) => word[0]).join('').toUpperCase();
+    push(initials);
+
+    // Filtered initials without conjunctions/prepositions — fixes e.g. "Library and Information Science" → "LIS"
+    const SKIP_WORDS = new Set(['AND', 'OF', 'THE', 'FOR', 'IN', 'AT', 'TO']);
+    const filteredInitials = words
+      .filter((word) => !SKIP_WORDS.has(word.toUpperCase()))
       .map((word) => word[0])
       .join('')
       .toUpperCase();
-    push(initials);
+    if (filteredInitials !== initials) push(filteredInitials);
   }
 
   return candidates;
@@ -227,13 +233,21 @@ function shouldSkipNonDataRow(rowCells) {
 
 const DEPARTMENT_CODE_HINTS = {
   AR: ['ARCHITECTURE', 'ARCHITECTURAL'],
-  CE: ['CIVIL', 'CIVIL ENGINEERING'],
+  CE: ['CIVIL ENGINEERING', 'CIVIL'],
   IT: ['INFORMATION TECHNOLOGY', 'INFO TECH'],
   CS: ['COMPUTER SCIENCE'],
   CPE: ['COMPUTER ENGINEERING', 'COMPUTER ENGINEER'],
-  ECE: ['ELECTRONICS', 'COMMUNICATION ENGINEERING'],
+  ECE: [
+    'ELECTRONICS AND COMMUNICATIONS',
+    'ELECTRONICS AND COMMUNICATION',
+    'ELECTRICAL COMMUNICATIONS ENGINEERING',
+    'ELECTRICAL COMMUNICATIONS',
+    'COMMUNICATIONS ENGINEERING',
+    'COMMUNICATION ENGINEERING',
+    'ELECTRONICS',
+  ],
   EE: ['ELECTRICAL ENGINEERING', 'ELECTRICAL'],
-  LIS: ['LIBRARY', 'INFORMATION SCIENCE'],
+  LIS: ['LIBRARY AND INFORMATION SCIENCE', 'LIBRARY INFORMATION SCIENCE', 'LIBRARY INFORMATION', 'LIBRARY', 'INFORMATION SCIENCE'],
 };
 
 const DEPARTMENT_CODE_DEFAULT_NAMES = {
@@ -242,7 +256,7 @@ const DEPARTMENT_CODE_DEFAULT_NAMES = {
   IT: 'Information Technology',
   CS: 'Computer Science',
   CPE: 'Computer Engineering',
-  ECE: 'Electronics Engineering',
+  ECE: 'Electrical Communications Engineering',
   EE: 'Electrical Engineering',
   LIS: 'Library and Information Science',
 };

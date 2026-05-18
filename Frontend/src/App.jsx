@@ -11,10 +11,11 @@ import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
 import CourseOfferingView from './pages/CourseOfferingView';
 import SettingsView from './pages/SettingsView';
-import { clearAllNotifications, rescanAllSubjectNotifications } from './services/notificationsApi';
+import { clearAllNotifications } from './services/notificationsApi';
 import { recordLogout } from './services/auditLogsApi.js';
 import { clearCurrentAuthUser, setCurrentAuthUser } from './services/authContext.js';
 import { RowHighlightProvider } from './hooks/RowHighlightProvider.jsx';
+import { NotificationProvider } from './hooks/NotificationProvider.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -42,12 +43,6 @@ export default function App() {
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(true);
-
-    try {
-      await rescanAllSubjectNotifications();
-    } catch (err) {
-      console.error('Failed to refresh subject notifications on login:', err);
-    }
   };
 
   const handleLogout = async () => {
@@ -77,7 +72,7 @@ export default function App() {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
       case 'faculty': return <FacultyView />;
-      case 'subjects': return <SubjectsView authRefreshKey={authRefreshKey} subjectMutationKey={subjectMutationKey} />;
+      case 'subjects': return <SubjectsView subjectMutationKey={subjectMutationKey} />;
       case 'rooms': return <RoomsView authRefreshKey={authRefreshKey} />;
       case 'schedule': return <ScheduleView onNavigate={setCurrentView} />;
       case 'faculty-loading': return <FacultyLoadingView />;
@@ -96,50 +91,52 @@ export default function App() {
 
   return (
     <RowHighlightProvider>
-      <div className="min-h-screen text-on-surface">
-        <div className="fixed inset-0 bg-mesh -z-10" />
+      <NotificationProvider authRefreshKey={authRefreshKey}>
+        <div className="min-h-screen text-on-surface">
+          <div className="fixed inset-0 bg-mesh -z-10" />
 
-        <div className="min-h-screen flex">
-          <Sidebar
-            currentView={currentView}
-            onViewChange={handleViewChange}
-            onLogout={handleLogout}
-            currentUser={currentUser}
-          />
-
-          <main className="flex-1 min-h-screen ml-[260px] pt-16">
-            <TopAppBar
-              title={getTitle()}
+          <div className="min-h-screen flex">
+            <Sidebar
+              currentView={currentView}
+              onViewChange={handleViewChange}
               onLogout={handleLogout}
-              onSettings={handleOpenSettings}
+              currentUser={currentUser}
             />
 
-            <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentView}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.28, ease: 'easeOut' }}
-                >
-                  {currentView === 'dashboard' ? (
-                    <DashboardView onNavigate={handleViewChange} />
-                  ) : (
-                    renderView()
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
+            <main className="flex-1 min-h-screen ml-[260px] pt-16">
+              <TopAppBar
+                title={getTitle()}
+                onLogout={handleLogout}
+                onSettings={handleOpenSettings}
+              />
 
-            <footer className="px-margin pb-8 pt-2 text-center">
-              <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-[0.32em]">
-                Chronomaria • Faculty Loading System
-              </p>
-            </footer>
-          </main>
+              <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentView}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.28, ease: 'easeOut' }}
+                  >
+                    {currentView === 'dashboard' ? (
+                      <DashboardView onNavigate={handleViewChange} />
+                    ) : (
+                      renderView()
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              <footer className="px-margin pb-8 pt-2 text-center">
+                <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-[0.32em]">
+                  Chronomaria • Faculty Loading System
+                </p>
+              </footer>
+            </main>
+          </div>
         </div>
-      </div>
+      </NotificationProvider>
     </RowHighlightProvider>
   );
 }

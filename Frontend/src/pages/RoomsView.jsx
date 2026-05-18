@@ -1015,12 +1015,14 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-black">
-                {currentRooms.map((room, index) => (
-                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`transition-colors hover:bg-white/45 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                {currentRooms.map((room, index) => {
+                  const isSelected = selectedRooms.has(room.room_id);
+                  return (
+                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/45'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
                     <td className="px-3 py-2 text-center">
                       <input
                         type="checkbox"
-                        checked={selectedRooms.has(room.room_id)}
+                        checked={isSelected}
                         onChange={() => toggleSelectRoom(room.room_id)}
                         className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
                       />
@@ -1083,7 +1085,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                       </div>
                     </td>
                   </tr>
-                ))}
+               ); })}
               </tbody>
             </table>
           </div>
