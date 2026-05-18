@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUpDown, DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw, BookOpen } from 'lucide-react';
 import { motion } from 'motion/react';
 import { fetchRoomsPage, createRoom, updateRoom, deleteRoom, fetchRoomOfferings } from '../services/roomsApi.js';
+import { fetchDepartments } from '../services/departmentsApi.js';
 import { fetchRoomNotifications, rescanAllRoomNotifications, resolveRoomNotification } from '../services/notificationsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 import { highlightRowElement } from '../utils/highlightRow.js';
@@ -56,6 +57,24 @@ function inferRoomTypeFromOfferings(offerings) {
   return hasLabHours ? 'Lab' : 'Lecture';
 }
 
+function parseRoomDepartmentIds(rawValue) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return [];
+
+  const values = Array.isArray(rawValue)
+    ? rawValue
+    : String(rawValue)
+        .split(/[\/,]/)
+        .map((value) => value.trim());
+
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  );
+}
+
 export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,12 +108,13 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const [subjectCols, setSubjectCols] = useState(new Set(['code', 'course_no', 'descriptive_title', 'schedule']));
   const [subjectSort, setSubjectSort] = useState({ key: 'schedule', dir: 'asc' });
   const [pendingScrollToRoom, setPendingScrollToRoom] = useState(null);
+  const [departments, setDepartments] = useState([]);
 
   // Info overlay states
   const [showAddInfo, setShowAddInfo] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({ room_name: '', room_type: '', room_status: 'available' });
+  const [formData, setFormData] = useState({ room_name: '', room_type: '', room_status: 'available', department_ids: [] });
   const [formError, setFormError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -106,7 +126,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = useState(
-    new Set(['room_name', 'room_type', 'room_status'])
+    new Set(['room_name', 'room_type', 'department_name', 'room_status'])
   );
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
@@ -121,8 +141,26 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const columns = [
     { key: 'room_name', label: 'Room Name' },
     { key: 'room_type', label: 'Room Type' },
+    { key: 'department_name', label: 'Department' },
     { key: 'room_status', label: 'Status' },
   ];
+
+  const departmentsById = useMemo(() => {
+    const map = new Map();
+    departments.forEach((department) => {
+      map.set(Number(department.department_id), department.department_name || `Department #${department.department_id}`);
+    });
+    return map;
+  }, [departments]);
+
+  const getRoomDepartmentLabel = (room) => {
+    const ids = parseRoomDepartmentIds(room?.room_department_ids ?? room?.room_department_id);
+    if (ids.length === 0) return '';
+
+    return ids
+      .map((id) => departmentsById.get(id) || `Department #${id}`)
+      .join(', ');
+  };
 
   const loadRooms = async ({ refreshNotifications = true, forceNotificationRescan = false } = {}) => {
     setLoading(true);
@@ -372,6 +410,20 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   }, [authRefreshKey]);
 
   useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const rows = await fetchDepartments();
+        setDepartments(Array.isArray(rows) ? rows : []);
+      } catch (err) {
+        console.error('Failed to fetch departments:', err);
+        setDepartments([]);
+      }
+    };
+
+    loadDepartments();
+  }, [authRefreshKey]);
+
+  useEffect(() => {
     setPageInput(currentPage);
   }, [currentPage]);
 
@@ -393,6 +445,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
           return (
             (r.room_name || '').toLowerCase().includes(query) ||
             (r.room_type || '').toLowerCase().includes(query) ||
+            getRoomDepartmentLabel(r).toLowerCase().includes(query) ||
             (r.room_status || '').toLowerCase().includes(query)
           );
         });
@@ -408,6 +461,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       switch (sortConfig.key) {
         case 'room_name': return String(room.room_name ?? '');
         case 'room_type': return String(room.room_type ?? '');
+        case 'department_name': return getRoomDepartmentLabel(room);
         case 'room_status': return String(room.room_status ?? '');
         default: return String(room.room_name ?? '');
       }
@@ -437,7 +491,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       currentRooms: paginatedRooms,
       sortedFilteredRooms: sorted,
     };
-  }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE, sortConfig]);
+  }, [rooms, currentPage, searchQuery, statusFilter, PAGE_SIZE, sortConfig, departmentsById]);
 
   const filteredNotifications = useMemo(() => {
     let filtered = [...notifications];
@@ -545,6 +599,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       switch (sortConfig.key) {
         case 'room_name': return String(room.room_name ?? '');
         case 'room_type': return String(room.room_type ?? '');
+        case 'department_name': return getRoomDepartmentLabel(room);
         case 'room_status': return String(room.room_status ?? '');
         default: return String(room.room_name ?? '');
       }
@@ -632,7 +687,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
   // Form handlers
   const resetForm = () => {
-    setFormData({ room_name: '', room_type: '', room_status: 'available' });
+    setFormData({ room_name: '', room_type: '', room_status: 'available', department_ids: [] });
     setFormError(null);
   };
 
@@ -647,6 +702,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       room_name: room.room_name,
       room_type: room.room_type || '',
       room_status: room.room_status || 'available',
+      department_ids: parseRoomDepartmentIds(room.room_department_ids ?? room.room_department_id),
     });
     setFormError(null);
     setShowEditModal(true);
@@ -706,6 +762,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         room_name: formData.room_name,
         room_type: formData.room_type || null,
         room_status: formData.room_status,
+        room_department_id: formData.department_ids,
       });
 
       setRooms([...rooms, newRoom]);
@@ -736,6 +793,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         room_name: formData.room_name,
         room_type: formData.room_type || null,
         room_status: formData.room_status,
+        room_department_id: formData.department_ids,
       });
 
       setRooms(rooms.map((r) => (r.room_id === editingRoom.room_id ? updatedRoom : r)));
@@ -979,6 +1037,10 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                             <span className="text-sm font-medium text-on-surface">
                               {room.room_type || '—'}
                             </span>
+                          ) : col.key === 'department_name' ? (
+                            <span className="text-sm font-medium text-on-surface">
+                              {getRoomDepartmentLabel(room) || '—'}
+                            </span>
                           ) : col.key === 'room_status' ? (
                             <div className="flex justify-start">
                               <span
@@ -1154,6 +1216,39 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Department
+                  </label>
+                  <div className="max-h-36 space-y-2 overflow-auto rounded-lg border border-slate-300 bg-white p-3">
+                    {departments.map((department) => {
+                      const deptId = Number(department.department_id);
+                      const isChecked = formData.department_ids.includes(deptId);
+
+                      return (
+                        <label key={department.department_id} className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setFormData((prev) => {
+                                const current = new Set(prev.department_ids);
+                                if (e.target.checked) current.add(deptId);
+                                else current.delete(deptId);
+                                return { ...prev, department_ids: Array.from(current) };
+                              });
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                            disabled={isSubmitting}
+                          />
+                          <span>{department.department_name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-xs text-on-surface-variant">Select one or more departments for this room.</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                     Status
                   </label>
                   <select
@@ -1239,6 +1334,39 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                     placeholder="e.g., Lecture Hall"
                     disabled={isSubmitting}
                   />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Department
+                  </label>
+                  <div className="max-h-36 space-y-2 overflow-auto rounded-lg border border-slate-300 bg-white p-3">
+                    {departments.map((department) => {
+                      const deptId = Number(department.department_id);
+                      const isChecked = formData.department_ids.includes(deptId);
+
+                      return (
+                        <label key={department.department_id} className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setFormData((prev) => {
+                                const current = new Set(prev.department_ids);
+                                if (e.target.checked) current.add(deptId);
+                                else current.delete(deptId);
+                                return { ...prev, department_ids: Array.from(current) };
+                              });
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                            disabled={isSubmitting}
+                          />
+                          <span>{department.department_name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-xs text-on-surface-variant">Select one or more departments for this room.</p>
                 </div>
 
                 <div>

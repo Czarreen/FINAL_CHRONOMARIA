@@ -23,11 +23,11 @@ export async function fetchRooms({ page = 1, limit = 50, search = '' } = {}) {
 }
 
 // CREATE - Add a new room
-export async function createRoom({ room_name, room_type, room_status = 'available' } = {}) {
+export async function createRoom({ room_name, room_type, room_status = 'available', room_department_id } = {}) {
   const response = await fetch(`${API_BASE_URL}/api/rooms`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ room_name, room_type, room_status }),
+    body: JSON.stringify({ room_name, room_type, room_status, room_department_id }),
   });
 
   if (!response.ok) {
@@ -44,11 +44,11 @@ export async function createRoom({ room_name, room_type, room_status = 'availabl
 }
 
 // UPDATE - Update a room
-export async function updateRoom(room_id, { room_name, room_type, room_status } = {}) {
+export async function updateRoom(room_id, { room_name, room_type, room_status, room_department_id } = {}) {
   const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ room_name, room_type, room_status }),
+    body: JSON.stringify({ room_name, room_type, room_status, room_department_id }),
   });
 
   if (!response.ok) {

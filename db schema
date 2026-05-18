@@ -29,9 +29,9 @@ CREATE TABLE public.automatic_scheduler (
   lec_hrs real,
   lab_hrs real,
   mth_schedule text,
-  mth_room_id text CHECK (mth_room_id IS NULL OR mth_room_id ~ '^[0-9]+(\/[0-9]+)*$'::text),
+  mth_room_id text CHECK (mth_room_id IS NULL OR btrim(mth_room_id) <> ''::text),
   tfs_schedule text,
-  tfs_room_id text CHECK (tfs_room_id IS NULL OR tfs_room_id ~ '^[0-9]+(\/[0-9]+)*$'::text),
+  tfs_room_id text CHECK (tfs_room_id IS NULL OR btrim(tfs_room_id) <> ''::text),
   merged text DEFAULT false,
   CONSTRAINT automatic_scheduler_pkey PRIMARY KEY (id),
   CONSTRAINT automatic_scheduler_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id)
@@ -153,6 +153,7 @@ CREATE TABLE public.rooms (
   room_name text NOT NULL,
   room_type text,
   room_status text,
+  room_department_id smallint,
   CONSTRAINT rooms_pkey PRIMARY KEY (room_id)
 );
 CREATE TABLE public.subject_notifications (
