@@ -728,6 +728,373 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     return final_result
 
 
+# ─── Schedule GA (room + time-slot assignment) ────────────────────────────────
+
+_SCHED_START = 7 * 60 + 30   # 7:30 AM in minutes
+_SCHED_END   = 20 * 60        # 8:00 PM in minutes
+_SCHED_STEP  = 30
+_MTH_DAYS    = ("MON", "THU")
+_TFS_DAYS    = ("TUE", "FRI")
+
+
+def _norm_room_ref(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9]", "", normalize_upper(str(value or "")))
+
+
+def _subject_slot_key(s: Dict[str, Any]) -> Optional[str]:
+    mth_s = normalize_upper(s.get("mth_schedule") or s.get("existing_mth_schedule") or "")
+    tfs_s = normalize_upper(s.get("tfs_schedule") or s.get("existing_tfs_schedule") or "")
+    mth_r = _norm_room_ref(
+        s.get("mth_room_id") or s.get("existing_mth_room_id") or
+        s.get("mth_room") or s.get("raw_mth_room") or ""
+    )
+    tfs_r = _norm_room_ref(
+        s.get("tfs_room_id") or s.get("existing_tfs_room_id") or
+        s.get("tfs_room") or s.get("raw_tfs_room") or ""
+    )
+    if not (mth_s or tfs_s) or not (mth_r or tfs_r):
+        return None
+    return f"{mth_s}|||{tfs_s}|||{mth_r}|||{tfs_r}"
+
+
+def _detect_schedule_merge_groups(subjects: List[Dict[str, Any]]) -> Dict[int, int]:
+    """
+    Group incoming subjects by physical slot key (schedule + room).
+    Any N>=2 subjects sharing the same slot are a merge group.
+    Returns {non-rep subject_id: rep subject_id} — extras that should not be scheduled.
+    """
+    slot_map: Dict[str, List[Dict[str, Any]]] = {}
+    for s in subjects:
+        key = _subject_slot_key(s)
+        if key is None:
+            continue
+        slot_map.setdefault(key, []).append(s)
+
+    merged: Dict[int, int] = {}
+    for group in slot_map.values():
+        if len(group) < 2:
+            continue
+        group_sorted = sorted(group, key=lambda s: int(to_number(s.get("subject_id")) or 0))
+        rep_id = int(to_number(group_sorted[0].get("subject_id")) or 0)
+        for s in group_sorted[1:]:
+            sid = int(to_number(s.get("subject_id")) or 0)
+            merged[sid] = rep_id
+    return merged
+
+
+def _duration_minutes(subject: Dict[str, Any]) -> int:
+    lec = to_number(subject.get("lec_hrs")) or 0.0
+    lab = to_number(subject.get("lab_hrs")) or 0.0
+    per_day = (lec + lab) / 2.0
+    raw = max(30, round(per_day * 60))
+    return int(((raw + _SCHED_STEP - 1) // _SCHED_STEP) * _SCHED_STEP)
+
+
+def _fmt_time(minutes: int) -> str:
+    hh12 = (minutes // 60) % 12 or 12
+    mm = minutes % 60
+    return f"{hh12}:{mm:02d}"
+
+
+def _sched_text(start: int, end: int) -> str:
+    return f"{_fmt_time(start)}-{_fmt_time(end)}"
+
+
+def _build_reserved_maps(reserved_slots: List[Dict[str, Any]]) -> Tuple[Dict[str, List[Tuple[int, int]]], Dict[str, List[Tuple[int, int]]]]:
+    room_map: Dict[str, List[Tuple[int, int]]] = {}
+    sect_map: Dict[str, List[Tuple[int, int]]] = {}
+    for slot in reserved_slots:
+        section = normalize_upper(slot.get("section") or "")
+        for pat, days in (("mth", _MTH_DAYS), ("tfs", _TFS_DAYS)):
+            sched = slot.get(f"{pat}_schedule") or ""
+            room_id = str(slot.get(f"{pat}_room_id") or "")
+            if not sched or not room_id:
+                continue
+            parsed = parse_time_range(sched)
+            if not parsed:
+                continue
+            block: Tuple[int, int] = (parsed["start"], parsed["end"])
+            for day in days:
+                room_map.setdefault(f"{room_id}|{day}", []).append(block)
+                if section:
+                    sect_map.setdefault(f"{section}|{day}", []).append(block)
+    return room_map, sect_map
+
+
+def _overlaps_any(start: int, end: int, blocks: List[Tuple[int, int]]) -> bool:
+    return any(start < be and bs < end for bs, be in blocks)
+
+
+# Gene: (room_idx, start_minutes, pattern)  pattern 0=MTH 1=TFS
+_Gene = Tuple[int, int, int]
+_Chrom = List[Optional[_Gene]]
+
+
+def _score_chrom(
+    chrom: _Chrom,
+    subjects: List[Dict[str, Any]],
+    rooms: List[Dict[str, Any]],
+    res_room: Dict[str, List[Tuple[int, int]]],
+    res_sect: Dict[str, List[Tuple[int, int]]],
+) -> float:
+    hard = 0.0
+    local_room: Dict[str, List[Tuple[int, int]]] = {}
+    local_sect: Dict[str, List[Tuple[int, int]]] = {}
+
+    for i, gene in enumerate(chrom):
+        if gene is None or gene[0] >= len(rooms):
+            hard += 200.0
+            continue
+        room_idx, start, pattern = gene
+        room_id = str(rooms[room_idx].get("room_id") or "")
+        dur = _duration_minutes(subjects[i])
+        end = start + dur
+        if end > _SCHED_END:
+            hard += 50.0
+            continue
+        days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
+        section = normalize_upper(subjects[i].get("section") or "")
+        for day in days:
+            rk = f"{room_id}|{day}"
+            sk = f"{section}|{day}"
+            if _overlaps_any(start, end, res_room.get(rk, [])) or _overlaps_any(start, end, local_room.get(rk, [])):
+                hard += 100.0
+            if section and (_overlaps_any(start, end, res_sect.get(sk, [])) or _overlaps_any(start, end, local_sect.get(sk, []))):
+                hard += 60.0
+            local_room.setdefault(rk, []).append((start, end))
+            if section:
+                local_sect.setdefault(sk, []).append((start, end))
+
+    return max(0.0, 100.0 - hard / max(1, len(chrom)))
+
+
+def _greedy_chrom(
+    subjects: List[Dict[str, Any]],
+    rooms: List[Dict[str, Any]],
+    res_room: Dict[str, List[Tuple[int, int]]],
+    res_sect: Dict[str, List[Tuple[int, int]]],
+    rng: random.Random,
+) -> _Chrom:
+    chrom: _Chrom = []
+    local_room: Dict[str, List[Tuple[int, int]]] = {}
+    local_sect: Dict[str, List[Tuple[int, int]]] = {}
+
+    room_order = list(range(len(rooms)))
+    rng.shuffle(room_order)
+
+    for subject in subjects:
+        dur = _duration_minutes(subject)
+        section = normalize_upper(subject.get("section") or "")
+        pref_str = normalize_upper(subject.get("preferred_pattern") or "")
+        patterns = [0, 1] if pref_str not in ("TFS", "TF") else [1, 0]
+
+        gene: Optional[_Gene] = None
+        for pattern in patterns:
+            days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
+            for ri in room_order:
+                if ri >= len(rooms):
+                    continue
+                room_id = str(rooms[ri].get("room_id") or "")
+                for start in range(_SCHED_START, _SCHED_END - dur + 1, _SCHED_STEP):
+                    end = start + dur
+                    ok = True
+                    for day in days:
+                        rk = f"{room_id}|{day}"
+                        sk = f"{section}|{day}"
+                        if _overlaps_any(start, end, res_room.get(rk, [])) or _overlaps_any(start, end, local_room.get(rk, [])):
+                            ok = False
+                            break
+                        if section and (_overlaps_any(start, end, res_sect.get(sk, [])) or _overlaps_any(start, end, local_sect.get(sk, []))):
+                            ok = False
+                            break
+                    if ok:
+                        gene = (ri, start, pattern)
+                        break
+                if gene is not None:
+                    break
+            if gene is not None:
+                break
+
+        if gene is not None:
+            ri, start, pattern = gene
+            room_id = str(rooms[ri].get("room_id") or "")
+            days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
+            end = start + dur
+            for day in days:
+                local_room.setdefault(f"{room_id}|{day}", []).append((start, end))
+                if section:
+                    local_sect.setdefault(f"{section}|{day}", []).append((start, end))
+
+        chrom.append(gene)
+    return chrom
+
+
+def _mutate_chrom(
+    chrom: _Chrom,
+    subjects: List[Dict[str, Any]],
+    rooms: List[Dict[str, Any]],
+    rng: random.Random,
+    rate: float,
+) -> _Chrom:
+    new_c = list(chrom)
+    for i in range(len(new_c)):
+        if rng.random() > rate:
+            continue
+        if not rooms:
+            continue
+        subject = subjects[i]
+        dur = _duration_minutes(subject)
+        max_start = _SCHED_END - dur
+        if max_start < _SCHED_START:
+            continue
+        starts = list(range(_SCHED_START, max_start + 1, _SCHED_STEP))
+        if not starts:
+            continue
+        new_c[i] = (rng.randint(0, len(rooms) - 1), rng.choice(starts), rng.randint(0, 1))
+    return new_c
+
+
+def _crossover_chrom(a: _Chrom, b: _Chrom, rng: random.Random) -> _Chrom:
+    return [av if rng.random() < 0.5 else bv for av, bv in zip(a, b)]
+
+
+def _chrom_to_output(
+    chrom: _Chrom,
+    subjects: List[Dict[str, Any]],
+    rooms: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    assignments: List[Dict[str, Any]] = []
+    unresolved: List[Dict[str, Any]] = []
+    for i, gene in enumerate(chrom):
+        subj = subjects[i]
+        if gene is None or gene[0] >= len(rooms):
+            unresolved.append({
+                "subject_id": subj.get("subject_id"),
+                "course_no": subj.get("course_no"),
+                "section": subj.get("section"),
+                "descriptive_title": subj.get("descriptive_title"),
+                "reason": "No conflict-free room/time slot found by GA.",
+            })
+            continue
+        ri, start, pattern = gene
+        room = rooms[ri]
+        end = start + _duration_minutes(subj)
+        sched = _sched_text(start, end)
+        room_id_s = str(room.get("room_id") or "")
+        row: Dict[str, Any] = {**subj, "source_subject_id": subj.get("subject_id"), "merged": False}
+        if pattern == 0:
+            row.update(mth_schedule=sched, mth_room_id=room_id_s, mth_room_name=room.get("room_name"),
+                       tfs_schedule=None, tfs_room_id=None, tfs_room_name=None)
+        else:
+            row.update(tfs_schedule=sched, tfs_room_id=room_id_s, tfs_room_name=room.get("room_name"),
+                       mth_schedule=None, mth_room_id=None, mth_room_name=None)
+        assignments.append(row)
+    return assignments, unresolved
+
+
+def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+    subjects_raw = list(payload.get("subjects", []))
+    rooms = list(payload.get("rooms", []))
+    reserved_slots = list(payload.get("reserved_slots", []))
+    constraints = payload.get("constraints", {})
+
+    seed            = constraints.get("random_seed", 42)
+    population_size = int(constraints.get("population_size", 80))
+    max_generations = int(constraints.get("max_generations", 150))
+    mutation_rate   = float(constraints.get("mutation_rate", 0.08))
+    max_runtime     = float(constraints.get("max_runtime_seconds", 30))
+
+    rng = create_rng(seed)
+
+    # Detect N>=2 subjects sharing the same physical slot in the incoming list
+    merged_to_rep = _detect_schedule_merge_groups(subjects_raw)
+    extra_merged  = [s for s in subjects_raw if int(to_number(s.get("subject_id")) or 0) in merged_to_rep]
+    to_schedule   = [s for s in subjects_raw if int(to_number(s.get("subject_id")) or 0) not in merged_to_rep]
+
+    empty_report: Dict[str, Any] = {
+        "merge_groups_detected": len(set(merged_to_rep.values())),
+        "subjects_preserved_as_merged": len(extra_merged),
+        "subjects_scheduled_by_ga": 0,
+        "conflict_count": 0,
+        "conflicts": [],
+    }
+
+    if not rooms:
+        return {
+            "assignments": [], "unresolved": [{"subject_id": s.get("subject_id"), "course_no": s.get("course_no"),
+                "section": s.get("section"), "descriptive_title": s.get("descriptive_title"),
+                "reason": "No active rooms available."} for s in to_schedule],
+            "fitness_overall": 0.0, "fitness_hard": 0.0, "fitness_soft": 0.0,
+            "generations": 0, "runtime_ms": int((time.perf_counter() - started_at) * 1000),
+            "report": {**empty_report, "summary": "No active rooms provided."},
+        }
+
+    res_room, res_sect = _build_reserved_maps(reserved_slots)
+
+    if not to_schedule:
+        return {
+            "assignments": [], "unresolved": [],
+            "fitness_overall": 100.0, "fitness_hard": 100.0, "fitness_soft": 100.0,
+            "generations": 0, "runtime_ms": int((time.perf_counter() - started_at) * 1000),
+            "report": {**empty_report, "summary": "All subjects preserved as merged groups; no GA scheduling needed."},
+        }
+
+    # Build initial population using greedy construction
+    population: List[_Chrom] = [_greedy_chrom(to_schedule, rooms, res_room, res_sect, rng)
+                                  for _ in range(max(6, population_size))]
+    best_chrom = population[0]
+    best_score = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
+    stagnant = 0
+    generation = 0
+
+    while generation < max_generations:
+        if (time.perf_counter() - started_at) >= max_runtime:
+            break
+        scored = sorted(
+            [(_score_chrom(c, to_schedule, rooms, res_room, res_sect), c) for c in population],
+            key=lambda x: -x[0],
+        )
+        top_score, top_chrom = scored[0]
+        if top_score > best_score:
+            best_score, best_chrom, stagnant = top_score, top_chrom, 0
+        else:
+            stagnant += 1
+        if stagnant >= 25:
+            break
+
+        elite_count = max(2, population_size // 5)
+        elites = [c for _, c in scored[:elite_count]]
+        next_pop: List[_Chrom] = list(elites)
+        while len(next_pop) < population_size:
+            child = _crossover_chrom(rng.choice(elites), rng.choice(elites), rng)
+            child = _mutate_chrom(child, to_schedule, rooms, rng, mutation_rate)
+            next_pop.append(child)
+        population = next_pop
+        generation += 1
+
+    final_score = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
+    assignments, unresolved = _chrom_to_output(best_chrom, to_schedule, rooms)
+
+    return {
+        "assignments": assignments,
+        "unresolved": unresolved,
+        "fitness_overall": round(final_score, 2),
+        "fitness_hard": round(final_score, 2),
+        "fitness_soft": round(final_score, 2),
+        "generations": generation + 1,
+        "runtime_ms": int((time.perf_counter() - started_at) * 1000),
+        "report": {
+            "summary": f"Scheduled {len(assignments)} subject(s); {len(unresolved)} unresolved.",
+            "merge_groups_detected": len(set(merged_to_rep.values())),
+            "subjects_preserved_as_merged": len(extra_merged),
+            "subjects_scheduled_by_ga": len(assignments),
+            "conflict_count": len(unresolved),
+            "conflicts": [{"type": "unassigned", "subject_id": u.get("subject_id"), "problem": u.get("reason")} for u in unresolved],
+        },
+    }
+
+
 class GaHandler(BaseHTTPRequestHandler):
     server_version = "ChronoMariaGA/1.0"
 
@@ -746,7 +1113,12 @@ class GaHandler(BaseHTTPRequestHandler):
         self._write_json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.rstrip("/") != "/generate":
+        path = self.path.rstrip("/")
+        if path == "/generate":
+            runner = run_ga
+        elif path == "/generate-schedule":
+            runner = run_schedule_ga
+        else:
             self._write_json(404, {"error": "Not found"})
             return
 
@@ -759,7 +1131,7 @@ class GaHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            result = run_ga(payload)
+            result = runner(payload)
         except Exception as exc:  # pragma: no cover - surfaced to the caller
             self._write_json(500, {"error": str(exc)})
             return

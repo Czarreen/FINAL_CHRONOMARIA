@@ -160,14 +160,8 @@ function isGymRoomValue(roomValue, gymRoomIds) {
 
 // Returns true when two offerings occupy exactly the same physical slot —
 // identical schedule strings AND at least one shared room ID.
-// Two offerings at the exact same time in the same room are the same physical class
-// (merged/cross-listed), regardless of code, course_no, title, dept, or curriculum.
+// Same room + same time = merged, regardless of course number, title, dept, or curriculum.
 function isMergedSubject(entity, other) {
-  // Different course numbers means different courses — cannot be the same physical class.
-  const courseNo = String(entity.course_no || entity.subject_course_no || '').trim().toUpperCase();
-  const otherCourseNo = String(other.course_no || other.subject_course_no || '').trim().toUpperCase();
-  if (courseNo && otherCourseNo && courseNo !== otherCourseNo) return false;
-
   const norm = (s) => String(s || '').trim().toUpperCase();
 
   const mthA = norm(entity.mth_schedule);
