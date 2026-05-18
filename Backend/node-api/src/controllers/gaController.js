@@ -2231,9 +2231,9 @@ async function persistAutomaticScheduler(assignments) {
           row.lec_hrs,
           row.lab_hrs,
           row.mth_schedule,
-          row.mth_room_name || row.mth_room_id,
+          row.mth_room_id != null ? String(row.mth_room_id) : null,
           row.tfs_schedule,
-          row.tfs_room_id,
+          row.tfs_room_id != null ? String(row.tfs_room_id) : null,
           row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
         );
       });
@@ -2330,7 +2330,7 @@ async function buildAutomaticSchedulerExportRows() {
 }
 
 async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false }) {
-  const rows = await buildAutomaticSchedulerExportRows();
+  const rows = await fetchAutomaticSchedulerRows();
   if (rows.length === 0) {
     return { updated: 0, backup: null };
   }
