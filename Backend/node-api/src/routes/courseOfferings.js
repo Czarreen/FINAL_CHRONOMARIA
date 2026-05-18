@@ -563,8 +563,11 @@ const SUBJECT_SYNC_FIELD_MAP = [
 function buildCourseOfferingPayload(input = {}, existing = null) {
   const mergedFlag =
     input.merged !== undefined
-      ? input.merged === true || input.merged === 'true'
-      : existing?.merged === true || existing?.merged === 'true';
+      ? input.merged === true ||
+        (typeof input.merged === 'string' &&
+          input.merged.trim() !== '' &&
+          input.merged.trim().toLowerCase() !== 'false')
+      : existing?.merged === true;
 
   return {
     code: normalizeCell(input.code ?? existing?.code),

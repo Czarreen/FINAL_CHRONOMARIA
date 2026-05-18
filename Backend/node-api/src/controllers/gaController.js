@@ -1376,6 +1376,8 @@ function toAutomaticCandidateFromSubject(subject, roomLookup) {
     existing_mth_room_name: resolveRoomReference(subject.mth_room, roomLookup).roomName,
     existing_tfs_room_id: resolveRoomReference(subject.tfs_room, roomLookup).roomId,
     existing_tfs_room_name: resolveRoomReference(subject.tfs_room, roomLookup).roomName,
+    raw_mth_room: normalizeText(subject.mth_room) || null,
+    raw_tfs_room: normalizeText(subject.tfs_room) || null,
     // infer preferred pattern from existing schedules when available
     preferred_pattern: (() => {
       const hasMth = Boolean(normalizeText(subject.mth_schedule));
@@ -1452,8 +1454,12 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     for (const c of identityGroup) {
       const mthS = normalizeUpper(c.existing_mth_schedule || '');
       const tfsS = normalizeUpper(c.existing_tfs_schedule || '');
-      const mthR = normalizeUpper(String(c.existing_mth_room_id || ''));
-      const tfsR = normalizeUpper(String(c.existing_tfs_room_id || ''));
+      const mthR = c.existing_mth_room_id
+        ? normalizeUpper(String(c.existing_mth_room_id))
+        : normalizeUpper(String(c.raw_mth_room || '')).replace(/[^A-Z0-9]/g, '');
+      const tfsR = c.existing_tfs_room_id
+        ? normalizeUpper(String(c.existing_tfs_room_id))
+        : normalizeUpper(String(c.raw_tfs_room || '')).replace(/[^A-Z0-9]/g, '');
       const srKey = `${mthS}|||${tfsS}|||${mthR}|||${tfsR}`;
       if (!schedRoomGroups.has(srKey)) schedRoomGroups.set(srKey, []);
       schedRoomGroups.get(srKey).push(c);
@@ -1489,6 +1495,50 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     // They are valid unique schedules — handled by the unique-clean detection pass below.
   }
   console.log(`[preflight][merge] candidates=${candidates.length}, merged sub-groups=${mergeGroupCount}`);
+
+  // Pass B — catch cross-course and title-mismatch subjects that share the same
+  // physical slot (same schedule + same room) but were not caught by the identity-based
+  // Pass A above. Any 2+ subjects occupying the exact same room+time are co-located
+  // and should be treated as merged regardless of course number or title.
+  const schedRoomAllGroups = new Map();
+  for (const candidate of candidates) {
+    if (candidate.is_general) continue;
+    const mthS = normalizeUpper(candidate.existing_mth_schedule || '');
+    const tfsS = normalizeUpper(candidate.existing_tfs_schedule || '');
+    const mthR = candidate.existing_mth_room_id
+      ? normalizeUpper(String(candidate.existing_mth_room_id))
+      : normalizeUpper(String(candidate.raw_mth_room || '')).replace(/[^A-Z0-9]/g, '');
+    const tfsR = candidate.existing_tfs_room_id
+      ? normalizeUpper(String(candidate.existing_tfs_room_id))
+      : normalizeUpper(String(candidate.raw_tfs_room || '')).replace(/[^A-Z0-9]/g, '');
+    if (!mthS && !tfsS) continue;
+    if (!mthR && !tfsR) continue;
+    const srKey = `${mthS}|||${tfsS}|||${mthR}|||${tfsR}`;
+    if (!schedRoomAllGroups.has(srKey)) schedRoomAllGroups.set(srKey, []);
+    schedRoomAllGroups.get(srKey).push(candidate);
+  }
+  for (const [, srGroup] of schedRoomAllGroups.entries()) {
+    if (srGroup.length < 2) continue;
+    const unmerged = srGroup.filter((c) => !c.merged);
+    if (unmerged.length === 0) continue;
+    srGroup.sort((a, b) => (a.subject_id || 0) - (b.subject_id || 0));
+    const repId = srGroup[0].subject_id;
+    for (const c of unmerged) {
+      c.merged = true;
+      c.merge_representative_id = repId;
+      mergeGroupCount++;
+      issues.push({
+        type: 'subject',
+        severity: 'info',
+        id: c.subject_id,
+        problem: `Merged: same Schedule and Room as subject ID ${repId}. Excluded from automation — left as-is.`,
+        entity_label: `${c.code || '-'} ${c.course_no || '-'} ${c.section || '-'}`.trim(),
+        department_name: describeDepartment(c.department_id, departmentLookup),
+      });
+    }
+    console.log(`[preflight][merge-b] room+time merged group: ids=[${srGroup.map((s) => s.subject_id).join(',')}]`);
+  }
+  console.log(`[preflight][merge-b] total merged sub-groups after pass B=${mergeGroupCount}`);
 
   // ── Unique-clean detection (Scenario 1 only) ─────────────────────────────────
   // A subject is "unique-clean" when it already has a schedule+room assignment
@@ -2187,6 +2237,33 @@ function toCourseOfferingRoomIdText(value, roomLookup) {
 
 async function buildAutomaticSchedulerExportRows() {
   const rows = await fetchAutomaticSchedulerRows();
+
+  // Group merged rows by their physical slot (schedule + room IDs) so we can
+  // list merge partners in the exported column instead of a plain true/false.
+  const mergeGroups = new Map(); // slotKey -> row[]
+  for (const row of rows) {
+    if (!row.merged) continue;
+    const key = `${normalizeUpper(row.mth_schedule || '')}|||${normalizeUpper(row.tfs_schedule || '')}|||${normalizeUpper(String(row.mth_room_id || ''))}|||${normalizeUpper(String(row.tfs_room_id || ''))}`;
+    if (!mergeGroups.has(key)) mergeGroups.set(key, []);
+    mergeGroups.get(key).push(row);
+  }
+
+  // For each merged row, build a label listing its partners (all group members except self).
+  // Format: "{code} {section} ({department_name})" joined by ", ".
+  const mergeLabel = new Map(); // row.id -> label string
+  for (const group of mergeGroups.values()) {
+    for (const row of group) {
+      const partners = group.filter((r) => r.id !== row.id);
+      if (partners.length === 0) continue;
+      mergeLabel.set(
+        row.id,
+        partners
+          .map((r) => `${r.code || ''} ${r.section || ''} (${r.department_name || ''})`.trim())
+          .join(', '),
+      );
+    }
+  }
+
   return rows.map((row) => ({
     curr_id: row.curr_id,
     code: row.code,
@@ -2201,7 +2278,7 @@ async function buildAutomaticSchedulerExportRows() {
     mth_room: row.mth_room_name,
     tfs_schedule: row.tfs_schedule,
     tfs_room: row.tfs_room_name,
-    merged: row.merged,
+    merged: row.merged ? (mergeLabel.get(row.id) || 'true') : '',
   }));
 }
 

@@ -254,19 +254,35 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Groups merged rows by course_no|||section → { codes: Set, depts: [] }
+  function isMergedRow(row) {
+    return (
+      row.merged === true ||
+      row.merged === 'true' ||
+      (typeof row.merged === 'string' &&
+        row.merged !== '' &&
+        row.merged.toLowerCase() !== 'false' &&
+        row.merged !== 'preserved')
+    );
+  }
+
+  function mergeSlotKey(row) {
+    const mthR = normalizeKey(row.mth_room_name || row.mth_room || String(row.mth_room_id || ''));
+    const tfsR = normalizeKey(row.tfs_room_name || row.tfs_room || String(row.tfs_room_id || ''));
+    return `${normalizeKey(row.mth_schedule || '')}|||${normalizeKey(row.tfs_schedule || '')}|||${mthR}|||${tfsR}`;
+  }
+
+  // Groups merged rows by physical slot (schedule + room) → { codes: Set, depts: [], sections: Set }
   const mergedGroupMap = useMemo(() => {
     const map = new Map();
     if (!Array.isArray(rows)) return map;
     for (const row of rows) {
-      const isMerged = row.merged === true || row.merged === 'true';
-      if (!isMerged) continue;
-      const cn = normalizeKey(row.course_no);
-      const sec = normalizeKey(row.section);
-      const key = `${cn}|||${sec}`;
-      if (!map.has(key)) map.set(key, { codes: new Set(), depts: [] });
+      if (!isMergedRow(row)) continue;
+      const key = mergeSlotKey(row);
+      if (!map.has(key)) map.set(key, { codes: new Set(), courseNos: new Set(), depts: [], sections: new Set() });
       const entry = map.get(key);
       if (row.code) entry.codes.add(row.code);
+      if (row.course_no) entry.courseNos.add(row.course_no);
+      if (row.section) entry.sections.add(row.section);
       const dept = row.department_name || `Dept ${row.department_id}`;
       if (!entry.depts.includes(dept)) entry.depts.push(dept);
     }
@@ -297,7 +313,7 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
     mth_room: (r) => (r.mth_room_name || r.mth_room_id || '').toLowerCase(),
     tfs_schedule: (r) => (r.tfs_schedule || '').toLowerCase(),
     tfs_room: (r) => (r.tfs_room_name || r.tfs_room_id || '').toLowerCase(),
-    status: (r) => ((r.merged === true || r.merged === 'true') ? 'merged' : ''),
+    status: (r) => (isMergedRow(r) ? 'merged' : r.merged === 'preserved' ? 'preserved' : ''),
   };
 
   const sortedRows = useMemo(() => {
@@ -485,7 +501,7 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
               </td>
               <td className="px-4 py-3">
                 {(() => {
-                  const isMerged = row.merged === true || row.merged === 'true';
+                  const isMerged = isMergedRow(row);
                   const isPreserved = row.merged === 'preserved';
                   if (isPreserved) {
                     return (
@@ -497,16 +513,16 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
                   if (!isMerged) {
                     return <span className="text-xs text-on-surface-variant">—</span>;
                   }
-                  const groupKey = `${normalizeKey(row.course_no)}|||${normalizeKey(row.section)}`;
-                  const group = mergedGroupMap.get(groupKey) || { codes: new Set(), depts: [] };
-                  const uniqueCodes = [...group.codes];
-                  const codesAreUnique = uniqueCodes.length > 1;
-                  if (codesAreUnique) {
+                  const groupKey = mergeSlotKey(row);
+                  const group = mergedGroupMap.get(groupKey) || { codes: new Set(), courseNos: new Set(), depts: [], sections: new Set() };
+                  const uniqueCourseNos = [...(group.courseNos || new Set())];
+                  const multiCourse = uniqueCourseNos.length > 1;
+                  if (multiCourse) {
                     return (
                       <div className="flex flex-col gap-0.5">
                         <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100/80 text-blue-700 self-start">Merged</span>
                         <span className="text-xs text-blue-500 pl-1" title={group.depts.join(', ')}>
-                          → {uniqueCodes.join(', ')}
+                          → {uniqueCourseNos.join(', ')}
                         </span>
                       </div>
                     );
