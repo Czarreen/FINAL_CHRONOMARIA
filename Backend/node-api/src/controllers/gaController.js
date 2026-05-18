@@ -2342,6 +2342,8 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
   `);
   const roomLookup = buildRoomLookup(roomResp.rows || []);
 
+  await query('DELETE FROM public.subjects');
+
   let backup = null;
 
   await withPgClient(async (client) => {
