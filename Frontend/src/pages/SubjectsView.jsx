@@ -4,14 +4,15 @@ import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, 
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchSubjectNotifications, fetchPersistedSubjectNotifications, resolveSubjectNotification, rescanAllSubjectNotifications, syncSubjectNotifications } from '../services/notificationsApi';
+import { syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { useNotifications } from '../hooks/useNotifications';
 import { highlightRowElement } from '../utils/highlightRow.js';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
-import { buildScheduleString, parseScheduleString, emptyCardState } from '../utils/scheduleUtils';
+import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils';
 
-export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 0 } = {}) {
+export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,8 +62,13 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [subjectNotifications, setSubjectNotifications] = useState([]);
-  const [subjectNotificationsLoading, setSubjectNotificationsLoading] = useState(false);
+  const {
+    subjectNotifications,
+    subjectLoading: subjectNotificationsLoading,
+    rescanBoth: handleRescanNotifications,
+    resolveSubject: handleResolveNotification,
+    refreshSubject: refreshNotifications,
+  } = useNotifications();
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
   const [pendingScrollToSubject, setPendingScrollToSubject] = useState(null);
@@ -73,6 +79,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     { key: 'subject_course_no', label: 'Course No' },
     { key: 'subject_descriptive_title', label: 'Description' },
     { key: 'department_info', label: 'Department' },
+    { key: 'merged', label: 'Merged' },
     { key: 'mth_schedule', label: 'MTH' },
     { key: 'tfs_schedule', label: 'TFS' },
     { key: 'room', label: 'Room' },
@@ -166,7 +173,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       await Promise.all(deletePromises);
       setSelectedSubjects(new Set());
       await loadSubjects();
-      await loadSubjectNotifications();
+      refreshNotifications();
     } catch (err) {
       setUpdateError(err.message || 'Failed to delete subjects');
     }
@@ -260,13 +267,9 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     loadSubjects();
   }, [page, limit, search, searchField, statusFilter, subjectMutationKey]);
 
-  useEffect(() => {
-    loadSubjectNotifications();
-  }, [authRefreshKey, subjectMutationKey]);
 
-  const handleInlineSave = async ({ offeringId, field, value, rowId }) => {
-    // offeringId may be undefined for subjects notifications; prefer rowId
-    const subjectId = rowId || offeringId;
+  const handleInlineSave = async ({ offeringId, field, value }) => {
+    const subjectId = offeringId;
     if (!subjectId) return;
     const keyMap = {
       'Course Code': 'subject_code', 'Course Number': 'subject_course_no', 'Course Title': 'subject_descriptive_title',
@@ -277,8 +280,9 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     const dbField = keyMap[field] || field;
     try {
       await updateSubject(subjectId, { [dbField]: value });
-        try { await syncSubjectNotifications(subjectId); } catch (_) {}
-      await loadSubjectNotifications({ forceRescan: false });
+        syncSubjectNotifications(subjectId)
+        .then(() => refreshNotifications())
+        .catch(() => {});
     } catch (err) {
       console.error('Inline save (subject) failed:', err);
     }
@@ -422,86 +426,6 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
     }
   }
 
-  async function loadSubjectNotifications({ forceRescan = false } = {}) {
-    setSubjectNotificationsLoading(true);
-    try {
-      if (forceRescan) {
-        await rescanAllSubjectNotifications();
-      }
-      // Prefer persisted notifications (allows resolving); fallback to computed live
-      try {
-        let persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
-        let rows = Array.isArray(persisted.rows) ? persisted.rows : [];
-
-        // Auto-rescan if DB is empty and this is not already a forced rescan
-        if (rows.length === 0 && !forceRescan) {
-          await rescanAllSubjectNotifications();
-          persisted = await fetchPersistedSubjectNotifications({ page: 1, limit: 500 });
-          rows = Array.isArray(persisted.rows) ? persisted.rows : [];
-        }
-
-        // Backend enriches each row with the full subject object — no per-row fetches needed
-        const items = rows.map((r) => {
-          const dbSubject = r.subject || null;
-          const field = r.field_name || null;
-          const hasLectureHours = Number(dbSubject?.subject_lec_hrs ?? 0) > 0;
-          const hasLabHours = Number(dbSubject?.subject_lab_hrs ?? 0) > 0;
-
-          // Backend uses a single "either lecture hours or lab hours" message under field_name='subject_lec_hrs'.
-          // If one of the two is already filled, the editable field(s) should only include the missing side.
-          const msg = String(r.message || '');
-          const isSubjectHoursIssue =
-            (field === 'subject_lec_hrs' || field === 'subject_lecture_hours') &&
-            msg.toLowerCase().includes('either lecture hours or lab hours');
-
-          const missingFields = isSubjectHoursIssue
-            ? (!hasLectureHours && !hasLabHours
-                ? ['subject_lec_hrs', 'subject_lab_hrs']
-                : [])
-            : (field ? [field] : []);
-
-
-          // Ignore stale hours notifications when the subject already has at least one hour value.
-          if (isSubjectHoursIssue && missingFields.length === 0) {
-            return null;
-          }
-
-          return {
-            id: r.id,
-            title: r.subject_descriptive_title || dbSubject?.subject_descriptive_title || r.message || `Subject #${r.entity_id}`,
-            description: r.subject_code || dbSubject?.subject_code || null,
-            severity: normalizeNotificationSeverity(r.severity),
-            missingFields,
-            issues: [{ message: r.message, details: r.details, field }],
-            rowId: r.entity_id,
-            subject: dbSubject,
-            raw: r,
-          };
-        }).filter(Boolean);
-
-        setSubjectNotifications(items);
-      } catch (err) {
-        const data = await fetchSubjectNotifications({ page: 1, limit: 500 });
-        // fallback: map computed live rows to expected shape
-        const items = (Array.isArray(data.rows) ? data.rows : []).map((r) => ({
-          id: r.id || `subject-${r.rowId}`,
-          title: r.title || r.message || `Subject #${r.rowId}`,
-          description: r.description || null,
-          severity: normalizeNotificationSeverity(r.severity),
-          missingFields: r.missingFields || [],
-          issues: r.issues || (r.message ? [{ message: r.message, field: (r.field_name || (r.missingFields && r.missingFields[0]) || null) }] : []),
-          rowId: r.rowId,
-          subject: r.subject || null,
-          raw: r,
-        }));
-        setSubjectNotifications(items);
-      }
-    } catch (err) {
-      setSubjectNotifications([]);
-    } finally {
-      setSubjectNotificationsLoading(false);
-    }
-  }
 
   function scrollToSubjectRowById(subjectId, severity = null) {
     const rowElement = document.getElementById(`subject-row-${subjectId}`);
@@ -529,18 +453,6 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
         // ignore fallback failures
       }
     })();
-  }
-
-  async function handleResolveNotification(item) {
-    try {
-      // item.id from persisted table should be numeric; ignore computed ids like 'subject-123'
-      const numericId = Number(item.id);
-      if (!numericId || Number.isNaN(numericId)) return;
-      await resolveSubjectNotification(numericId);
-      await loadSubjectNotifications();
-    } catch (err) {
-      // ignore or set a UI error state if desired
-    }
   }
 
   async function handleStatusToggle(subjectId, currentStatus) {
@@ -655,7 +567,9 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       setEditingSubject(null);
       setMthCard(emptyCardState('mth'));
       setTfsCard(emptyCardState('tfs'));
-      await loadSubjectNotifications();
+      syncSubjectNotifications(editingSubject.subject_id)
+        .then(() => refreshNotifications())
+        .catch(() => {});
     } catch (err) {
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
@@ -687,7 +601,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
             setActiveCount((c) => Math.max(0, c - 1));
           }
           await loadSubjects();
-          await loadSubjectNotifications();
+          refreshNotifications();
         } catch (err) {
           if (String(err.message || '').includes('404')) {
             await loadSubjects();
@@ -811,9 +725,9 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
       if ((createdSubject?.subject_status || 'active') === 'active') {
         setActiveCount((currentCount) => currentCount + 1);
       }
-      // Reload subjects
+      // Reload subjects then sync notifications
       await loadSubjects();
-      await loadSubjectNotifications();
+      refreshNotifications();
     } catch (err) {
       setSubjectError(err.message || 'Failed to create subject');
     } finally {
@@ -999,6 +913,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
           <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
             <NotificationButton
+              panelSize="lg"
               items={visibleSubjectNotifications}
               title="Subject Notifications"
               emptyLabel="No subject issues"
@@ -1022,7 +937,7 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
             />
             <div className="h-5 w-px bg-slate-200 self-center" />
             <button
-              onClick={() => loadSubjectNotifications({ forceRescan: true })}
+              onClick={handleRescanNotifications}
               disabled={subjectNotificationsLoading}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
               title="Re-detect all subject issues"
@@ -1226,12 +1141,13 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
               <tbody className="divide-y divide-white/20">
                 {sortedSubjects.map((subject, index) => {
                   const issueState = getSubjectIssueState(subject.subject_id);
+                  const isSelected = selectedSubjects.has(subject.subject_id);
                   return (
-                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors hover:bg-white/100 ${issueState.hasScheduleConflict ? 'bg-red-50/70' : index % 2 === 0 ? 'bg-white/6' : ''}`}>
+                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors ${isSelected ? 'bg-primary/10' : issueState.hasScheduleConflict ? 'bg-red-50/70' : index % 2 === 0 ? 'bg-white/6' : ''}`}>
                     <td className="px-4 py-2">
                       <input
                         type="checkbox"
-                        checked={selectedSubjects.has(subject.subject_id)}
+                        checked={isSelected}
                         onChange={() => toggleSelectSubject(subject.subject_id)}
                         aria-label={`Select subject ${subject.subject_code || subject.subject_id}`}
                       />
@@ -1264,11 +1180,36 @@ export default function SubjectsView({ authRefreshKey = 0, subjectMutationKey = 
                         {col.key === 'department_info' && (
                           <span className="text-xs font-medium text-on-surface">{subject.departments?.department_name || '—'}</span>
                         )}
+                        {col.key === 'merged' && (
+                          <div className="flex justify-center">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                              {subject.merged === true || subject.merged === 'true'
+                                ? 'Merged'
+                                : subject.merged === false || subject.merged === 'false'
+                                ? '—'
+                                : String(subject.merged ?? '—')}
+                            </span>
+                          </div>
+                        )}
                         {col.key === 'mth_schedule' && (
-                          <span className="block text-xs text-on-surface-variant">{extractTimeRange(subject.mth_schedule)}</span>
+                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
+                            {formatScheduleTimeDisplay(subject.mth_schedule) || extractTimeRange(subject.mth_schedule)}
+                            {getScheduleAmPm(subject.mth_schedule) && (
+                              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {getScheduleAmPm(subject.mth_schedule)}
+                              </span>
+                            )}
+                          </span>
                         )}
                         {col.key === 'tfs_schedule' && (
-                          <span className="block text-xs text-on-surface-variant">{extractTimeRange(subject.tfs_schedule)}</span>
+                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
+                            {formatScheduleTimeDisplay(subject.tfs_schedule) || extractTimeRange(subject.tfs_schedule)}
+                            {getScheduleAmPm(subject.tfs_schedule) && (
+                              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {getScheduleAmPm(subject.tfs_schedule)}
+                              </span>
+                            )}
+                          </span>
                         )}
                         {col.key === 'room' && (
                           <span className="block text-xs text-on-surface-variant">{extractRoomSummary(subject)}</span>

@@ -38,10 +38,11 @@ import {
 import { fetchRooms } from '../services/roomsApi';
 import { fetchDepartments } from '../services/departmentsApi';
 import NotificationButton from '../components/NotificationButton';
-import { fetchCourseOfferingNotifications, resolveCourseOfferingNotification, syncCourseOfferingNotifications, rescanAllCourseOfferingNotifications } from '../services/notificationsApi';
+import { syncCourseOfferingNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
+import { useNotifications } from '../hooks/useNotifications';
 import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidation';
-import { normalizeNotificationSeverity } from '../utils/notificationUtils';
+import { NOTIFICATION_FIELD_TO_KEY } from '../utils/notificationTransform';
 import ScheduleCardInput from '../components/ScheduleCardInput';
 import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleTimeDisplay } from '../utils/scheduleUtils';
 
@@ -73,7 +74,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [importResultModal, setImportResultModal] = useState(null); // holds summary after import finishes
   const [selectedOfferings, setSelectedOfferings] = useState(new Set());
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState(
     new Set([
       'code', 'curr_id', 'course_no', 'descriptive_title', 'department_name', 'section',
@@ -96,7 +96,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
   const [editingFromNotification, setEditingFromNotification] = useState(false);
   const [notificationMissingFields, setNotificationMissingFields] = useState(new Set());
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const {
+    coNotifications: notifications,
+    coLoading: notificationsLoading,
+    rescanBoth: handleForceRescan,
+    resolveCO: resolveNotificationItem,
+    refreshCO: refreshNotifications,
+    refreshSubject: refreshSubjectNotifications,
+    triggerCoRefresh,
+  } = useNotifications();
 
   // Structured schedule card state — drives mth_schedule / tfs_schedule strings
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
@@ -235,7 +243,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     return () => {
       active = false;
     };
-  }, [page, refreshToken, refreshTrigger, sortConfig, debouncedSearch, filterColumn]);
+  }, [page, refreshToken, sortConfig, debouncedSearch, filterColumn]);
 
   // Load rooms data
   useEffect(() => {
@@ -467,8 +475,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setTfsCard(emptyCardState('tfs'));
       setEditingFromNotification(false);
       setNotificationMissingFields(new Set());
-      // Re-sync notifications for this offering in the background then refresh list
-      syncCourseOfferingNotifications(savedId).catch(() => {});
+      // Re-sync notifications for this offering in the background then refresh both
+      syncCourseOfferingNotifications(savedId)
+        .then(() => { refreshNotifications(); refreshSubjectNotifications(); })
+        .catch(() => {});
       await loadInitialPage();
     } catch (err) {
       if (String(err.message || '').includes('404')) {
@@ -570,7 +580,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       const summary = response?.summary ?? null;
       setImportSummary(summary);
       setImportResultModal(summary);
-      setRefreshTrigger((prev) => prev + 1);
+      triggerCoRefresh();
       await loadInitialPage();
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Failed to import CSV.');
@@ -589,6 +599,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     { key: 'descriptive_title', label: 'Title' },
     { key: 'department_name', label: 'Department' },
     { key: 'section', label: 'Section' },
+    { key: 'merged', label: 'Merged' },
     { key: 'units', label: 'Units' },
     { key: 'lec_hrs', label: 'Lecture Hrs' },
     { key: 'lab_hrs', label: 'Lab Hrs' },
@@ -618,6 +629,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         { key: 'curr_id', label: 'Curriculum ID' },
         { key: 'department_name', label: 'Department' },
         { key: 'section', label: 'Section' },
+        { key: 'merged', label: 'Merged' },
         { key: 'units', label: 'Units' },
         { key: 'lec_hrs', label: 'Lecture Hrs' },
         { key: 'lab_hrs', label: 'Lab Hrs' },
@@ -636,40 +648,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     },
   ];
 
-  // Maps issue.field strings (from buildCourseOfferingNotifications) → editingData keys
-  const NOTIFICATION_FIELD_TO_KEY = {
-    'Course Code': 'code',
-    'Course Number': 'course_no',
-    'Course Title': 'descriptive_title',
-    'Department': 'department_id',
-    'Curriculum': 'curr_id',
-    'Credit Units': 'units',
-    'Lecture Hours': ['lec_hrs', 'lab_hrs'],
-    'Lecture/Lab Hours': ['lec_hrs', 'lab_hrs'],
-    'Schedule': ['mth_schedule', 'tfs_schedule'],
-    'Room Assignment': ['mth_room_id', 'tfs_room_id'],
-    'MTH Room': 'mth_room_id',
-    'TFS Room': 'tfs_room_id',
-    'MTH Schedule': 'mth_schedule',
-    'TFS Schedule': 'tfs_schedule',
-  };
-
-  // Maps backend snake_case field names to display names
-  const BACKEND_FIELD_TO_DISPLAY_NAME = {
-    'code': 'Course Code',
-    'course_no': 'Course Number',
-    'descriptive_title': 'Course Title',
-    'department_id': 'Department',
-    'curr_id': 'Curriculum',
-    'units': 'Credit Units',
-    'lec_hrs': 'Lecture/Lab Hours',
-    'hours': 'Lecture/Lab Hours',
-    'mth_schedule': 'MTH Schedule',
-    'tfs_schedule': 'TFS Schedule',
-    'mth_room_id': 'MTH Room',
-    'tfs_room_id': 'TFS Room',
-  };
-
   // Set of column keys that are editable in notification-edit mode (null = all editable)
   const editableKeys = useMemo(() => {
     if (!editingFromNotification) return null;
@@ -686,74 +664,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   // Server-side search and sort are now active — offerings already contain only matching results
   const displayedOfferings = offerings;
 
-  const [notifications, setNotifications] = useState([]);
-
-  // Transform flat DB rows (one row per issue) into grouped notification objects
-  function transformDbNotifications(rows) {
-    const byOffering = {};
-    (rows || []).forEach((row) => {
-      const key = row.entity_id;
-      if (!byOffering[key]) {
-        byOffering[key] = {
-          id: row.entity_id,
-          offeringId: row.entity_id,
-          entity_id: row.entity_id,
-          title: row.details?.code ? `${row.details.code}` : `Offering #${row.entity_id}`,
-          description: row.message,
-          severity: normalizeNotificationSeverity(row.severity),
-          issues: [],
-          missingFields: [],
-          dbIds: [],
-        };
-      }
-      const displayFieldName = BACKEND_FIELD_TO_DISPLAY_NAME[row.field_name] || row.field_name;
-      byOffering[key].issues.push({
-        field: displayFieldName,
-        message: row.message,
-        details: row.details,
-      });
-      byOffering[key].missingFields.push(displayFieldName);
-      byOffering[key].dbIds.push(row.id);
-      // Escalate severity if any issue is high/critical
-      if (normalizeNotificationSeverity(row.severity) === 'critical') {
-        byOffering[key].severity = 'critical';
-      }
-    });
-    return Object.values(byOffering);
-  }
-
-  // Fetch persisted notifications from backend
-  useEffect(() => {
-    let active = true;
-
-    async function loadNotifications() {
-      setNotificationsLoading(true);
-      try {
-        const payload = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
-        if (!active) return;
-
-        const rowCount = payload.total ?? payload.rows?.length ?? 0;
-        if (rowCount === 0) {
-          // DB is empty — auto-rescan all offerings to populate the table
-          await rescanAllCourseOfferingNotifications();
-          if (!active) return;
-          const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
-          if (!active) return;
-          setNotifications(transformDbNotifications(refetched.rows || []));
-        } else {
-          setNotifications(transformDbNotifications(payload.rows || []));
-        }
-      } catch (err) {
-        console.error('Failed to load course offering notifications:', err);
-        if (active) setNotifications([]);
-      } finally {
-        if (active) setNotificationsLoading(false);
-      }
-    }
-
-    loadNotifications();
-    return () => { active = false; };
-  }, [refreshTrigger]);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
@@ -849,32 +759,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     }
   };
 
-  const handleForceRescan = async () => {
-    setNotificationsLoading(true);
-    try {
-      await rescanAllCourseOfferingNotifications(true);
-      const refetched = await fetchCourseOfferingNotifications({ page: 1, limit: 500, unresolvedOnly: true });
-      setNotifications(transformDbNotifications(refetched.rows || []));
-    } catch (err) {
-      console.error('Force rescan failed:', err);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
-
-  const resolveNotificationItem = async (item) => {
-    // Optimistically remove from local list
-    setNotifications((prev) => prev.filter((n) => n.id !== item.id));
-    try {
-      await Promise.all(
-        (item.dbIds || []).map((dbId) => resolveCourseOfferingNotification(dbId))
-      );
-    } catch (err) {
-      console.error('Failed to resolve notification:', err);
-      setRefreshTrigger((t) => t + 1);
-    }
-  };
-
   const handleInlineSave = async ({ offeringId, field, value }) => {
     const keyMap = {
       'Course Code': 'code', 'Course Number': 'course_no', 'Course Title': 'descriptive_title',
@@ -885,8 +769,9 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     const dbField = keyMap[field] || field;
     try {
       await updateCourseOffering(offeringId, { [dbField]: value });
-      syncCourseOfferingNotifications(offeringId).catch(() => {});
-      setRefreshTrigger((t) => t + 1);
+      syncCourseOfferingNotifications(offeringId)
+        .then(() => { refreshNotifications(); refreshSubjectNotifications(); })
+        .catch(() => {});
     } catch (err) {
       console.error('Inline save failed:', err);
     }
@@ -1681,16 +1566,18 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 </tr>
               )}
 
-              {!loading && !error && displayedOfferings.map((offering, index) => (
-                <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors hover:bg-white/40 ${index % 2 === 0 ? 'bg-white/6' : ''}`}>
-                  <td className="px-3 py-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedOfferings.has(offering.id)}
-                      onChange={() => toggleSelectOffering(offering.id)}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
-                    />
-                  </td>
+              {!loading && !error && displayedOfferings.map((offering, index) => {
+                const isSelected = selectedOfferings.has(offering.id);
+                return (
+                  <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
+                    <td className="px-3 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectOffering(offering.id)}
+                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      />
+                    </td>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
@@ -1715,6 +1602,14 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                           </span>
                         ) : col.key === 'mth_room_id' || col.key === 'tfs_room_id' ? (
                           <span className="text-xs text-on-surface-variant">{renderRoomCell(offering, col.key)}</span>
+                        ) : col.key === 'merged' ? (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                            {offering.merged === true || offering.merged === 'true'
+                              ? 'Merged'
+                              : offering.merged === false || offering.merged === 'false'
+                              ? '—'
+                              : String(offering.merged ?? '—')}
+                          </span>
                         ) : col.key === 'mth_schedule' || col.key === 'tfs_schedule' ? (
                           <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
                             {formatScheduleTimeDisplay(offering[col.key]) ?? renderCellValue(offering[col.key])}
@@ -1753,7 +1648,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
         </div>

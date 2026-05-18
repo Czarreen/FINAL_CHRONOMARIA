@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { recordAuditLog } from '../lib/auditLogger.js';
 import { buildSubjectNotificationIssues, buildSubjectNotificationRows, rescanAllSubjectNotifications } from '../lib/subjectNotifications.js';
+import { buildOfferingNotificationIssues, upsertOfferingNotificationCache, rescanAllOfferingNotifications } from '../lib/courseOfferingNotifications.js';
 import { findConflictingSchedules, isRoomGym, parseScheduleString, timeRangesOverlap } from '../lib/scheduleConflictChecker.js';
 
 const router = Router();
@@ -79,75 +80,6 @@ router.patch('/course-offerings/:id/resolve', async (req, res) => {
   }
 });
 
-// Shared helper: compute issue rows for a single offering object.
-// gymRoomIds is a Set<string> of room IDs that are gym rooms (exempt from conflict detection).
-function computeOfferingIssues(offering, allOfferings = [], gymRoomIds = new Set()) {
-  const isEmptyVal = (v) => v === null || v === undefined || String(v).trim() === '' || v === 0;
-  const issues = [];
-
-  if (isEmptyVal(offering.code)) issues.push({ field_name: 'code', severity: 'high', message: 'Course code is required', issue_type: 'missing' });
-  if (isEmptyVal(offering.course_no)) issues.push({ field_name: 'course_no', severity: 'high', message: 'Course number is required', issue_type: 'missing' });
-
-  const mthSchedule = !isEmptyVal(offering.mth_schedule);
-  const mthRoom = !isEmptyVal(offering.mth_room_id);
-  const tfsSchedule = !isEmptyVal(offering.tfs_schedule);
-  const tfsRoom = !isEmptyVal(offering.tfs_room_id);
-
-  if (!(mthSchedule && mthRoom) && !(tfsSchedule && tfsRoom)) {
-    if (!mthSchedule && !tfsSchedule) {
-      issues.push({ field_name: 'mth_schedule', severity: 'high', message: 'No schedule assigned', issue_type: 'missing' });
-    } else if (!mthRoom && !tfsRoom) {
-      if (mthSchedule) issues.push({ field_name: 'mth_room_id', severity: 'high', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
-      if (tfsSchedule) issues.push({ field_name: 'tfs_room_id', severity: 'high', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
-    } else {
-      if (mthSchedule && !mthRoom) issues.push({ field_name: 'mth_room_id', severity: 'medium', message: 'MTH schedule is missing room assignment', issue_type: 'missing' });
-      if (tfsSchedule && !tfsRoom) issues.push({ field_name: 'tfs_room_id', severity: 'medium', message: 'TFS schedule is missing room assignment', issue_type: 'missing' });
-      if (!mthSchedule && mthRoom) issues.push({ field_name: 'mth_schedule', severity: 'medium', message: 'MTH room assigned but no schedule', issue_type: 'missing' });
-      if (!tfsSchedule && tfsRoom) issues.push({ field_name: 'tfs_schedule', severity: 'medium', message: 'TFS room assigned but no schedule', issue_type: 'missing' });
-    }
-  }
-
-  if (isEmptyVal(offering.descriptive_title)) issues.push({ field_name: 'descriptive_title', severity: 'medium', message: 'Course title is missing', issue_type: 'missing' });
-  if (isEmptyVal(offering.department_id)) issues.push({ field_name: 'department_id', severity: 'medium', message: 'Department is not assigned', issue_type: 'missing' });
-  if (isEmptyVal(offering.curr_id)) issues.push({ field_name: 'curr_id', severity: 'medium', message: 'Curriculum ID is missing', issue_type: 'missing' });
-  if (isEmptyVal(offering.units)) issues.push({ field_name: 'units', severity: 'medium', message: 'Credit units are not specified', issue_type: 'missing' });
-  const hasLectureHours = !isEmptyVal(offering.lec_hrs);
-  const hasLabHours = !isEmptyVal(offering.lab_hrs);
-  if (!hasLectureHours && !hasLabHours) {
-    issues.push({
-      field_name: 'hours',
-      severity: 'medium',
-      message: 'Either lecture hours or lab hours must be specified',
-      issue_type: 'missing',
-    });
-  }
-
-  // Gym detection: check by numeric ID first (course offerings), then fall back to name (subjects).
-  const isMthRoomGym = gymRoomIds.has(String(offering.mth_room_id)) || isRoomGym(offering.mth_room_id);
-  const isTfsRoomGym = gymRoomIds.has(String(offering.tfs_room_id)) || isRoomGym(offering.tfs_room_id);
-
-  const conflicts = findConflictingSchedules(offering, allOfferings, false, gymRoomIds);
-  for (const conflict of conflicts) {
-    if ((conflict.schedule === 'MTH' && !isMthRoomGym) || (conflict.schedule === 'TFS' && !isTfsRoomGym)) {
-      issues.push({
-        field_name: 'schedule_conflict',
-        severity: 'high',
-        message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
-        issue_type: 'conflict',
-        conflicting_offering_id: conflict.entityId,
-      });
-    }
-  }
-
-  // Escalate: 4+ issues with no critical → all become critical
-  const hasCritical = issues.some((i) => i.severity === 'high');
-  if (!hasCritical && issues.length >= 4) {
-    issues.forEach((i) => { i.severity = 'high'; });
-  }
-
-  return issues;
-}
-
 // POST /api/notifications/course-offerings/sync
 // Re-computes notifications for a single offering after a save
 router.post('/course-offerings/sync', async (req, res) => {
@@ -155,113 +87,12 @@ router.post('/course-offerings/sync', async (req, res) => {
     const offeringId = Number(req.body?.offering_id);
     if (!offeringId) return res.status(400).json({ error: 'offering_id required' });
 
-    const { data: rows, error: fetchErr } = await supabaseAdmin
-      .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
-      .eq('id', offeringId)
-      .limit(1);
-
-    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
-    const offering = rows?.[0];
-    if (!offering) return res.status(404).json({ error: 'Offering not found' });
-
-    const { data: allOfferings, error: allFetchErr } = await supabaseAdmin
-      .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
-
-    if (allFetchErr) return res.status(500).json({ error: allFetchErr.message });
-
-    // Build a set of gym room IDs so the conflict checker can exempt them by numeric ID.
-    const { data: allRooms } = await supabaseAdmin.from('rooms').select('room_id, room_name');
-    const gymRoomIds = new Set(
-      (allRooms || []).filter((r) => isRoomGym(r.room_name)).map((r) => String(r.room_id))
-    );
-
-    const { error: delErr } = await supabaseAdmin
-      .from('data_quality_notifications')
-      .delete()
-      .eq('entity_type', 'course_offering')
-      .eq('entity_id', offeringId)
-      .eq('is_resolved', false);
-
-    if (delErr) return res.status(500).json({ error: delErr.message });
-
-    const issues = computeOfferingIssues(offering, allOfferings || [], gymRoomIds);
-    const now = new Date().toISOString();
-
-    let inserted = [];
-    if (issues.length > 0) {
-      const inserts = issues.map((issue) => ({
-        entity_type: 'course_offering',
-        entity_id: offeringId,
-        field_name: issue.field_name,
-        issue_type: issue.issue_type,
-        severity: issue.severity,
-        message: issue.message,
-        details: { offering_id: offeringId, code: offering.code, conflicting_offering_id: issue.conflicting_offering_id || null },
-        is_resolved: false,
-        created_at: now,
-        updated_at: now,
-      }));
-
-      const { data: insertedRows, error: insertErr } = await supabaseAdmin
-        .from('data_quality_notifications')
-        .insert(inserts)
-        .select();
-
-      if (insertErr) return res.status(500).json({ error: insertErr.message });
-      inserted = insertedRows ?? [];
-    }
-
-    // Cascade: find all offerings that had a conflict notification referencing this offering
-    // and re-sync them, even if this offering now has no issues (conflict may have been resolved).
-    const { data: staleConflictNotifs } = await supabaseAdmin
-      .from('data_quality_notifications')
-      .select('entity_id')
-      .eq('entity_type', 'course_offering')
-      .eq('field_name', 'schedule_conflict')
-      .eq('is_resolved', false)
-      .filter('details->>conflicting_offering_id', 'eq', String(offeringId));
-
-    const affectedIds = [...new Set((staleConflictNotifs || []).map((r) => r.entity_id))];
-    for (const affectedId of affectedIds) {
-      const { data: affectedRows } = await supabaseAdmin
-        .from('course_offerings')
-        .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id')
-        .eq('id', affectedId)
-        .limit(1);
-
-      const affected = affectedRows?.[0];
-      if (!affected) continue;
-
-      await supabaseAdmin
-        .from('data_quality_notifications')
-        .delete()
-        .eq('entity_type', 'course_offering')
-        .eq('entity_id', affectedId)
-        .eq('is_resolved', false);
-
-      const affectedIssues = computeOfferingIssues(affected, allOfferings || [], gymRoomIds);
-      if (affectedIssues.length === 0) continue;
-
-      const affectedInserts = affectedIssues.map((issue) => ({
-        entity_type: 'course_offering',
-        entity_id: affectedId,
-        field_name: issue.field_name,
-        issue_type: issue.issue_type,
-        severity: issue.severity,
-        message: issue.message,
-        details: { offering_id: affectedId, code: affected.code, conflicting_offering_id: issue.conflicting_offering_id || null },
-        is_resolved: false,
-        created_at: now,
-        updated_at: now,
-      }));
-
-      await supabaseAdmin.from('data_quality_notifications').insert(affectedInserts);
-    }
-
-    return res.json({ synced: inserted.length, issues: inserted });
+    const result = await upsertOfferingNotificationCache(offeringId);
+    return res.json({ synced: result.updated, issues: result.issues });
   } catch (err) {
+    if (String(err.message || '').includes('Offering not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
@@ -272,104 +103,22 @@ router.post('/course-offerings/sync', async (req, res) => {
 router.post('/course-offerings/rescan-all', async (req, res) => {
   try {
     const force = req.body?.force === true || req.query?.force === 'true';
+    const result = await rescanAllOfferingNotifications({ force });
 
-    // Check if the table already has unresolved rows
-    const { count: existingCount, error: countErr } = await supabaseAdmin
-      .from('data_quality_notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('entity_type', 'course_offering')
-      .eq('is_resolved', false);
-
-    if (countErr) return res.status(500).json({ error: countErr.message });
-
-    if (!force && (existingCount ?? 0) > 0) {
-      return res.json({ skipped: true, count: existingCount, message: 'Table already has data — use force=true to rescan.' });
-    }
-
-    // If forced, wipe existing unresolved course offering notifications first.
-    if (force && (existingCount ?? 0) > 0) {
-      const { error: wipeErr } = await supabaseAdmin
-        .from('data_quality_notifications')
-        .delete()
-        .eq('entity_type', 'course_offering')
-        .eq('is_resolved', false);
-      if (wipeErr) return res.status(500).json({ error: wipeErr.message });
-    }
-
-    // Build gym room IDs set so gym rooms are exempted from conflict detection.
-    const { data: allRooms } = await supabaseAdmin.from('rooms').select('room_id, room_name');
-    const gymRoomIds = new Set(
-      (allRooms || []).filter((r) => isRoomGym(r.room_name)).map((r) => String(r.room_id))
-    );
-
-    // Fetch all offerings
-    const { data: offerings, error: fetchErr } = await supabaseAdmin
-      .from('course_offerings')
-      .select('id, code, course_no, descriptive_title, department_id, curr_id, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id');
-
-    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
-
-    const now = new Date().toISOString();
-    const inserts = [];
-
-    for (const offering of offerings || []) {
-      const issues = computeOfferingIssues(offering, offerings || [], gymRoomIds);
-      for (const issue of issues) {
-        inserts.push({
-          entity_type: 'course_offering',
-          entity_id: offering.id,
-          field_name: issue.field_name,
-          issue_type: issue.issue_type,
-          severity: issue.severity,
-          message: issue.message,
-          details: { offering_id: offering.id, code: offering.code || null, conflicting_offering_id: issue.conflicting_offering_id || null },
-          is_resolved: false,
-          created_at: now,
-          updated_at: now,
-        });
-      }
-    }
-
-    if (inserts.length === 0) {
-      if (force) {
-        await recordAuditLog(req, {
-          action: 'course_offering_notifications_rescanned',
-          module: COURSE_OFFERING_AUDIT_MODULE,
-          description: `Rescanned course offering notifications (${(offerings || []).length} scanned, 0 issues found)`,
-          changes_after: {
-            force,
-            scanned: (offerings || []).length,
-            inserted: 0,
-          },
-        });
-      }
-
-      return res.json({ skipped: false, scanned: (offerings || []).length, inserted: 0, message: 'All offerings are complete — no issues found.' });
-    }
-
-    // Insert in batches of 200
-    const BATCH = 200;
-    for (let i = 0; i < inserts.length; i += BATCH) {
-      const { error: insertErr } = await supabaseAdmin
-        .from('data_quality_notifications')
-        .insert(inserts.slice(i, i + BATCH));
-      if (insertErr) return res.status(500).json({ error: insertErr.message });
+    if (result.skipped) {
+      return res.json({ skipped: true, count: result.count, message: 'Table already has data — use force=true to rescan.' });
     }
 
     if (force) {
       await recordAuditLog(req, {
         action: 'course_offering_notifications_rescanned',
         module: COURSE_OFFERING_AUDIT_MODULE,
-        description: `Rescanned course offering notifications (${(offerings || []).length} scanned, ${inserts.length} issue(s) found)`,
-        changes_after: {
-          force,
-          scanned: (offerings || []).length,
-          inserted: inserts.length,
-        },
+        description: `Rescanned course offering notifications (${result.scanned} scanned, ${result.inserted} issue(s) found)`,
+        changes_after: { force, scanned: result.scanned, inserted: result.inserted },
       });
     }
 
-    return res.json({ skipped: false, scanned: (offerings || []).length, inserted: inserts.length });
+    return res.json({ skipped: false, scanned: result.scanned, inserted: result.inserted });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
@@ -941,6 +690,24 @@ router.post('/subjects/rescan-all', async (_req, res) => {
   try {
     const result = await rescanAllSubjectNotifications();
     return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+// POST /api/notifications/rescan-all-entities
+// Rescans both course offering and subject notifications in one call.
+router.post('/rescan-all-entities', async (req, res) => {
+  try {
+    const force = req.body?.force === true || req.query?.force === 'true';
+    const [coResult, subjectResult] = await Promise.all([
+      rescanAllOfferingNotifications({ force }),
+      rescanAllSubjectNotifications(),
+    ]);
+    return res.json({
+      courseOfferings: { skipped: coResult.skipped ?? false, scanned: coResult.scanned ?? 0, inserted: coResult.inserted ?? 0 },
+      subjects: { scanned: subjectResult.scanned, inserted: subjectResult.inserted },
+    });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }

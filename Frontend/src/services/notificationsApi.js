@@ -41,6 +41,19 @@ export async function rescanAllCourseOfferingNotifications(force = false) {
   return res.json();
 }
 
+export async function rescanAllEntities(force = false) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rescan-all-entities`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ force }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to rescan all entities: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function syncCourseOfferingNotifications(offeringId) {
   const res = await fetch(`${API_BASE_URL}/api/notifications/course-offerings/sync`, {
     method: 'POST',

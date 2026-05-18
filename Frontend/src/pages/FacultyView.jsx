@@ -138,6 +138,28 @@ export default function FacultyView() {
     });
   }
 
+  const [selectedFaculty, setSelectedFaculty] = useState(new Set());
+
+  function toggleSelectFaculty(facultyId) {
+    setSelectedFaculty((prev) => {
+      const next = new Set(prev);
+      if (next.has(facultyId)) {
+        next.delete(facultyId);
+      } else {
+        next.add(facultyId);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAllFaculty() {
+    if (selectedFaculty.size === sortedFaculty.length && sortedFaculty.length > 0) {
+      setSelectedFaculty(new Set());
+    } else {
+      setSelectedFaculty(new Set(sortedFaculty.map((member) => member.faculty_id)));
+    }
+  }
+
   const { setHighlight } = useRowHighlight();
 
   useEffect(() => {
@@ -649,9 +671,16 @@ export default function FacultyView() {
               <span>Reload</span>
             </button>
           </div>
-          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
-            {total} faculty
-          </span>
+          <div className="inline-flex items-center gap-2">
+            {selectedFaculty.size > 0 && (
+              <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+                {selectedFaculty.size} selected
+              </span>
+            )}
+            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+              {total} faculty
+            </span>
+          </div>
           <button
             ref={colButtonRef}
             className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
@@ -767,7 +796,15 @@ export default function FacultyView() {
             <table className="min-w-full w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="sticky top-0 z-20 border-b border-white bg-white">
-
+                  <th className="px-4 py-2 text-center w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedFaculty.size > 0 && selectedFaculty.size === sortedFaculty.length}
+                      onChange={toggleSelectAllFaculty}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      aria-label="Select all faculty rows"
+                    />
+                  </th>
                   {columns.map(col => visibleColumns.has(col.key) && (
                     <th key={col.key} className="px-4 py-2 text-left">
                       <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
@@ -784,9 +821,23 @@ export default function FacultyView() {
                   const specializationItems = parseSpecializations(member.faculty_specialization);
                   const visibleSpecializations = specializationItems.slice(0, 2);
                   const hiddenSpecializationCount = Math.max(0, specializationItems.length - visibleSpecializations.length);
+                  const isSelected = selectedFaculty.has(member.faculty_id);
 
                   return (
-                    <tr key={member.faculty_id} id={`faculty-row-${member.faculty_id}`} className="group transition-colors hover:bg-white/45">
+                    <tr
+                      key={member.faculty_id}
+                      id={`faculty-row-${member.faculty_id}`}
+                      className={`group transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/45'}`}
+                    >
+                      <td className="px-4 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectFaculty(member.faculty_id)}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                          aria-label={`Select faculty ${member.faculty_name || member.faculty_id}`}
+                        />
+                      </td>
                       {columns.map(col => visibleColumns.has(col.key) && (
                         <td key={col.key} className="px-4 py-2">
                           {col.key === 'faculty_name' && (
