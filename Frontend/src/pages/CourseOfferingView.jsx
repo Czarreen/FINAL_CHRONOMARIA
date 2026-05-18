@@ -1395,7 +1395,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     ? 'bg-orange-100 text-orange-700'
                     : 'text-on-surface-variant hover:bg-slate-100'
                 }`}
-                title="Replace Mode: clears ALL Course Offerings, Subjects, and Rooms before importing the new file"
+                title="Replace Mode: clears ALL Course Offerings and Subjects before importing the new file. Rooms are not affected."
               >
                 <input
                   type="checkbox"
@@ -1830,7 +1830,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
             {replaceMode && (
               <div className="w-full rounded-lg border border-orange-300/30 bg-orange-500/20 px-4 py-2.5 text-center text-xs text-orange-200">
-                Replace mode: deleting all Course Offerings, Subjects &amp; Rooms, then rebuilding from CSV.
+                Replace mode: deleting all Course Offerings &amp; Subjects, then rebuilding from CSV. Room records are not affected.
               </div>
             )}
           </div>
@@ -1866,7 +1866,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               {/* Mode badge */}
               {importResultModal.replaceMode && (
                 <div className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-2 text-sm font-semibold text-orange-700">
-                  <span>Replace Mode — all old data was cleared first</span>
+                  <span>Replace Mode — Course Offerings &amp; Subjects were cleared first</span>
                 </div>
               )}
 
@@ -1962,7 +1962,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     <AlertCircle size={16} />
                     Replace Mode is ON
                   </p>
-                  <p>This will permanently delete <strong>all</strong> existing Course Offerings, Subjects, and Rooms — then import the new file from scratch.</p>
+                  <p>This will permanently delete <strong>all</strong> existing Course Offerings and Subjects — then import the new file from scratch. Room records are not affected.</p>
                   <p className="font-semibold">We strongly recommend downloading a backup before continuing.</p>
                 </div>
               ) : (
