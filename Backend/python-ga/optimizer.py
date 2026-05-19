@@ -1061,6 +1061,12 @@ def _norm_room_ref(value: Any) -> str:
     return re.sub(r"[^A-Z0-9]", "", normalize_upper(str(value or "")))
 
 
+def _split_room_ids(room_id_str: Any) -> List[str]:
+    """Split a slash/pipe/comma-separated room ID string into individual room IDs."""
+    raw = re.sub(r"\s+", "", str(room_id_str or ""))
+    return [tok for tok in re.split(r"[/|,;]+", raw) if tok]
+
+
 def _subject_slot_key(s: Dict[str, Any]) -> Optional[str]:
     mth_s = normalize_upper(s.get("mth_schedule") or s.get("existing_mth_schedule") or "")
     tfs_s = normalize_upper(s.get("tfs_schedule") or s.get("existing_tfs_schedule") or "")
@@ -1102,10 +1108,27 @@ def _detect_schedule_merge_groups(subjects: List[Dict[str, Any]]) -> Dict[int, i
     return merged
 
 
-def _duration_minutes(subject: Dict[str, Any]) -> int:
+def _needs_both_patterns(subject: Dict[str, Any]) -> bool:
+    """True when the subject has separate lecture and lab components needing independent slots."""
     lec = to_number(subject.get("lec_hrs")) or 0.0
     lab = to_number(subject.get("lab_hrs")) or 0.0
-    per_day = (lec + lab) / 2.0
+    return lec > 0.0 and lab > 0.0
+
+
+def _mth_dur(subject: Dict[str, Any]) -> int:
+    """Duration in minutes for the MTH-pattern slot (lecture when both patterns needed)."""
+    lec = to_number(subject.get("lec_hrs")) or 0.0
+    lab = to_number(subject.get("lab_hrs")) or 0.0
+    per_day = (lec / 2.0) if _needs_both_patterns(subject) else ((lec + lab) / 2.0)
+    raw = max(30, round(per_day * 60))
+    return int(((raw + _SCHED_STEP - 1) // _SCHED_STEP) * _SCHED_STEP)
+
+
+def _tfs_dur(subject: Dict[str, Any]) -> int:
+    """Duration in minutes for the TFS-pattern slot (lab when both patterns needed)."""
+    lec = to_number(subject.get("lec_hrs")) or 0.0
+    lab = to_number(subject.get("lab_hrs")) or 0.0
+    per_day = (lab / 2.0) if _needs_both_patterns(subject) else ((lec + lab) / 2.0)
     raw = max(30, round(per_day * 60))
     return int(((raw + _SCHED_STEP - 1) // _SCHED_STEP) * _SCHED_STEP)
 
@@ -1134,9 +1157,12 @@ def _build_reserved_maps(reserved_slots: List[Dict[str, Any]]) -> Tuple[Dict[str
             if not parsed:
                 continue
             block: Tuple[int, int] = (parsed["start"], parsed["end"])
-            for day in days:
-                room_map.setdefault(f"{room_id}|{day}", []).append(block)
-                if section:
+            sub_ids = _split_room_ids(room_id) or [room_id]
+            for sub_id in sub_ids:
+                for day in days:
+                    room_map.setdefault(f"{sub_id}|{day}", []).append(block)
+            if section:
+                for day in days:
                     sect_map.setdefault(f"{section}|{day}", []).append(block)
     return room_map, sect_map
 
@@ -1145,8 +1171,50 @@ def _overlaps_any(start: int, end: int, blocks: List[Tuple[int, int]]) -> bool:
     return any(start < be and bs < end for bs, be in blocks)
 
 
-# Gene: (room_idx, start_minutes, pattern)  pattern 0=MTH 1=TFS
-_Gene = Tuple[int, int, int]
+def _register_blocks(
+    room_id: str,
+    start: int,
+    end: int,
+    days: Tuple[str, ...],
+    section: str,
+    room_map: Dict[str, List[Tuple[int, int]]],
+    sect_map: Dict[str, List[Tuple[int, int]]],
+) -> None:
+    for sub_id in (_split_room_ids(room_id) or [room_id]):
+        for day in days:
+            room_map.setdefault(f"{sub_id}|{day}", []).append((start, end))
+    if section:
+        for day in days:
+            sect_map.setdefault(f"{section}|{day}", []).append((start, end))
+
+
+def _check_conflict(
+    room_id: str,
+    start: int,
+    end: int,
+    days: Tuple[str, ...],
+    section: str,
+    res_room: Dict[str, List[Tuple[int, int]]],
+    local_room: Dict[str, List[Tuple[int, int]]],
+    res_sect: Dict[str, List[Tuple[int, int]]],
+    local_sect: Dict[str, List[Tuple[int, int]]],
+) -> float:
+    penalty = 0.0
+    for sub_id in (_split_room_ids(room_id) or [room_id]):
+        for day in days:
+            rk = f"{sub_id}|{day}"
+            if _overlaps_any(start, end, res_room.get(rk, [])) or _overlaps_any(start, end, local_room.get(rk, [])):
+                penalty += 500.0
+    if section:
+        for day in days:
+            sk = f"{section}|{day}"
+            if _overlaps_any(start, end, res_sect.get(sk, [])) or _overlaps_any(start, end, local_sect.get(sk, [])):
+                penalty += 300.0
+    return penalty
+
+
+# Gene: (mth_room_idx, mth_start, tfs_room_idx, tfs_start)  -1 = pattern not scheduled
+_Gene = Tuple[int, int, int, int]
 _Chrom = List[Optional[_Gene]]
 
 
@@ -1156,36 +1224,102 @@ def _score_chrom(
     rooms: List[Dict[str, Any]],
     res_room: Dict[str, List[Tuple[int, int]]],
     res_sect: Dict[str, List[Tuple[int, int]]],
-) -> float:
+) -> Tuple[float, int]:
+    """Return (score 0-100, conflict_count). Conflict-free chromosomes always outrank conflicted ones."""
     hard = 0.0
+    conflict_count = 0
     local_room: Dict[str, List[Tuple[int, int]]] = {}
     local_sect: Dict[str, List[Tuple[int, int]]] = {}
 
     for i, gene in enumerate(chrom):
-        if gene is None or gene[0] >= len(rooms):
-            hard += 200.0
-            continue
-        room_idx, start, pattern = gene
-        room_id = str(rooms[room_idx].get("room_id") or "")
-        dur = _duration_minutes(subjects[i])
-        end = start + dur
-        if end > _SCHED_END:
-            hard += 50.0
-            continue
-        days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
-        section = normalize_upper(subjects[i].get("section") or "")
-        for day in days:
-            rk = f"{room_id}|{day}"
-            sk = f"{section}|{day}"
-            if _overlaps_any(start, end, res_room.get(rk, [])) or _overlaps_any(start, end, local_room.get(rk, [])):
-                hard += 100.0
-            if section and (_overlaps_any(start, end, res_sect.get(sk, [])) or _overlaps_any(start, end, local_sect.get(sk, []))):
-                hard += 60.0
-            local_room.setdefault(rk, []).append((start, end))
-            if section:
-                local_sect.setdefault(sk, []).append((start, end))
+        subject = subjects[i]
+        section = normalize_upper(subject.get("section") or "")
+        needs_both = _needs_both_patterns(subject)
 
-    return max(0.0, 100.0 - hard / max(1, len(chrom)))
+        if gene is None:
+            hard += 500.0
+            conflict_count += 1
+            continue
+
+        mth_ri, mth_start, tfs_ri, tfs_start = gene
+
+        if mth_ri >= 0:
+            if mth_ri >= len(rooms):
+                hard += 500.0
+                conflict_count += 1
+            else:
+                room_id = str(rooms[mth_ri].get("room_id") or "")
+                dur = _mth_dur(subject)
+                end = mth_start + dur
+                if end > _SCHED_END:
+                    hard += 150.0
+                    conflict_count += 1
+                else:
+                    pen = _check_conflict(room_id, mth_start, end, _MTH_DAYS, section, res_room, local_room, res_sect, local_sect)
+                    if pen > 0:
+                        hard += pen
+                        conflict_count += 1
+                    _register_blocks(room_id, mth_start, end, _MTH_DAYS, section, local_room, local_sect)
+
+        if tfs_ri >= 0:
+            if tfs_ri >= len(rooms):
+                hard += 500.0
+                conflict_count += 1
+            else:
+                room_id = str(rooms[tfs_ri].get("room_id") or "")
+                dur = _tfs_dur(subject)
+                end = tfs_start + dur
+                if end > _SCHED_END:
+                    hard += 150.0
+                    conflict_count += 1
+                else:
+                    pen = _check_conflict(room_id, tfs_start, end, _TFS_DAYS, section, res_room, local_room, res_sect, local_sect)
+                    if pen > 0:
+                        hard += pen
+                        conflict_count += 1
+                    _register_blocks(room_id, tfs_start, end, _TFS_DAYS, section, local_room, local_sect)
+
+        if mth_ri < 0 and tfs_ri < 0:
+            hard += 500.0
+            conflict_count += 1
+        elif needs_both and (mth_ri < 0 or tfs_ri < 0):
+            hard += 300.0
+            conflict_count += 1
+
+    score = max(0.0, 100.0 - hard / max(1, len(chrom)))
+    return score, conflict_count
+
+
+def _subject_difficulty(subject: Dict[str, Any]) -> float:
+    lec = to_number(subject.get("lec_hrs")) or 0.0
+    lab = to_number(subject.get("lab_hrs")) or 0.0
+    return (2.0 if _needs_both_patterns(subject) else 0.0) + lec + lab
+
+
+def _try_place(
+    subject: Dict[str, Any],
+    dur: int,
+    days: Tuple[str, ...],
+    rooms: List[Dict[str, Any]],
+    room_order: List[int],
+    res_room: Dict[str, List[Tuple[int, int]]],
+    res_sect: Dict[str, List[Tuple[int, int]]],
+    local_room: Dict[str, List[Tuple[int, int]]],
+    local_sect: Dict[str, List[Tuple[int, int]]],
+) -> Optional[Tuple[int, int]]:
+    section = normalize_upper(subject.get("section") or "")
+    max_start = _SCHED_END - dur
+    if max_start < _SCHED_START:
+        return None
+    for ri in room_order:
+        if ri >= len(rooms):
+            continue
+        room_id = str(rooms[ri].get("room_id") or "")
+        for start in range(_SCHED_START, max_start + 1, _SCHED_STEP):
+            end = start + dur
+            if _check_conflict(room_id, start, end, days, section, res_room, local_room, res_sect, local_sect) == 0.0:
+                return (ri, start)
+    return None
 
 
 def _greedy_chrom(
@@ -1195,57 +1329,62 @@ def _greedy_chrom(
     res_sect: Dict[str, List[Tuple[int, int]]],
     rng: random.Random,
 ) -> _Chrom:
-    chrom: _Chrom = []
+    indexed = sorted(enumerate(subjects), key=lambda t: -_subject_difficulty(t[1]))
+    chrom: _Chrom = [None] * len(subjects)
     local_room: Dict[str, List[Tuple[int, int]]] = {}
     local_sect: Dict[str, List[Tuple[int, int]]] = {}
 
     room_order = list(range(len(rooms)))
     rng.shuffle(room_order)
 
-    for subject in subjects:
-        dur = _duration_minutes(subject)
+    for orig_i, subject in indexed:
         section = normalize_upper(subject.get("section") or "")
         pref_str = normalize_upper(subject.get("preferred_pattern") or "")
-        patterns = [0, 1] if pref_str not in ("TFS", "TF") else [1, 0]
+        needs_both = _needs_both_patterns(subject)
 
-        gene: Optional[_Gene] = None
-        for pattern in patterns:
-            days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
-            for ri in room_order:
-                if ri >= len(rooms):
-                    continue
-                room_id = str(rooms[ri].get("room_id") or "")
-                for start in range(_SCHED_START, _SCHED_END - dur + 1, _SCHED_STEP):
-                    end = start + dur
-                    ok = True
-                    for day in days:
-                        rk = f"{room_id}|{day}"
-                        sk = f"{section}|{day}"
-                        if _overlaps_any(start, end, res_room.get(rk, [])) or _overlaps_any(start, end, local_room.get(rk, [])):
-                            ok = False
-                            break
-                        if section and (_overlaps_any(start, end, res_sect.get(sk, [])) or _overlaps_any(start, end, local_sect.get(sk, []))):
-                            ok = False
-                            break
-                    if ok:
-                        gene = (ri, start, pattern)
-                        break
-                if gene is not None:
-                    break
-            if gene is not None:
-                break
+        if needs_both:
+            mth_res = _try_place(subject, _mth_dur(subject), _MTH_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+            tfs_res = _try_place(subject, _tfs_dur(subject), _TFS_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+            mth_ri = mth_res[0] if mth_res else -1
+            mth_start = mth_res[1] if mth_res else _SCHED_START
+            tfs_ri = tfs_res[0] if tfs_res else -1
+            tfs_start = tfs_res[1] if tfs_res else _SCHED_START
+            if mth_res:
+                _register_blocks(str(rooms[mth_ri].get("room_id") or ""), mth_start, mth_start + _mth_dur(subject), _MTH_DAYS, section, local_room, local_sect)
+            if tfs_res:
+                _register_blocks(str(rooms[tfs_ri].get("room_id") or ""), tfs_start, tfs_start + _tfs_dur(subject), _TFS_DAYS, section, local_room, local_sect)
+            chrom[orig_i] = (mth_ri, mth_start, tfs_ri, tfs_start)
+        else:
+            prefer_tfs = pref_str in ("TFS", "TF")
+            if prefer_tfs:
+                result = _try_place(subject, _tfs_dur(subject), _TFS_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+                if result:
+                    ri, start = result
+                    _register_blocks(str(rooms[ri].get("room_id") or ""), start, start + _tfs_dur(subject), _TFS_DAYS, section, local_room, local_sect)
+                    chrom[orig_i] = (-1, _SCHED_START, ri, start)
+                else:
+                    result = _try_place(subject, _mth_dur(subject), _MTH_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+                    if result:
+                        ri, start = result
+                        _register_blocks(str(rooms[ri].get("room_id") or ""), start, start + _mth_dur(subject), _MTH_DAYS, section, local_room, local_sect)
+                        chrom[orig_i] = (ri, start, -1, _SCHED_START)
+                    else:
+                        chrom[orig_i] = (-1, _SCHED_START, -1, _SCHED_START)
+            else:
+                result = _try_place(subject, _mth_dur(subject), _MTH_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+                if result:
+                    ri, start = result
+                    _register_blocks(str(rooms[ri].get("room_id") or ""), start, start + _mth_dur(subject), _MTH_DAYS, section, local_room, local_sect)
+                    chrom[orig_i] = (ri, start, -1, _SCHED_START)
+                else:
+                    result = _try_place(subject, _tfs_dur(subject), _TFS_DAYS, rooms, room_order, res_room, res_sect, local_room, local_sect)
+                    if result:
+                        ri, start = result
+                        _register_blocks(str(rooms[ri].get("room_id") or ""), start, start + _tfs_dur(subject), _TFS_DAYS, section, local_room, local_sect)
+                        chrom[orig_i] = (-1, _SCHED_START, ri, start)
+                    else:
+                        chrom[orig_i] = (-1, _SCHED_START, -1, _SCHED_START)
 
-        if gene is not None:
-            ri, start, pattern = gene
-            room_id = str(rooms[ri].get("room_id") or "")
-            days = _MTH_DAYS if pattern == 0 else _TFS_DAYS
-            end = start + dur
-            for day in days:
-                local_room.setdefault(f"{room_id}|{day}", []).append((start, end))
-                if section:
-                    local_sect.setdefault(f"{section}|{day}", []).append((start, end))
-
-        chrom.append(gene)
     return chrom
 
 
@@ -1263,14 +1402,27 @@ def _mutate_chrom(
         if not rooms:
             continue
         subject = subjects[i]
-        dur = _duration_minutes(subject)
-        max_start = _SCHED_END - dur
-        if max_start < _SCHED_START:
-            continue
-        starts = list(range(_SCHED_START, max_start + 1, _SCHED_STEP))
-        if not starts:
-            continue
-        new_c[i] = (rng.randint(0, len(rooms) - 1), rng.choice(starts), rng.randint(0, 1))
+        needs_both = _needs_both_patterns(subject)
+
+        def rand_start(dur: int) -> int:
+            max_s = _SCHED_END - dur
+            if max_s < _SCHED_START:
+                return _SCHED_START
+            starts = list(range(_SCHED_START, max_s + 1, _SCHED_STEP))
+            return rng.choice(starts) if starts else _SCHED_START
+
+        if needs_both:
+            new_c[i] = (
+                rng.randint(0, len(rooms) - 1), rand_start(_mth_dur(subject)),
+                rng.randint(0, len(rooms) - 1), rand_start(_tfs_dur(subject)),
+            )
+        else:
+            gene = new_c[i]
+            cur_tfs_only = gene is not None and gene[0] < 0 and gene[2] >= 0
+            if cur_tfs_only:
+                new_c[i] = (-1, _SCHED_START, rng.randint(0, len(rooms) - 1), rand_start(_tfs_dur(subject)))
+            else:
+                new_c[i] = (rng.randint(0, len(rooms) - 1), rand_start(_mth_dur(subject)), -1, _SCHED_START)
     return new_c
 
 
@@ -1287,7 +1439,7 @@ def _chrom_to_output(
     unresolved: List[Dict[str, Any]] = []
     for i, gene in enumerate(chrom):
         subj = subjects[i]
-        if gene is None or gene[0] >= len(rooms):
+        if gene is None or (gene[0] < 0 and gene[2] < 0):
             unresolved.append({
                 "subject_id": subj.get("subject_id"),
                 "course_no": subj.get("course_no"),
@@ -1296,18 +1448,26 @@ def _chrom_to_output(
                 "reason": "No conflict-free room/time slot found by GA.",
             })
             continue
-        ri, start, pattern = gene
-        room = rooms[ri]
-        end = start + _duration_minutes(subj)
-        sched = _sched_text(start, end)
-        room_id_s = str(room.get("room_id") or "")
+        mth_ri, mth_start, tfs_ri, tfs_start = gene
         row: Dict[str, Any] = {**subj, "source_subject_id": subj.get("subject_id"), "merged": False}
-        if pattern == 0:
-            row.update(mth_schedule=sched, mth_room_id=room_id_s, mth_room_name=room.get("room_name"),
-                       tfs_schedule=None, tfs_room_id=None, tfs_room_name=None)
+        if mth_ri >= 0 and mth_ri < len(rooms):
+            mth_room = rooms[mth_ri]
+            row.update(
+                mth_schedule=_sched_text(mth_start, mth_start + _mth_dur(subj)),
+                mth_room_id=str(mth_room.get("room_id") or ""),
+                mth_room_name=mth_room.get("room_name"),
+            )
         else:
-            row.update(tfs_schedule=sched, tfs_room_id=room_id_s, tfs_room_name=room.get("room_name"),
-                       mth_schedule=None, mth_room_id=None, mth_room_name=None)
+            row.update(mth_schedule=None, mth_room_id=None, mth_room_name=None)
+        if tfs_ri >= 0 and tfs_ri < len(rooms):
+            tfs_room = rooms[tfs_ri]
+            row.update(
+                tfs_schedule=_sched_text(tfs_start, tfs_start + _tfs_dur(subj)),
+                tfs_room_id=str(tfs_room.get("room_id") or ""),
+                tfs_room_name=tfs_room.get("room_name"),
+            )
+        else:
+            row.update(tfs_schedule=None, tfs_room_id=None, tfs_room_name=None)
         assignments.append(row)
     return assignments, unresolved
 
@@ -1364,8 +1524,9 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     population: List[_Chrom] = [_greedy_chrom(to_schedule, rooms, res_room, res_sect, rng)
                                   for _ in range(max(6, population_size))]
     best_chrom = population[0]
-    best_score = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
+    best_score, best_conflicts = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
     stagnant = 0
+    diversity_injections = 0
     generation = 0
 
     while generation < max_generations:
@@ -1373,15 +1534,22 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             break
         scored = sorted(
             [(_score_chrom(c, to_schedule, rooms, res_room, res_sect), c) for c in population],
-            key=lambda x: -x[0],
+            key=lambda x: (x[0][1], -x[0][0]),  # fewer conflicts first, then higher score
         )
-        top_score, top_chrom = scored[0]
-        if top_score > best_score:
-            best_score, best_chrom, stagnant = top_score, top_chrom, 0
+        (top_score, top_conflicts), top_chrom = scored[0]
+        if top_conflicts < best_conflicts or (top_conflicts == best_conflicts and top_score > best_score):
+            best_score, best_conflicts, best_chrom, stagnant = top_score, top_conflicts, top_chrom, 0
         else:
             stagnant += 1
-        if stagnant >= 25:
-            break
+
+        if stagnant >= 15:
+            if diversity_injections < 5:
+                for _ in range(3):
+                    population.append(_greedy_chrom(to_schedule, rooms, res_room, res_sect, rng))
+                stagnant = 0
+                diversity_injections += 1
+            else:
+                break
 
         elite_count = max(2, population_size // 5)
         elites = [c for _, c in scored[:elite_count]]
@@ -1393,7 +1561,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         population = next_pop
         generation += 1
 
-    final_score = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
+    final_score, final_conflicts = _score_chrom(best_chrom, to_schedule, rooms, res_room, res_sect)
     assignments, unresolved = _chrom_to_output(best_chrom, to_schedule, rooms)
 
     return {
@@ -1409,7 +1577,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "merge_groups_detected": len(set(merged_to_rep.values())),
             "subjects_preserved_as_merged": len(extra_merged),
             "subjects_scheduled_by_ga": len(assignments),
-            "conflict_count": len(unresolved),
+            "conflict_count": final_conflicts,
             "conflicts": [{"type": "unassigned", "subject_id": u.get("subject_id"), "problem": u.get("reason")} for u in unresolved],
         },
     }

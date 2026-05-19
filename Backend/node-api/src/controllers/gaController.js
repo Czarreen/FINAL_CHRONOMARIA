@@ -175,6 +175,20 @@ function resolveRoomReference(value, roomLookup) {
   return { roomId: null, roomName: null };
 }
 
+function resolveAllRoomIds(value, roomLookup) {
+  const raw = normalizeText(value);
+  if (!raw) return [];
+  return splitList(raw)
+    .map((token) => {
+      const numeric = toNumber(token);
+      if (numeric !== null && roomLookup.byId.has(numeric)) return Number(roomLookup.byId.get(numeric).room_id);
+      const key = normalizeUpper(token).replace(/[^A-Z0-9]/g, '');
+      if (roomLookup.byName.has(key)) return Number(roomLookup.byName.get(key).room_id);
+      return null;
+    })
+    .filter((id) => id !== null);
+}
+
 function buildScheduleBlocks(offering) {
   const blocks = [];
   for (const group of ['mth', 'tfs']) {
@@ -1423,6 +1437,8 @@ function toAutomaticCandidateFromSubject(subject, roomLookup) {
     existing_mth_room_name: resolveRoomReference(subject.mth_room, roomLookup).roomName,
     existing_tfs_room_id: resolveRoomReference(subject.tfs_room, roomLookup).roomId,
     existing_tfs_room_name: resolveRoomReference(subject.tfs_room, roomLookup).roomName,
+    existing_mth_room_ids: resolveAllRoomIds(subject.mth_room, roomLookup).join('/') || null,
+    existing_tfs_room_ids: resolveAllRoomIds(subject.tfs_room, roomLookup).join('/') || null,
     raw_mth_room: normalizeText(subject.mth_room) || null,
     raw_tfs_room: normalizeText(subject.tfs_room) || null,
     // infer preferred pattern from existing schedules when available
@@ -1747,9 +1763,9 @@ function buildReservedSlots(mergedSubjects, uniqueCleanSubjects) {
       section: c.section,
       department_id: c.department_id,
       mth_schedule: c.existing_mth_schedule || null,
-      mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+      mth_room_id: c.existing_mth_room_ids || (c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null),
       tfs_schedule: c.existing_tfs_schedule || null,
-      tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+      tfs_room_id: c.existing_tfs_room_ids || (c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null),
     });
   }
 
@@ -1759,9 +1775,9 @@ function buildReservedSlots(mergedSubjects, uniqueCleanSubjects) {
       section: c.section,
       department_id: c.department_id,
       mth_schedule: c.existing_mth_schedule || null,
-      mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+      mth_room_id: c.existing_mth_room_ids || (c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null),
       tfs_schedule: c.existing_tfs_schedule || null,
-      tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+      tfs_room_id: c.existing_tfs_room_ids || (c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null),
     });
   }
 
