@@ -24,8 +24,11 @@ const HEADER_TO_FIELD = {
   labhrs: 'lab_hrs',
   mthschedule: 'mth_schedule',
   mthroomid: 'mth_room_id',
+  mthroom: 'mth_room_id',
   tfsschedule: 'tfs_schedule',
   tfsroomid: 'tfs_room_id',
+  tfsroom: 'tfs_room_id',
+  departmentname: 'department_code',
   merged: 'merged',
 };
 
@@ -238,6 +241,7 @@ const DEPARTMENT_CODE_HINTS = {
   CS: ['COMPUTER SCIENCE'],
   CPE: ['COMPUTER ENGINEERING', 'COMPUTER ENGINEER'],
   ECE: [
+    'ELECTRONICS ENGINEERING',
     'ELECTRONICS AND COMMUNICATIONS',
     'ELECTRONICS AND COMMUNICATION',
     'ELECTRICAL COMMUNICATIONS ENGINEERING',
@@ -256,7 +260,7 @@ const DEPARTMENT_CODE_DEFAULT_NAMES = {
   IT: 'Information Technology',
   CS: 'Computer Science',
   CPE: 'Computer Engineering',
-  ECE: 'Electrical Communications Engineering',
+  ECE: 'Electronics Engineering',
   EE: 'Electrical Engineering',
   LIS: 'Library and Information Science',
 };
