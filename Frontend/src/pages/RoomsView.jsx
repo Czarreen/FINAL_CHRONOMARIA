@@ -850,8 +850,9 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
           <p className="text-xs text-on-surface-variant">Manage campus facilities and their capacities.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+          <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-2 py-1">
             <NotificationButton
+              buttonClassName="btn-primary border-none"
               items={filteredNotifications}
               title="Room Issues"
               emptyLabel="No room data quality issues detected"
@@ -866,8 +867,15 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               onNotificationSearchChange={setNotificationSearch}
               notificationStats={notificationStats}
             />
+          </div>
+
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-primary shadow-sm">
+              <DoorOpen size={14} />
+              {stats.totalRooms} rooms
+            </span>
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-on-surface-variant shadow-sm transition-colors hover:bg-slate-100"
+              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
               onClick={() => loadRooms({ refreshNotifications: true, forceNotificationRescan: true })}
               type="button"
               title="Reload data"
@@ -876,11 +884,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               <RefreshCw size={14} className={loading || notificationsLoading ? 'animate-spin' : ''} />
               <span>{loading || notificationsLoading ? 'Refreshing...' : 'Reload'}</span>
             </button>
-          </div>
-
-          <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800">
-            <DoorOpen size={12} className="text-primary" />
-            <span>{stats.totalRooms}</span>
             {selectedRooms.size > 0 && (
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
                 {selectedRooms.size} selected
@@ -890,7 +893,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
 
           <button
             ref={colButtonRef}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
+            className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
             onClick={() => setColMenuOpen((prev) => !prev)}
             type="button"
             title="Column visibility"
