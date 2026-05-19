@@ -233,8 +233,23 @@ function buildIssueRecommendations(issue, roomCount) {
   return steps;
 }
 
+const DEPT_ABBREV_OVERRIDE = {
+  'ELECTRONICS ENGINEERING': 'ECE',
+  'ELECTRICAL ENGINEERING': 'EE',
+  'COMPUTER ENGINEERING': 'CPE',
+  'CIVIL ENGINEERING': 'CE',
+  'COMPUTER SCIENCE': 'CS',
+  'INFORMATION TECHNOLOGY': 'IT',
+  'ARCHITECTURE': 'AR',
+  'LIBRARY AND INFORMATION SCIENCE': 'LIS',
+  'ELECTRICAL COMMUNICATIONS ENGINEERING': 'ECE',
+  'ELECTRONICS AND COMMUNICATIONS ENGINEERING': 'ECE',
+};
+
 function abbreviateDept(name) {
   if (!name) return '?';
+  const upper = name.trim().toUpperCase();
+  if (DEPT_ABBREV_OVERRIDE[upper]) return DEPT_ABBREV_OVERRIDE[upper];
   const stripped = name.replace(/^(department|college|school|institute)\s+of\s+/i, '').trim();
   const words = stripped.split(/\s+/).filter(Boolean);
   if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
