@@ -343,11 +343,9 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
     });
   }, [rows, sortCol, sortDir]);
 
-  const filteredRows = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return sortedRows;
-    return sortedRows.filter((row) => {
-      const haystack = [
+  const rowSearchIndex = useMemo(
+    () => sortedRows.map((row) =>
+      [
         row.code,
         row.course_no,
         row.section,
@@ -357,10 +355,16 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
         row.tfs_schedule,
         row.tfs_room_name || row.tfs_room_id,
         row.department_name,
-      ].filter(Boolean).join(' ').toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [sortedRows, searchQuery]);
+      ].filter(Boolean).join(' ').toLowerCase()
+    ),
+    [sortedRows]
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sortedRows;
+    return sortedRows.filter((_, idx) => rowSearchIndex[idx].includes(q));
+  }, [sortedRows, rowSearchIndex, searchQuery]);
 
   function SortIcon({ col }) {
     if (sortCol !== col) return <span className="ml-1 opacity-30">↕</span>;
@@ -547,7 +551,15 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
               <td className="px-4 py-3">
                 {(() => {
                   const isMerged = isMergedRow(row);
+                  const isUnresolved = row.merged === 'unresolved';
                   const isPreserved = row.merged === 'preserved';
+                  if (isUnresolved) {
+                    return (
+                      <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 self-start">
+                        Unresolved
+                      </span>
+                    );
+                  }
                   if (isPreserved) {
                     return (
                       <span className="px-2 py-1 rounded text-xs font-semibold bg-teal-100 text-teal-700 self-start">
@@ -708,14 +720,13 @@ export default function ScheduleView({ onNavigate }) {
           ? `${scenarioNotice}Schedule reached a verified state. You can export it or update Course Offering, then proceed to Faculty Loading.`
           : `${scenarioNotice}Schedule generated, but unresolved issues still need manual review before continuing to Faculty Loading.`
       );
-      await loadPreflight();
       if (dryRun) {
-        // Dry run does not persist to DB — show the generated assignments directly from the response
+        await loadPreflight();
         const dryRunRows = Array.isArray(response?.assignments) ? response.assignments : [];
         setRows(dryRunRows);
         setIsDryRunRows(true);
       } else {
-        await loadRows();
+        await Promise.all([loadPreflight(), loadRows()]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scheduler run failed.');
@@ -774,8 +785,7 @@ export default function ScheduleView({ onNavigate }) {
           ? `Course Offering replaced with ${response?.updated || 0} schedule rows. A backup export was downloaded first.`
           : `Course Offering replaced with ${response?.updated || 0} schedule rows without creating a backup.`
       );
-      await loadPreflight();
-      await loadRows();
+      await Promise.all([loadPreflight(), loadRows()]);
     } catch (err) {
       setPostUpdateNav(false);
       setUpdateModalError(err instanceof Error ? err.message : 'Update failed. Please try again.');
@@ -784,24 +794,36 @@ export default function ScheduleView({ onNavigate }) {
     }
   }
 
-  const unresolvedList = normalizeUnresolvedIssues(result);
-  const unresolvedCount = unresolvedList.length;
   const fitnessScore = Number(result?.fitness_overall || 0);
-  const gaConflicts = Array.isArray(result?.report?.ga_report?.conflicts) ? result.report.ga_report.conflicts : [];
+  const gaConflicts = useMemo(
+    () => (Array.isArray(result?.report?.ga_report?.conflicts) ? result.report.ga_report.conflicts : []),
+    [result]
+  );
+
+  const unresolvedList = useMemo(() => normalizeUnresolvedIssues(result), [result]);
+  const unresolvedCount = unresolvedList.length;
+
   const isFixed = Boolean(result) && fitnessScore === 100 && unresolvedCount === 0 && gaConflicts.length === 0;
   const needsManualResolution = Boolean(result) && !isFixed;
-  const unresolvedCards = unresolvedList.map((issue) => ({
-    ...issue,
-    categories: issueCategories(issue),
-    recommendations: buildIssueRecommendations(issue, roomCount),
-  }));
 
-  const groupedIssues = issues.reduce((acc, issue) => {
-    const bucket = issue.severity || 'low';
-    if (!acc[bucket]) acc[bucket] = [];
-    acc[bucket].push(issue);
-    return acc;
-  }, {});
+  const unresolvedCards = useMemo(
+    () => unresolvedList.map((issue) => ({
+      ...issue,
+      categories: issueCategories(issue),
+      recommendations: buildIssueRecommendations(issue, roomCount),
+    })),
+    [unresolvedList, roomCount]
+  );
+
+  const groupedIssues = useMemo(
+    () => issues.reduce((acc, issue) => {
+      const bucket = issue.severity || 'low';
+      if (!acc[bucket]) acc[bucket] = [];
+      acc[bucket].push(issue);
+      return acc;
+    }, {}),
+    [issues]
+  );
 
   return (
     <div className="space-y-6">

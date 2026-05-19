@@ -68,6 +68,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     rescanBoth: handleRescanNotifications,
     resolveSubject: handleResolveNotification,
     refreshSubject: refreshNotifications,
+    rescanning,
   } = useNotifications();
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
@@ -935,16 +936,17 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               notificationSearch={notifSearch}
               onNotificationSearchChange={(v) => setNotifSearch(v)}
               notificationStats={subjectNotificationStats}
+              isRescanning={rescanning}
             />
             <button
               onClick={handleRescanNotifications}
-              disabled={subjectNotificationsLoading}
+              disabled={rescanning}
               className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
               title="Re-detect all subject issues"
               type="button"
             >
-              <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
-              <span>{subjectNotificationsLoading ? 'Scanning' : 'Rescan'}</span>
+              <RotateCcw size={14} className={rescanning ? 'animate-spin' : ''} />
+              <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
             </button>
           </div>
 

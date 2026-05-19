@@ -1439,36 +1439,36 @@ export async function postRunFacultyLoading(req, res) {
 }
 
 async function fetchAutomaticSchedulerRows() {
-  const response = await query(`
-    select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
-           a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
-           (a.merged = 'true') as merged, a.preflight_tag,
-           coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name,
-           case
-             when nullif(trim(a.mth_room_id), '') is null then null
-             else coalesce(mr.room_names, a.mth_room_id)
-           end as mth_room_name,
-           case
-             when nullif(trim(a.tfs_room_id), '') is null then null
-             else coalesce(tr.room_names, a.tfs_room_id)
-           end as tfs_room_name
-    from public.automatic_scheduler a
-    left join public.departments d on d.department_id = a.department_id
-    left join lateral (
-      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
-      from regexp_split_to_table(coalesce(a.mth_room_id, ''), '[^0-9]+') as token
-      join public.rooms r on r.room_id = token::integer
-      where token ~ '^[0-9]+$'
-    ) mr on true
-    left join lateral (
-      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
-      from regexp_split_to_table(coalesce(a.tfs_room_id, ''), '[^0-9]+') as token
-      join public.rooms r on r.room_id = token::integer
-      where token ~ '^[0-9]+$'
-    ) tr on true
-    order by a.id asc
-  `);
-  return response.rows;
+  const [schedulerResp, roomsResp] = await Promise.all([
+    query(`
+      select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
+             a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
+             (a.merged = 'true') as merged, a.preflight_tag,
+             coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name
+      from public.automatic_scheduler a
+      left join public.departments d on d.department_id = a.department_id
+      order by a.id asc
+    `),
+    query(`select room_id, room_name from public.rooms`),
+  ]);
+
+  const roomById = new Map(roomsResp.rows.map((r) => [String(r.room_id), r.room_name]));
+
+  function resolveRoomName(roomIdStr) {
+    if (!roomIdStr || !roomIdStr.trim()) return null;
+    const names = roomIdStr
+      .split(/[^0-9]+/)
+      .filter(Boolean)
+      .map((id) => roomById.get(id) || id)
+      .join(' / ');
+    return names || null;
+  }
+
+  return schedulerResp.rows.map((row) => ({
+    ...row,
+    mth_room_name: resolveRoomName(row.mth_room_id),
+    tfs_room_name: resolveRoomName(row.tfs_room_id),
+  }));
 }
 
 function parseRoomIdList(value) {
@@ -2565,58 +2565,63 @@ async function persistAutomaticScheduler(assignments) {
     return { persisted: 0 };
   }
 
+  const columns = [
+    'curr_id',
+    'code',
+    'course_no',
+    'department_id',
+    'section',
+    'descriptive_title',
+    'units',
+    'lec_hrs',
+    'lab_hrs',
+    'mth_schedule',
+    'mth_room_id',
+    'tfs_schedule',
+    'tfs_room_id',
+    'merged',
+    'preflight_tag',
+  ];
+
+  const CHUNK_SIZE = 200;
+
   await withPgClient(async (client) => {
     try {
       await client.query('BEGIN');
       await client.query('DELETE FROM public.automatic_scheduler');
 
-      const columns = [
-        'curr_id',
-        'code',
-        'course_no',
-        'department_id',
-        'section',
-        'descriptive_title',
-        'units',
-        'lec_hrs',
-        'lab_hrs',
-        'mth_schedule',
-        'mth_room_id',
-        'tfs_schedule',
-        'tfs_room_id',
-        'merged',
-        'preflight_tag',
-      ];
+      for (let offset = 0; offset < assignments.length; offset += CHUNK_SIZE) {
+        const chunk = assignments.slice(offset, offset + CHUNK_SIZE);
+        const values = [];
+        const placeholders = [];
 
-      const values = [];
-      const placeholders = [];
+        chunk.forEach((row, idx) => {
+          const base = idx * columns.length;
+          placeholders.push(`(${columns.map((_, cIdx) => `$${base + cIdx + 1}`).join(', ')})`);
+          values.push(
+            row.curr_id,
+            row.code,
+            row.course_no,
+            row.department_id,
+            row.section,
+            row.descriptive_title,
+            row.units,
+            row.lec_hrs,
+            row.lab_hrs,
+            row.mth_schedule,
+            row.mth_room_id != null ? String(row.mth_room_id) : null,
+            row.tfs_schedule,
+            row.tfs_room_id != null ? String(row.tfs_room_id) : null,
+            row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : row.merged === 'unresolved' ? 'unresolved' : 'false',
+            row.preflight_tag ?? null,
+          );
+        });
 
-      assignments.forEach((row, idx) => {
-        const base = idx * columns.length;
-        placeholders.push(`(${columns.map((_, cIdx) => `$${base + cIdx + 1}`).join(', ')})`);
-        values.push(
-          row.curr_id,
-          row.code,
-          row.course_no,
-          row.department_id,
-          row.section,
-          row.descriptive_title,
-          row.units,
-          row.lec_hrs,
-          row.lab_hrs,
-          row.mth_schedule,
-          row.mth_room_id != null ? String(row.mth_room_id) : null,
-          row.tfs_schedule,
-          row.tfs_room_id != null ? String(row.tfs_room_id) : null,
-          row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
-          row.preflight_tag ?? null,
+        await client.query(
+          `INSERT INTO public.automatic_scheduler (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`,
+          values
         );
-      });
-
-      await client.query(
-        `INSERT INTO public.automatic_scheduler (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`,
-        values
-      );
+      }
 
       await client.query('COMMIT');
     } catch (error) {
@@ -2721,29 +2726,20 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
     return { updated: 0, backup: null };
   }
 
-  const roomResp = await query(`
-    select room_id, room_name
-    from public.rooms
-    order by room_id asc
-  `);
+  const [roomResp, offeringsCurrResp, subjectsCurrResp] = await Promise.all([
+    query(`select room_id, room_name from public.rooms order by room_id asc`),
+    query(`SELECT code, course_no, department_id, section, curr_id FROM public.course_offerings WHERE curr_id IS NOT NULL`),
+    query(`SELECT subject_code AS code, subject_course_no AS course_no, department_id, subject_section AS section, curr_id FROM public.subjects WHERE curr_id IS NOT NULL`),
+  ]);
+
   const roomLookup = buildRoomLookup(roomResp.rows || []);
 
-  const offeringsCurrResp = await query(`
-    SELECT code, course_no, department_id, section, curr_id
-    FROM public.course_offerings
-    WHERE curr_id IS NOT NULL
-  `);
   const currIdFromOfferings = new Map();
   for (const r of offeringsCurrResp.rows) {
     const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
     if (!currIdFromOfferings.has(k)) currIdFromOfferings.set(k, r.curr_id);
   }
 
-  const subjectsCurrResp = await query(`
-    SELECT subject_code AS code, subject_course_no AS course_no, department_id, subject_section AS section, curr_id
-    FROM public.subjects
-    WHERE curr_id IS NOT NULL
-  `);
   const currIdFromSubjects = new Map();
   for (const r of subjectsCurrResp.rows) {
     const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
@@ -2776,8 +2772,6 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         backup = current.rows;
       }
 
-      await client.query('DELETE FROM public.subject_notifications');
-      await client.query('DELETE FROM public.subjects');
       await client.query('DELETE FROM public.course_offerings');
 
       const columns = [
@@ -2828,9 +2822,37 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         values
       );
 
-      // Rebuild subjects from scratch — subjects were cleared above so every
-      // scheduler row must be inserted. Lateral joins resolve slash-joined
-      // multi-room IDs to display names.
+      // Sync scheduler output back to subjects so faculty loading can read it.
+      // Update existing subjects (including curr_id which may have been missing).
+      // Lateral joins resolve slash-joined multi-room IDs to display names.
+      await client.query(`
+        UPDATE public.subjects s
+        SET
+          curr_id      = asch.curr_id,
+          mth_schedule = asch.mth_schedule,
+          tfs_schedule = asch.tfs_schedule,
+          mth_room     = COALESCE(mr.room_names, asch.mth_room_id),
+          tfs_room     = COALESCE(tf.room_names, asch.tfs_room_id)
+        FROM public.automatic_scheduler asch
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.mth_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) mr ON true
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.tfs_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) tf ON true
+        WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
+          AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
+          AND s.department_id                  = asch.department_id
+          AND lower(trim(s.subject_section))   = lower(trim(asch.section))
+      `);
+
+      // Insert subjects that have no matching row yet (e.g. after a prior broken run cleared subjects).
       await client.query(`
         INSERT INTO public.subjects (
           subject_code, subject_course_no, subject_descriptive_title,
@@ -2860,6 +2882,13 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
           JOIN public.rooms r ON r.room_id = token::integer
           WHERE token ~ '^[0-9]+$'
         ) tf ON true
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.subjects s
+          WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
+            AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
+            AND s.department_id                  = asch.department_id
+            AND lower(trim(s.subject_section))   = lower(trim(asch.section))
+        )
       `);
 
       await client.query('COMMIT');
@@ -3025,6 +3054,8 @@ export async function postRunAutomaticScheduler(req, res) {
       if (conflicted.length === 0) break;
       console.log(`[run][automatic] GA iteration ${iter + 1}/${MAX_GA_ITERATIONS}: scheduling ${conflicted.length} subject(s)`);
 
+      const conflictedById = new Map(conflicted.map((c) => [toNumber(c.subject_id), c]));
+
       let gaResult;
       try {
         gaResult = await callPythonScheduleGA({
@@ -3045,6 +3076,12 @@ export async function postRunAutomaticScheduler(req, res) {
             .map((r) => ({ ...r, preflight_tag: null }));
           discardedPile.push(...enriched);
           allUnresolved.push(...(greedyResult.unresolved || []));
+          discardedPile.push(
+            ...(greedyResult.unresolved || []).map((u) => {
+              const candidate = conflictedById.get(toNumber(u.subject_id)) ?? u;
+              return candidateToOutputRow(candidate, roomLookup, 'unresolved', null);
+            })
+          );
           conflicted = [];
           break;
         }
@@ -3054,6 +3091,12 @@ export async function postRunAutomaticScheduler(req, res) {
 
       lastGAResult = gaResult;
       allUnresolved.push(...(gaResult.unresolved || []));
+      discardedPile.push(
+        ...(gaResult.unresolved || []).map((u) => {
+          const candidate = conflictedById.get(toNumber(u.subject_id)) ?? u;
+          return candidateToOutputRow(candidate, roomLookup, 'unresolved', null);
+        })
+      );
 
       const { conflictFreeNew, stillConflicted } = validateGAResults(
         gaResult.assignments || [], discardedPile, activeRooms
@@ -3066,9 +3109,14 @@ export async function postRunAutomaticScheduler(req, res) {
       if (conflicted.length === 0) break;
     }
 
-    // Any subjects still conflicted after all iterations are added as unresolved
+    // Any subjects still conflicted after all iterations are stored as unresolved (null schedule/room).
     if (conflicted.length > 0) {
-      console.warn(`[run][automatic] ${conflicted.length} subject(s) remain conflicted after all GA iterations`);
+      console.warn(`[run][automatic] ${conflicted.length} subject(s) remain conflicted — stored as unresolved`);
+      discardedPile.push(...conflicted.map((c) => candidateToOutputRow(c, roomLookup, 'unresolved', null)));
+      allUnresolved.push(...conflicted.map((c) => ({
+        ...c,
+        reason: 'Could not be scheduled after all GA iterations — manual assignment required.',
+      })));
     }
 
     const allAssignments = discardedPile;

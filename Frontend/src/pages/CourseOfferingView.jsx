@@ -104,6 +104,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     refreshCO: refreshNotifications,
     refreshSubject: refreshSubjectNotifications,
     triggerCoRefresh,
+    rescanning,
   } = useNotifications();
 
   // Structured schedule card state — drives mth_schedule / tfs_schedule strings
@@ -1184,19 +1185,19 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 notificationSearch={notificationSearch}
                 onNotificationSearchChange={setNotificationSearch}
                 notificationStats={notificationStats}
-                isRescanning={notificationsLoading}
+                  isRescanning={rescanning}
                 totalEntityCount={totalRows}
               />
               <div className="h-5 w-px bg-slate-200" />
               <button
                 type="button"
-                onClick={handleForceRescan}
-                disabled={notificationsLoading}
+                  onClick={handleForceRescan}
+                  disabled={rescanning}
                 title="Clear and re-detect all schedule conflicts and missing data"
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
               >
-                <RefreshCw size={14} className={notificationsLoading ? 'animate-spin' : ''} />
-                <span>Rescan</span>
+                  <RefreshCw size={14} className={rescanning ? 'animate-spin' : ''} />
+                  <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
               </button>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
