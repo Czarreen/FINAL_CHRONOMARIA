@@ -235,10 +235,18 @@ def _build_pre_occupied(
             if not parsed:
                 continue
             start, end = parsed["start"], parsed["end"]
-            room_idx = room_id_to_idx.get(room_id_str)
+            # Support slash-separated room IDs (e.g. "3/5" = lec room on day1, lab room on day2).
+            # A single ID occupies both days; two IDs map first→day1, second→day2.
+            sub_ids = [x.strip() for x in room_id_str.split("/") if x.strip()]
+            for i, sub_id in enumerate(sub_ids):
+                room_idx = room_id_to_idx.get(sub_id)
+                days_for_room = list(default_days) if len(sub_ids) == 1 else (
+                    [default_days[i]] if i < len(default_days) else []
+                )
+                for day in days_for_room:
+                    if room_idx is not None:
+                        room_entries.append((room_idx, day, start, end))
             for day in default_days:
-                if room_idx is not None:
-                    room_entries.append((room_idx, day, start, end))
                 section_entries.append((sec_key, day, start, end))
 
     return {"room_entries": room_entries, "section_entries": section_entries}
@@ -1189,22 +1197,32 @@ def sched_evaluate(
             section_pattern_counts[section].get(pat_idx, 0) + 1
         )
 
-    # R-H1: room conflicts for non-GYM rooms — mark both subjects as violators.
+    # R-H1: room conflicts for non-GYM rooms — sweep-line to catch ALL overlaps,
+    # including non-adjacent pairs (e.g. a long slot A overlapping short B and later C).
     # GYM rooms are handled separately by R-GYM below.
-    # Using a set ensures hard_violations <= n regardless of how many pairs conflict.
     for rk, slots in room_day_slots.items():
         ri_str = rk.split("|")[0]
         ri_int = int(ri_str) if ri_str.isdigit() else -1
         if 0 <= ri_int < len(rooms) and is_gym_room(rooms[ri_int]):
             continue  # GYM room conflicts handled in R-GYM
-        ss = sorted(slots, key=lambda x: x[0])
-        for i in range(1, len(ss)):
-            if ss[i][0] < ss[i - 1][1]:
-                # Only flag GA-scheduled subjects (si >= 0); si == -1 are reserved slots
-                if ss[i][2] >= 0:
-                    hard_violation_subs.add(ss[i][2])
-                if ss[i - 1][2] >= 0:
-                    hard_violation_subs.add(ss[i - 1][2])
+        events: List[Tuple[int, int, int]] = []
+        for s_, e_, si_ in slots:
+            events.append((s_,  1, si_))   # slot opens
+            events.append((e_, -1, si_))   # slot closes
+        # Sort: closes (-1) before opens (+1) at the same timestamp so touching
+        # intervals (end == next start) are not counted as overlapping.
+        events.sort(key=lambda x: (x[0], x[1]))
+        active: Set[int] = set()
+        for _t, delta, si_ in events:
+            if delta == 1:
+                active.add(si_)
+                if len(active) > 1:
+                    # All currently open slots overlap — mark GA-scheduled ones.
+                    for asi in active:
+                        if asi >= 0:
+                            hard_violation_subs.add(asi)
+            else:
+                active.discard(si_)
 
     # R-GYM: GYM rooms allow up to GYM_MAX_OVERLAP PATH FIT classes per dept per slot.
     # Excess simultaneous subjects (per dept) are hard violations.
@@ -1520,18 +1538,27 @@ def sched_build_conflict_report(
         for day in days:
             section_day.setdefault(f"{section}|{day}", []).append((start, end, label))
 
-    # Standard room conflict for non-GYM rooms
+    # Standard room conflict for non-GYM rooms — sweep-line to catch all overlaps.
     for rk, slots in room_day.items():
-        ss = sorted(slots, key=lambda x: x[0])
-        for i in range(1, len(ss)):
-            if ss[i][0] < ss[i - 1][1]:
-                ri, day = rk.split("|", 1)
-                rn = rooms[int(ri)].get("room_name", "?") if int(ri) < len(rooms) else "?"
-                conflicts.append({
-                    "type": "room_conflict", "day": day, "room": rn,
-                    "subjects": [ss[i - 1][2], ss[i][2]],
-                    "problem": f"Room overlap on {day}: {ss[i-1][2]} and {ss[i][2]}",
-                })
+        ri, day = rk.split("|", 1)
+        rn = rooms[int(ri)].get("room_name", "?") if int(ri) < len(rooms) else "?"
+        evts_r: List[Tuple[int, int, str]] = []
+        for s_, e_, lbl_ in slots:
+            evts_r.append((s_,  1, lbl_))
+            evts_r.append((e_, -1, lbl_))
+        evts_r.sort(key=lambda x: (x[0], x[1]))
+        act_r_lbl: Set[str] = set()
+        for _t, delta, lbl_ in evts_r:
+            if delta == 1:
+                act_r_lbl.add(lbl_)
+                if len(act_r_lbl) > 1:
+                    conflicts.append({
+                        "type": "room_conflict", "day": day, "room": rn,
+                        "subjects": sorted(act_r_lbl),
+                        "problem": f"Room overlap in {rn} on {day}: {', '.join(sorted(act_r_lbl))}",
+                    })
+            else:
+                act_r_lbl.discard(lbl_)
 
     # GYM room conflict: per-dept sweep-line — report when > GYM_MAX_OVERLAP overlap
     for rk, slots in gym_room_day_dept.items():
@@ -1561,15 +1588,24 @@ def sched_build_conflict_report(
                     act_labels.remove(lbl_)
 
     for sk, slots in section_day.items():
-        ss = sorted(slots, key=lambda x: x[0])
-        for i in range(1, len(ss)):
-            if ss[i][0] < ss[i - 1][1]:
-                sec, day = sk.rsplit("|", 1)
-                conflicts.append({
-                    "type": "section_conflict", "day": day, "section": sec,
-                    "subjects": [ss[i - 1][2], ss[i][2]],
-                    "problem": f"Section overlap on {day}: {ss[i-1][2]} and {ss[i][2]}",
-                })
+        sec, day = sk.rsplit("|", 1)
+        evts_s: List[Tuple[int, int, str]] = []
+        for s_, e_, lbl_ in slots:
+            evts_s.append((s_,  1, lbl_))
+            evts_s.append((e_, -1, lbl_))
+        evts_s.sort(key=lambda x: (x[0], x[1]))
+        act_s_lbl: Set[str] = set()
+        for _t, delta, lbl_ in evts_s:
+            if delta == 1:
+                act_s_lbl.add(lbl_)
+                if len(act_s_lbl) > 1:
+                    conflicts.append({
+                        "type": "section_conflict", "day": day, "section": sec,
+                        "subjects": sorted(act_s_lbl),
+                        "problem": f"Section overlap on {day}: {', '.join(sorted(act_s_lbl))}",
+                    })
+            else:
+                act_s_lbl.discard(lbl_)
 
     # S-S6: section-day total exceeds 10-hour hard limit
     for sk, slots in section_day.items():
@@ -1659,13 +1695,21 @@ def sched_local_repair(
                 sec_day_slots.setdefault(f"{section}|{day}", []).append((start, end, si))
 
         for slots in room_day_slots.values():
-            ss = sorted(slots, key=lambda x: x[0])
-            for i in range(1, len(ss)):
-                if ss[i][0] < ss[i - 1][1]:
-                    if ss[i][2] >= 0:
-                        viol_subs.add(ss[i][2])
-                    if ss[i - 1][2] >= 0:
-                        viol_subs.add(ss[i - 1][2])
+            evts: List[Tuple[int, int, int]] = []
+            for s_, e_, si_ in slots:
+                evts.append((s_,  1, si_))
+                evts.append((e_, -1, si_))
+            evts.sort(key=lambda x: (x[0], x[1]))
+            act_r: Set[int] = set()
+            for _t, delta, si_ in evts:
+                if delta == 1:
+                    act_r.add(si_)
+                    if len(act_r) > 1:
+                        for asi in act_r:
+                            if asi >= 0:
+                                viol_subs.add(asi)
+                else:
+                    act_r.discard(si_)
 
         # GYM: sweep-line per (room, day, dept) — flag subjects over GYM_MAX_OVERLAP
         for gym_slots in gym_room_dept_day_slots.values():
@@ -1801,7 +1845,7 @@ def sched_local_repair(
                             total_day = sum(e_ - s_ for s_, e_ in sec_track.get(section, {}).get(day, []))
                             if total_day + duration > 600: ok = False; break
                         if not ok: continue
-                        # Valid slot found
+                        # Valid same-room slot found
                         room_track.setdefault(r, {}).setdefault(day1, []).append((start, end))
                         room_track.setdefault(r, {}).setdefault(day2, []).append((start, end))
                         if pathfit and r in gym_ridxs_set:
@@ -1813,6 +1857,46 @@ def sched_local_repair(
                         chrom[si] = (pat_idx, start, r, r)
                         placed = True
                         break
+
+            # For lec+lab subjects that couldn't be placed with a single room,
+            # try a lecture-room-on-day1 / lab-room-on-day2 split placement.
+            if not placed and not pathfit and sched_has_lec_and_lab(s):
+                lec_ridxs = [r for r in valid_ridxs if not sched_is_lab_room(rooms[r])]
+                lab_ridxs = [r for r in valid_ridxs if sched_is_lab_room(rooms[r])]
+                rng.shuffle(lec_ridxs)
+                rng.shuffle(lab_ridxs)
+                for pat_idx in rng.sample([0, 1], 2):
+                    if placed: break
+                    _, days = SCHED_PATTERNS[pat_idx]
+                    day1, day2 = days[0], days[1]
+                    for start in starts:
+                        if placed: break
+                        end = start + duration
+                        # Section + daily-load check is the same for all room pairs
+                        sec_ok = True
+                        for day in days:
+                            for ss, se in sec_track.get(section, {}).get(day, []):
+                                if start < se and end > ss: sec_ok = False; break
+                            if not sec_ok: break
+                            if sum(e_ - s_ for s_, e_ in sec_track.get(section, {}).get(day, [])) + duration > 600:
+                                sec_ok = False; break
+                        if not sec_ok: continue
+                        for r1 in lec_ridxs:
+                            if placed: break
+                            if any(start < re and end > rs for rs, re in room_track.get(r1, {}).get(day1, [])):
+                                continue
+                            for r2 in lab_ridxs:
+                                if r1 == r2: continue
+                                if any(start < re and end > rs for rs, re in room_track.get(r2, {}).get(day2, [])):
+                                    continue
+                                # Valid split-room slot found
+                                room_track.setdefault(r1, {}).setdefault(day1, []).append((start, end))
+                                room_track.setdefault(r2, {}).setdefault(day2, []).append((start, end))
+                                for day in days:
+                                    sec_track.setdefault(section, {}).setdefault(day, []).append((start, end))
+                                chrom[si] = (pat_idx, start, r1, r2)
+                                placed = True
+                                break
 
     return chrom
 
@@ -1963,7 +2047,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[GA-DIAG] after repair: score={rep_score:.1f}% "
               f"(hard={rep_hard:.1f}% soft={rep_soft:.1f}%) improved={rep_score > best_score}",
               flush=True)
-        if rep_score > best_score:
+        if rep_hard > best_hard or (rep_hard == best_hard and rep_score > best_score):
             best, best_score, best_hard, best_soft = repaired, rep_score, rep_hard, rep_soft
     else:
         print(f"[GA-DIAG] repair skipped (time_remaining={time_remaining:.1f}s)", flush=True)
@@ -1989,6 +2073,57 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
         for s in deferred_subjects
     ]
+
+    # Final validation: any subjects still in hard conflict are moved to unresolved
+    # so callers are never given a schedule that contains room or section violations.
+    if conflicts:
+        # Build label→subject lookup (label = code-course_no-section, same as conflict report)
+        label_to_subject: Dict[str, Dict[str, Any]] = {}
+        for s in subjects:
+            lbl = (
+                f"{normalize_upper(s.get('code') or '')}"
+                f"-{normalize_upper(s.get('course_no') or '')}"
+                f"-{normalize_upper(s.get('section') or '')}"
+            )
+            label_to_subject[lbl] = s
+
+        conflicted_labels: Set[str] = set()
+        for c in conflicts:
+            for lbl in c.get("subjects", []):
+                if isinstance(lbl, str):
+                    conflicted_labels.add(lbl)
+
+        if conflicted_labels:
+            # Build subject_id→assignment map for fast lookup
+            sid_to_assignment: Dict[Any, Dict[str, Any]] = {
+                to_number(a.get("subject_id")): a for a in assignments
+            }
+            conflict_sids: Set[Any] = set()
+            for lbl in conflicted_labels:
+                s = label_to_subject.get(lbl)
+                if s:
+                    conflict_sids.add(to_number(s.get("subject_id")))
+
+            conflict_unresolved = [
+                {
+                    "subject_id":        s.get("subject_id"),
+                    "code":              s.get("code"),
+                    "course_no":         s.get("course_no"),
+                    "section":           s.get("section"),
+                    "descriptive_title": s.get("descriptive_title"),
+                    "units":             s.get("units"),
+                    "reason":            "Unresolved room or section conflict — no valid slot found after repair",
+                }
+                for lbl in conflicted_labels
+                for s in [label_to_subject.get(lbl)]
+                if s is not None
+            ]
+            unresolved.extend(conflict_unresolved)
+            assignments = [a for a in assignments if to_number(a.get("subject_id")) not in conflict_sids]
+            print(
+                f"[GA-DIAG] final validation: {len(conflict_sids)} conflicted subject(s) moved to unresolved",
+                flush=True,
+            )
 
     return {
         "assignments":     assignments,
