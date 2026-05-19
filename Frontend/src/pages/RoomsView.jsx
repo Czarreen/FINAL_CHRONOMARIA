@@ -844,13 +844,13 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         </div>
       )}
       {/* Header with stats - Line 1: Title, stats, and action buttons */}
-      <div className="glass-panel p-3">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-on-surface">Available Rooms</h2>
-            <p className="text-xs text-on-surface-variant">Manage campus facilities and their capacities.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+      <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-on-surface">Available Rooms</h2>
+          <p className="text-xs text-on-surface-variant">Manage campus facilities and their capacities.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             <NotificationButton
               items={filteredNotifications}
               title="Room Issues"
@@ -866,17 +866,8 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               onNotificationSearchChange={setNotificationSearch}
               notificationStats={notificationStats}
             />
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1 text-[10px] font-semibold text-on-surface-variant backdrop-blur">
-              <DoorOpen size={12} className="text-primary" />
-              {stats.totalRooms}
-            </span>
-            {selectedRooms.size > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-primary/60 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary backdrop-blur">
-                {selectedRooms.size} sel
-              </span>
-            )}
             <button
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-on-surface-variant shadow-sm transition-colors hover:bg-slate-100"
               onClick={() => loadRooms({ refreshNotifications: true, forceNotificationRescan: true })}
               type="button"
               title="Reload data"
@@ -885,69 +876,80 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               <RefreshCw size={14} className={loading || notificationsLoading ? 'animate-spin' : ''} />
               <span>{loading || notificationsLoading ? 'Refreshing...' : 'Reload'}</span>
             </button>
-            <button
-              ref={colButtonRef}
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
-              onClick={() => setColMenuOpen((prev) => !prev)}
-              type="button"
-              title="Column visibility"
-            >
-              <Settings size={14} />
-              <span>Cols</span>
-            </button>
-            {colMenuOpen && typeof document !== 'undefined' && createPortal(
-              <div
-                ref={colMenuRef}
-                style={{
-                  position: 'fixed',
-                  top: `${colMenuPos.top}px`,
-                  left: `${colMenuPos.left}px`,
-                  zIndex: 9999,
-                }}
-                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
-              >
-                {columns.map((col) => (
-                  <label
-                    key={col.key}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.has(col.key)}
-                      onChange={() => toggleColumnVisibility(col.key)}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
-                    />
-                    {col.label}
-                  </label>
-                ))}
-              </div>,
-              document.body
-            )}
-            {selectedRooms.size > 0 && (
-              <button
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 font-semibold text-white text-xs min-h-[44px] min-w-max transition-colors hover:bg-red-700"
-                onClick={handleBulkDelete}
-                type="button"
-              >
-                <Trash2 size={14} />
-                <span>Delete</span>
-              </button>
-            )}
-            <button
-              onClick={handleAddClick}
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
-            >
-              <Plus size={14} />
-              <span>Add Room</span>
-            </button>
           </div>
+
+          <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800">
+            <DoorOpen size={12} className="text-primary" />
+            <span>{stats.totalRooms}</span>
+            {selectedRooms.size > 0 && (
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
+                {selectedRooms.size} selected
+              </span>
+            )}
+          </div>
+
+          <button
+            ref={colButtonRef}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
+            onClick={() => setColMenuOpen((prev) => !prev)}
+            type="button"
+            title="Column visibility"
+          >
+            <Settings size={14} />
+            <span>Cols</span>
+          </button>
+          {colMenuOpen && typeof document !== 'undefined' && createPortal(
+            <div
+              ref={colMenuRef}
+              style={{
+                position: 'fixed',
+                top: `${colMenuPos.top}px`,
+                left: `${colMenuPos.left}px`,
+                zIndex: 9999,
+              }}
+              className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
+            >
+              {columns.map((col) => (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(col.key)}
+                    onChange={() => toggleColumnVisibility(col.key)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                  />
+                  {col.label}
+                </label>
+              ))}
+            </div>,
+            document.body
+          )}
+          {selectedRooms.size > 0 && (
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700"
+              onClick={handleBulkDelete}
+              type="button"
+            >
+              <Trash2 size={14} />
+              <span>Delete</span>
+            </button>
+          )}
+          <button
+            onClick={handleAddClick}
+            className="btn-primary inline-flex items-center gap-1.5 text-xs px-3 py-2 h-11 min-w-11"
+            type="button"
+          >
+            <Plus size={14} />
+            <span>Add Room</span>
+          </button>
         </div>
       </div>
 
       {/* Search and Filter Bar - Line 2 */}
-      <div className="glass-panel space-y-3 p-3">
+      <div className="glass-panel p-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Search Input */}
           <div className="relative flex-1 md:max-w-md">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
@@ -958,12 +960,11 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
             />
           </div>
 
-          {/* Status Filter */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {['', 'available', 'unavailable'].map((status) => (
               <button
                 key={status}
@@ -971,10 +972,11 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   setStatusFilter(status);
                   setCurrentPage(1);
                 }}
-                className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                type="button"
+                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
+                    : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
                 }`}
               >
                 {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
@@ -988,145 +990,133 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       {!loading && !error && rooms.length > 0 && (
         <div className="glass-panel overflow-hidden">
           <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
-            <table className="min-w-full w-full text-left text-xs">
+            <table className="min-w-full w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="sticky top-0 z-20 border-b border-white bg-white/95 backdrop-blur">
-                  <th className="px-3 py-2 text-center w-10">
+                <tr className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+                  <th className="px-4 py-3 text-center w-10">
                     <input
                       type="checkbox"
                       checked={currentRooms.length > 0 && selectedRooms.size === currentRooms.length}
                       indeterminate={selectedRooms.size > 0 && selectedRooms.size < currentRooms.length ? true : undefined}
                       onChange={toggleSelectAll}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
                   </th>
                   {columns.map((col) => {
                     if (!visibleColumns.has(col.key)) return null;
                     return (
-                      <th key={col.key} className="px-6 py-4 text-left">
+                      <th key={col.key} className="px-4 py-3 text-left">
                         <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
                           <span>{col.label}</span>
-                          <ArrowUpDown size={10} />
+                          <ArrowUpDown size={12} />
                         </button>
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-30 bg-white/95 px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 backdrop-blur">Act</th>
+                  <th className="sticky right-0 z-30 bg-white px-4 py-3 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70">Act</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black">
+              <tbody className="divide-y divide-slate-200">
                 {currentRooms.map((room, index) => {
                   const isSelected = selectedRooms.has(room.room_id);
                   return (
-                  <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/45'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
-                    <td className="px-3 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRoom(room.room_id)}
-                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
-                      />
-                    </td>
-                    {columns.map((col) => {
-                      if (!visibleColumns.has(col.key)) return null;
-                      return (
-                        <td key={col.key} className="px-6 py-4">
-                          {col.key === 'room_name' ? (
-                            <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                              {room.room_name || 'N/A'}
-                            </span>
-                          ) : col.key === 'room_type' ? (
-                            <span className="text-sm font-medium text-on-surface">
-                              {room.room_type || '—'}
-                            </span>
-                          ) : col.key === 'department_name' ? (
-                            <span className="text-sm font-medium text-on-surface">
-                              {getRoomDepartmentLabel(room) || '—'}
-                            </span>
-                          ) : col.key === 'room_status' ? (
-                            <div className="flex justify-start">
-                              <span
-                                className={`badge ${
-                                  room.room_status === 'available'
-                                    ? 'badge-success'
-                                    : room.room_status === 'unavailable'
-                                    ? 'badge-warning'
-                                    : 'badge-error'
-                                }`}
-                              >
-                                {room.room_status || 'N/A'}
+                    <tr key={room.room_id} id={`room-row-${room.room_id}`} className={`group transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-slate-50'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRoom(room.room_id)}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                        />
+                      </td>
+                      {columns.map((col) => {
+                        if (!visibleColumns.has(col.key)) return null;
+                        return (
+                          <td key={col.key} className="px-4 py-3 align-top">
+                            {col.key === 'room_name' ? (
+                              <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-sm font-bold text-primary">
+                                {room.room_name || 'N/A'}
                               </span>
-                            </div>
-                          ) : null}
-                        </td>
-                      );
-                    })}
-                    <td className="sticky right-0 z-10 bg-white/90 px-6 py-4 text-center backdrop-blur">
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => handleEditClick(room)}
-                          className="rounded-md bg-white/30 p-2 text-slate-400 transition-colors hover:bg-white hover:text-primary"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleViewSubjects(room)}
-                          className="rounded-md bg-white/30 p-2 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
-                          title="View scheduled offerings"
-                        >
-                          <BookOpen size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(room)}
-                          className="rounded-md bg-white/30 p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-               ); })}
+                            ) : col.key === 'room_type' ? (
+                              <span className="text-sm font-medium text-on-surface">
+                                {room.room_type || '—'}
+                              </span>
+                            ) : col.key === 'department_name' ? (
+                              <span className="text-sm font-medium text-on-surface">
+                                {getRoomDepartmentLabel(room) || '—'}
+                              </span>
+                            ) : col.key === 'room_status' ? (
+                              <div className="flex justify-start">
+                                <span
+                                  className={`badge ${
+                                    room.room_status === 'available'
+                                      ? 'badge-success'
+                                      : room.room_status === 'unavailable'
+                                      ? 'badge-warning'
+                                      : 'badge-error'
+                                  }`}
+                                >
+                                  {room.room_status || 'N/A'}
+                                </span>
+                              </div>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                      <td className="sticky right-0 z-10 bg-white px-4 py-3 text-center">
+                        <div className="flex justify-center gap-2 opacity-80 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleEditClick(room)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
+                            type="button"
+                            aria-label={`Edit ${room.room_name}`}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleViewSubjects(room)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-indigo-50 hover:text-indigo-600"
+                            type="button"
+                            title="View scheduled offerings"
+                          >
+                            <BookOpen size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(room)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-red-50 hover:text-red-600"
+                            type="button"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2">
-              <div className="text-sm text-on-surface-variant">
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-600">
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, stats.totalRooms)} of {stats.totalRooms}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={currentPage === 1}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
                   <ChevronLeft size={16} />
-                  Previous
                 </button>
-                <div className="flex items-center gap-2 rounded-lg border border-white/30 bg-white px-3 py-1">
-                  <span className="text-sm text-on-surface-variant">Page</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={pageInput}
-                    onChange={(e) => setPageInput(e.target.value)}
-                    onBlur={applyPageInput}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') applyPageInput();
-                    }}
-                    className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-                  />
-                  <span className="text-sm text-on-surface-variant">of {totalPages}</span>
-                </div>
                 <button
                   onClick={handleNextPage}
                   disabled={currentPage === totalPages}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-3 py-2 text-sm font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
-                  Next
                   <ChevronRight size={16} />
                 </button>
               </div>
