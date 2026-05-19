@@ -2424,8 +2424,6 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
   `);
   const roomLookup = buildRoomLookup(roomResp.rows || []);
 
-  await query('DELETE FROM public.subjects');
-
   let backup = null;
 
   await withPgClient(async (client) => {
@@ -2492,11 +2490,12 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         values
       );
 
-      // Write generated schedules back to subjects so faculty loading can read them.
-      // Match by (code, course_no, department_id, section); join rooms to resolve room name.
+      // Sync scheduler output back to subjects so faculty loading can read it.
+      // Update existing subjects (including curr_id which was missing before).
       await client.query(`
         UPDATE public.subjects s
         SET
+          curr_id      = asch.curr_id,
           mth_schedule = asch.mth_schedule,
           tfs_schedule = asch.tfs_schedule,
           mth_room     = COALESCE(rm.room_name, asch.mth_room_id),
@@ -2504,10 +2503,39 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         FROM public.automatic_scheduler asch
         LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
         LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
-        WHERE lower(trim(s.subject_code))     = lower(trim(asch.code))
+        WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
           AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
           AND s.department_id                  = asch.department_id
           AND lower(trim(s.subject_section))   = lower(trim(asch.section))
+      `);
+
+      // Insert subjects that have no matching row yet (e.g. after a prior broken run cleared subjects).
+      await client.query(`
+        INSERT INTO public.subjects (
+          subject_code, subject_course_no, subject_descriptive_title,
+          curr_id, department_id, subject_section,
+          subject_units, subject_lec_hrs, subject_lab_hrs,
+          mth_schedule, tfs_schedule, mth_room, tfs_room,
+          subject_status, is_general
+        )
+        SELECT
+          asch.code, asch.course_no, asch.descriptive_title,
+          asch.curr_id, asch.department_id, asch.section,
+          asch.units, asch.lec_hrs, asch.lab_hrs,
+          asch.mth_schedule, asch.tfs_schedule,
+          COALESCE(rm.room_name, asch.mth_room_id),
+          COALESCE(rf.room_name, asch.tfs_room_id),
+          'active', false
+        FROM public.automatic_scheduler asch
+        LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
+        LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.subjects s
+          WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
+            AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
+            AND s.department_id                  = asch.department_id
+            AND lower(trim(s.subject_section))   = lower(trim(asch.section))
+        )
       `);
 
       await client.query('COMMIT');
