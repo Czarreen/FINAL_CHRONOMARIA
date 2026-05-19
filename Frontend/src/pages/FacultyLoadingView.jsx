@@ -7,6 +7,7 @@ import {
   Bolt,
   CheckCircle2,
   Clock3,
+  Download,
   DoorOpen,
   FileWarning,
   Gauge,
@@ -92,6 +93,68 @@ function formatDateTimeStandard(date) {
     minute: '2-digit',
     hour12: true,
   }).format(date);
+}
+
+function timestampForFileName(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
+
+function escapeCsvCell(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  const escaped = text.replace(/"/g, '""');
+  return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+function downloadGeneratedListCsv(filename, rows) {
+  const headers = [
+    'section',
+    'course_code',
+    'course_no',
+    'descriptive_title',
+    'units',
+    'mth_schedule',
+    'mth_ampm',
+    'tfs_schedule',
+    'tfs_ampm',
+    'department',
+    'faculty',
+    'merged',
+    'status',
+  ];
+
+  const csvRows = rows.map((item) => ({
+    section: item.section || '-',
+    course_code: item.code || '-',
+    course_no: item.course_no || '-',
+    descriptive_title: item.descriptive_title || '-',
+    units: item.units ?? '-',
+    mth_schedule: formatScheduleTimeDisplay(item.mth_schedule) || '-',
+    mth_ampm: getScheduleAmPm(item.mth_schedule) || '-',
+    tfs_schedule: formatScheduleTimeDisplay(item.tfs_schedule) || '-',
+    tfs_ampm: getScheduleAmPm(item.tfs_schedule) || '-',
+    department: item.department_name || 'Unassigned department',
+    faculty: item.faculty_name || '-',
+    merged: item.merged ? 'Merged' : '',
+    status: item.load_status?.replace(/_/g, ' ') || '-',
+  }));
+
+  const lines = [headers.join(',')];
+  for (const row of csvRows) {
+    lines.push(headers.map((header) => escapeCsvCell(row[header])).join(','));
+  }
+
+  const csv = lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
 }
 
 export default function FacultyLoadingView() {
@@ -240,6 +303,11 @@ export default function FacultyLoadingView() {
     if (delta !== 0) return delta;
     return toNumber(right.total_units) - toNumber(left.total_units);
   });
+
+  function handleExportGeneratedListCsv() {
+    if (!generatedRows.length) return;
+    downloadGeneratedListCsv(`faculty_loading_generated_list_${timestampForFileName()}.csv`, generatedRows);
+  }
 
   return (
     <div className="space-y-6">
@@ -415,7 +483,25 @@ export default function FacultyLoadingView() {
       </div>
 
       <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader title="Generated Faculty Loading List" subtitle="Old master-list concept adapted to current result assignments." action={<div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">{generatedRows.length} row(s)</div>} />
+        <SectionHeader
+          title="Generated Faculty Loading List"
+          subtitle="Old master-list concept adapted to current result assignments."
+          action={(
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+                {generatedRows.length} row(s)
+              </div>
+              <button
+                onClick={handleExportGeneratedListCsv}
+                disabled={!generatedRows.length}
+                className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-white/80 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-on-surface transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Download size={14} />
+                Export CSV
+              </button>
+            </div>
+          )}
+        />
         {!generatedRows.length ? (
           <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">No generated list yet. Run GA to populate assignments.</div>
         ) : (
