@@ -905,13 +905,13 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   return (
 <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
       {/* Header with Title, Description, and Action Buttons */}
-      <div className="glass-panel flex items-center justify-between p-3">
+      <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5 min-w-0">
           <h2 className="text-lg font-bold text-on-surface truncate">Curriculum Repository</h2>
           <p className="text-xs text-on-surface-variant truncate">Manage subjects, credit units, and classifications.</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-          <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             <NotificationButton
               panelSize="lg"
               items={visibleSubjectNotifications}
@@ -935,34 +935,32 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               onNotificationSearchChange={(v) => setNotifSearch(v)}
               notificationStats={subjectNotificationStats}
             />
-            <div className="h-5 w-px bg-slate-200 self-center" />
             <button
               onClick={handleRescanNotifications}
               disabled={subjectNotificationsLoading}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-on-surface-variant shadow-sm transition-colors hover:bg-slate-100 disabled:opacity-50"
               title="Re-detect all subject issues"
+              type="button"
             >
               <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
               <span>Rescan</span>
             </button>
           </div>
-          <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
-            <span className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-bold text-primary bg-primary/10 min-h-[40px] whitespace-nowrap">
+
+          <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800">
+            {selectedSubjects.size > 0 && (
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
+                {selectedSubjects.size} selected
+              </span>
+            )}
+            <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
               {total} subjects
             </span>
-            <div className="h-5 w-px bg-slate-200 self-center" />
-            <button
-              onClick={loadSubjects}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[40px] min-w-max"
-              title="Reload subjects list"
-            >
-              <RotateCcw size={14} />
-              <span>Reload</span>
-            </button>
           </div>
+
           <button
             ref={colButtonRef}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
             onClick={() => setColMenuOpen((prev) => !prev)}
             type="button"
             title="Column visibility"
@@ -984,7 +982,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               {columns.map((col) => (
                 <label
                   key={col.key}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap transition-colors"
                 >
                   <input
                     type="checkbox"
@@ -1004,31 +1002,23 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               setTfsCard(emptyCardState('tfs'));
               setShowAddModal(true);
             }}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px] flex-shrink-0"
+            className="btn-primary inline-flex items-center gap-1.5 text-xs px-3 py-2 h-11 min-w-11"
+            type="button"
           >
             <PlusCircle size={14} />
             <span>Add</span>
           </button>
-          {selectedSubjects.size > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 font-semibold text-white text-xs min-h-[44px] min-w-max transition-colors hover:bg-red-700 flex-shrink-0"
-            >
-              <Trash2 size={14} />
-              <span>Delete ({selectedSubjects.size})</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="glass-panel space-y-2 p-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex gap-2 flex-1 md:max-w-md">
+      <div className="glass-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex gap-2 flex-1 md:max-w-xl">
             <select
               value={searchField}
               onChange={(e) => setSearchField(e.target.value)}
-              className="rounded-lg border border-white/30 bg-white/50 px-3 py-1.5 text-xs text-on-surface outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-on-surface outline-none transition-all hover:border-primary focus:border-primary"
             >
               <option value="all">All Fields</option>
               <option value="subject_code">Code</option>
@@ -1037,35 +1027,29 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               <option value="curr_id">Curriculum ID</option>
             </select>
             <div className="relative flex-1">
-              <button
-                type="button"
-                onClick={handleSearchNow}
-                className="absolute left-0 top-0 flex h-full w-8 items-center justify-center text-on-surface-variant transition-colors hover:text-primary"
-                title="Search"
-              >
-                <Search size={14} />
-              </button>
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
               <input
                 type="text"
                 placeholder={`Search ${searchFieldLabel[searchField] ?? searchField.replace(/_/g, ' ')}...`}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearchNow(); }}
-                className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-8 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-10 text-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
               />
               {searchInput && (
                 <button
                   onClick={() => setSearchInput('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
                   title="Clear search"
+                  type="button"
                 >
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-2">
             {['', 'active', 'inactive'].map((status) => (
               <button
                 key={status}
@@ -1073,10 +1057,11 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                   setStatusFilter(status);
                   setPage(1);
                 }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                type="button"
+                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
+                    : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
                 }`}
               >
                 {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
@@ -1086,12 +1071,33 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         </div>
 
         {updateError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-            <AlertCircle size={14} />
-            {updateError}
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle size={16} />
+            <span>{updateError}</span>
           </div>
         )}
       </div>
+
+      {selectedSubjects.size > 0 && (
+        <div className="glass-panel mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="font-semibold">{selectedSubjects.size} subject{selectedSubjects.size === 1 ? '' : 's'} selected</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-slate-100"
+            >
+              Export selection
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              Delete selection
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Loading State */}
       {loading && (
@@ -1115,225 +1121,217 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       {/* Subjects Table */}
       {!loading && !error && subjects.length > 0 && (
         <div className="glass-panel overflow-hidden">
-          <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
-            <table className="min-w-full w-full text-left text-xs">
+          <div className="max-h-[calc(100vh-18rem)] overflow-auto">
+            <table className="min-w-full w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="sticky top-0 z-20 border-b border-white/20 bg-white">
-                  <th className="px-4 py-2 text-left">
+                <tr className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+                  <th className="px-4 py-3 text-center w-12">
                     <input
                       type="checkbox"
                       checked={selectedSubjects.size > 0 && selectedSubjects.size === sortedSubjects.length}
                       onChange={toggleSelectAllSubjects}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
                       aria-label="Select all subjects"
                     />
                   </th>
                   {columns.map(col => visibleColumns.has(col.key) && (
-                    <th key={col.key} className="px-4 py-2 text-left">
+                    <th key={col.key} className="px-4 py-3 text-left">
                       <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
                         <span>{col.label}</span>
-                        <ArrowUpDown size={10} />
+                        <ArrowUpDown size={12} />
                       </button>
                     </th>
                   ))}
-                  <th className="sticky right-0 z-30 px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
+                  <th className="sticky right-0 z-30 px-4 py-3 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/20">
+              <tbody className="divide-y divide-slate-200">
                 {sortedSubjects.map((subject, index) => {
                   const issueState = getSubjectIssueState(subject.subject_id);
                   const isSelected = selectedSubjects.has(subject.subject_id);
                   return (
-                  <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`border-b border-white/120 transition-colors ${isSelected ? 'bg-primary/10' : issueState.hasScheduleConflict ? 'bg-red-50/70' : index % 2 === 0 ? 'bg-white/6' : ''}`}>
-                    <td className="px-4 py-2">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectSubject(subject.subject_id)}
-                        aria-label={`Select subject ${subject.subject_code || subject.subject_id}`}
-                      />
-                    </td>
-                    {columns.map(col => visibleColumns.has(col.key) && (
-                      <td key={col.key} className="px-4 py-2">
-                        {col.key === 'subject_code' && (
-                          <div className="inline-flex items-center gap-1.5">
-                            <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                              {subject.subject_code || 'N/A'}
-                            </span>
-                            {issueState.hasScheduleConflict && (
-                              <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                                Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {col.key === 'subject_course_no' && (
-                          <span className="text-xs font-medium text-on-surface">{subject.subject_course_no || '—'}</span>
-                        )}
-                        {col.key === 'subject_descriptive_title' && (
-                          <div className="max-w-xs">
-                            <p className="text-xs font-medium text-on-surface truncate">{subject.subject_descriptive_title || '—'}</p>
-                          </div>
-                        )}
-                        {col.key === 'curr_id' && (
-                          <span className="text-center text-xs font-medium text-on-surface block">{subject.curr_id || '—'}</span>
-                        )}
-                        {col.key === 'department_info' && (
-                          <span className="text-xs font-medium text-on-surface">{subject.departments?.department_name || '—'}</span>
-                        )}
-                        {col.key === 'merged' && (
-                          <div className="flex justify-center">
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                              {subject.merged === true || subject.merged === 'true'
-                                ? 'Merged'
-                                : subject.merged === false || subject.merged === 'false'
-                                ? '—'
-                                : String(subject.merged ?? '—')}
-                            </span>
-                          </div>
-                        )}
-                        {col.key === 'mth_schedule' && (
-                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
-                            {formatScheduleTimeDisplay(subject.mth_schedule) || extractTimeRange(subject.mth_schedule)}
-                            {getScheduleAmPm(subject.mth_schedule) && (
-                              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {getScheduleAmPm(subject.mth_schedule)}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                        {col.key === 'tfs_schedule' && (
-                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
-                            {formatScheduleTimeDisplay(subject.tfs_schedule) || extractTimeRange(subject.tfs_schedule)}
-                            {getScheduleAmPm(subject.tfs_schedule) && (
-                              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {getScheduleAmPm(subject.tfs_schedule)}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                        {col.key === 'room' && (
-                          <span className="block text-xs text-on-surface-variant">{extractRoomSummary(subject)}</span>
-                        )}
-                        {col.key === 'subject_units' && (
-                          <span className="text-center text-xs font-medium text-on-surface">{subject.subject_units || 0}</span>
-                        )}
-                        {col.key === 'subject_lec_lab' && (
-                          <span className="text-center text-xs font-medium text-on-surface-variant">{subject.subject_lec_hrs || 0}h / {subject.subject_lab_hrs || 0}h</span>
-                        )}
-                        {col.key === 'is_general' && (
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => handleGeneralToggle(subject.subject_id, subject.is_general)}
-                              disabled={updatingGeneral === subject.subject_id}
-                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
-                                subject.is_general
-                                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              } disabled:opacity-50`}
-                            >
-                              {updatingGeneral === subject.subject_id ? (
-                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                              ) : subject.is_general ? (
-                                <>
-                                  <Check size={12} />
-                                  General
-                                </>
-                              ) : (
-                                <>
-                                  <X size={12} />
-                                  In scope
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        )}
-                        {col.key === 'subject_status' && (
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => handleStatusToggle(subject.subject_id, subject.subject_status)}
-                              disabled={updatingStatus === subject.subject_id}
-                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
-                                subject.subject_status === 'active'
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              } disabled:opacity-50`}
-                            >
-                              {updatingStatus === subject.subject_id ? (
-                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                              ) : subject.subject_status === 'active' ? (
-                                <>
-                                  <Check size={12} />
-                                  Active
-                                </>
-                              ) : (
-                                <>
-                                  <X size={12} />
-                                  Inactive
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        )}
+                    <tr id={`subject-row-${subject.subject_id}`} data-subject-id={subject.subject_id} key={subject.subject_id} className={`group transition-colors ${isSelected ? 'bg-primary/10' : issueState.hasScheduleConflict ? 'bg-red-50/70' : 'hover:bg-slate-50'}`}>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectSubject(subject.subject_id)}
+                          aria-label={`Select subject ${subject.subject_code || subject.subject_id}`}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                        />
                       </td>
-                    ))}
-                    <td className="sticky right-0 z-10 px-4 py-2 bg-white">
-                      <div className="flex justify-center gap-1">
-                        <button
-                          onClick={() => handleEditSubject(subject)}
-                          className="rounded-md bg-white/30 p-1 text-slate-400 transition-colors hover:bg-white hover:text-primary"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSubject(subject)}
-                          className="rounded-md bg-white/30 p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );})}
+                      {columns.map(col => visibleColumns.has(col.key) && (
+                        <td key={col.key} className="px-4 py-3 align-top">
+                          {col.key === 'subject_code' && (
+                            <div className="inline-flex items-center gap-1.5">
+                              <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                                {subject.subject_code || 'N/A'}
+                              </span>
+                              {issueState.hasScheduleConflict && (
+                                <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                  Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {col.key === 'subject_course_no' && (
+                            <span className="text-sm font-medium text-on-surface">{subject.subject_course_no || '—'}</span>
+                          )}
+                          {col.key === 'subject_descriptive_title' && (
+                            <div className="max-w-xs">
+                              <p className="text-sm font-medium text-on-surface truncate">{subject.subject_descriptive_title || '—'}</p>
+                            </div>
+                          )}
+                          {col.key === 'curr_id' && (
+                            <span className="block text-sm font-medium text-on-surface">{subject.curr_id || '—'}</span>
+                          )}
+                          {col.key === 'department_info' && (
+                            <span className="text-sm font-medium text-on-surface">{subject.departments?.department_name || '—'}</span>
+                          )}
+                          {col.key === 'merged' && (
+                            <div className="flex justify-center">
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                {subject.merged === true || subject.merged === 'true'
+                                  ? 'Merged'
+                                  : subject.merged === false || subject.merged === 'false'
+                                  ? '—'
+                                  : String(subject.merged ?? '—')}
+                              </span>
+                            </div>
+                          )}
+                          {col.key === 'mth_schedule' && (
+                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant">
+                              {formatScheduleTimeDisplay(subject.mth_schedule) || extractTimeRange(subject.mth_schedule)}
+                              {getScheduleAmPm(subject.mth_schedule) && (
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {getScheduleAmPm(subject.mth_schedule)}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {col.key === 'tfs_schedule' && (
+                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant">
+                              {formatScheduleTimeDisplay(subject.tfs_schedule) || extractTimeRange(subject.tfs_schedule)}
+                              {getScheduleAmPm(subject.tfs_schedule) && (
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {getScheduleAmPm(subject.tfs_schedule)}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {col.key === 'room' && (
+                            <span className="block text-sm text-on-surface-variant">{extractRoomSummary(subject)}</span>
+                          )}
+                          {col.key === 'subject_units' && (
+                            <span className="text-sm font-medium text-on-surface">{subject.subject_units || 0}</span>
+                          )}
+                          {col.key === 'subject_lec_lab' && (
+                            <span className="text-sm font-medium text-on-surface-variant">{subject.subject_lec_hrs || 0}h / {subject.subject_lab_hrs || 0}h</span>
+                          )}
+                          {col.key === 'is_general' && (
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => handleGeneralToggle(subject.subject_id, subject.is_general)}
+                                disabled={updatingGeneral === subject.subject_id}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
+                                  subject.is_general
+                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                } disabled:opacity-50`}
+                              >
+                                {updatingGeneral === subject.subject_id ? (
+                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                                ) : subject.is_general ? (
+                                  <>
+                                    <Check size={12} />
+                                    General
+                                  </>
+                                ) : (
+                                  <>
+                                    <X size={12} />
+                                    In scope
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {col.key === 'subject_status' && (
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => handleStatusToggle(subject.subject_id, subject.subject_status)}
+                                disabled={updatingStatus === subject.subject_id}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${
+                                  subject.subject_status === 'active'
+                                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                } disabled:opacity-50`}
+                              >
+                                {updatingStatus === subject.subject_id ? (
+                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                                ) : subject.subject_status === 'active' ? (
+                                  <>
+                                    <Check size={12} />
+                                    Active
+                                  </>
+                                ) : (
+                                  <>
+                                    <X size={12} />
+                                    Inactive
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                      <td className="sticky right-0 z-10 px-4 py-3 bg-white">
+                        <div className="flex justify-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleEditSubject(subject)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
+                            type="button"
+                            aria-label={`Edit ${subject.subject_code}`}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubject(subject)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-red-50 hover:text-red-600"
+                            type="button"
+                            aria-label={`Delete ${subject.subject_code}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2 flex-shrink-0">
-              <div className="text-xs text-on-surface-variant">
-                {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-600">
+                Showing {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={16} />
                 </button>
-                <div className="flex items-center gap-2 rounded-lg border border-white/30 bg-white px-3 py-1">
-                  <span className="text-xs text-on-surface-variant">Page</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={pageInput}
-                    onChange={(e) => setPageInput(e.target.value)}
-                    onBlur={applyPageInput}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') applyPageInput();
-                    }}
-                    className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-                  />
-                  <span className="text-xs text-on-surface-variant">of {totalPages}</span>
-                </div>
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
-                  <ChevronRight size={14} />
+                  <ChevronRight size={16} />
                 </button>
               </div>
             </div>

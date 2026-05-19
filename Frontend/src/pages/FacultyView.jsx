@@ -82,10 +82,9 @@ export default function FacultyView() {
     { key: 'faculty_role', label: 'Role' },
     { key: 'faculty_specialization', label: 'Specialization' },
     { key: 'faculty_max_units', label: 'Units' },
-    { key: 'faculty_status', label: 'Status' },
   ];
 
-  const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
+  const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map((c) => c.key)));
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
@@ -633,57 +632,90 @@ export default function FacultyView() {
     return 'bg-slate-100 text-slate-600 hover:bg-slate-200';
   }
 
+  function getDepartmentBadgeClass(departmentName) {
+    const normalized = String(departmentName || '').toLowerCase();
+    if (normalized.includes('architecture')) {
+      return 'bg-fuchsia-100 text-fuchsia-800';
+    }
+    if (normalized.includes('information technology') || normalized.includes('it')) {
+      return 'bg-sky-100 text-sky-800';
+    }
+    if (normalized.includes('civil engineering')) {
+      return 'bg-emerald-100 text-emerald-800';
+    }
+    if (normalized.includes('electrical engineering')) {
+      return 'bg-amber-100 text-amber-800';
+    }
+    if (normalized.includes('computer engineering')) {
+      return 'bg-violet-100 text-violet-800';
+    }
+    if (normalized.includes('mechanical engineering')) {
+      return 'bg-slate-100 text-slate-700';
+    }
+    if (normalized.includes('data') || normalized.includes('science')) {
+      return 'bg-cyan-100 text-cyan-800';
+    }
+    if (normalized.includes('mathematics')) {
+      return 'bg-indigo-100 text-indigo-800';
+    }
+    return 'bg-slate-100 text-slate-700';
+  }
+
   return (
 <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-500">
 
       {/* Header with Title, Description, and Action Buttons */}
-      <div className="glass-panel flex items-center justify-between p-3">
-
+      <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5 min-w-0">
           <h2 className="text-lg font-bold text-on-surface truncate">Faculty Directory</h2>
           <p className="text-xs text-on-surface-variant truncate">Manage and track academic teaching staff.</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-          <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
-            <NotificationButton
-              items={filteredNotifications}
-              title="Faculty Notifications"
-              buttonLabel="Issues"
-              emptyLabel="No faculty issues"
-              panelSize="md"
-              onItemEdit={handleNotificationEdit}
-              onItemJump={handleNotificationJump}
-              onItemResolve={handleResolveNotification}
-              onItemInlineSave={handleInlineSave}
-              severityFilter={notificationSeverityFilter}
-              onSeverityFilterChange={setNotificationSeverityFilter}
-              notificationSearch={notificationSearch}
-              onNotificationSearchChange={setNotificationSearch}
-              notificationStats={notificationStats}
-            />
-            <div className="h-5 w-px bg-slate-200 self-center" />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+            <div className="faculty-issues-trigger rounded-xl">
+              <NotificationButton
+                items={filteredNotifications}
+                title="Faculty Notifications"
+                buttonLabel="Issues"
+                emptyLabel="No faculty issues"
+                panelSize="md"
+                onItemEdit={handleNotificationEdit}
+                onItemJump={handleNotificationJump}
+                onItemResolve={handleResolveNotification}
+                onItemInlineSave={handleInlineSave}
+                severityFilter={notificationSeverityFilter}
+                onSeverityFilterChange={setNotificationSeverityFilter}
+                notificationSearch={notificationSearch}
+                onNotificationSearchChange={setNotificationSearch}
+                notificationStats={notificationStats}
+              />
+            </div>
             <button
               onClick={() => loadFaculty()}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[40px] min-w-max"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
               title="Reload faculty members"
+              type="button"
             >
               <RotateCcw size={14} />
               <span>Reload</span>
             </button>
           </div>
-          <div className="inline-flex items-center gap-2">
+
+          <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-1 text-xs font-semibold text-on-surface-variant">
             {selectedFaculty.size > 0 && (
-              <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
                 {selectedFaculty.size} selected
               </span>
             )}
-            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary whitespace-nowrap">
+            <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
               {total} faculty
             </span>
           </div>
+
           <button
             ref={colButtonRef}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/90 px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
             onClick={() => setColMenuOpen((prev) => !prev)}
             type="button"
             title="Column visibility"
@@ -691,6 +723,7 @@ export default function FacultyView() {
             <Settings size={14} />
             <span>Cols</span>
           </button>
+
           {colMenuOpen && typeof document !== 'undefined' && createPortal(
             <div
               ref={colMenuRef}
@@ -705,7 +738,7 @@ export default function FacultyView() {
               {columns.map((col) => (
                 <label
                   key={col.key}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap transition-colors"
                 >
                   <input
                     type="checkbox"
@@ -719,7 +752,12 @@ export default function FacultyView() {
             </div>,
             document.body
           )}
-          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px] flex-shrink-0">
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px] flex-shrink-0"
+            type="button"
+          >
             <PlusCircle size={14} />
             <span>Add</span>
           </button>
@@ -727,11 +765,10 @@ export default function FacultyView() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="glass-panel space-y-2 p-3">
-
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 md:max-w-md">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+      <div className="glass-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative flex-1 md:max-w-lg">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
               placeholder="Search faculty..."
@@ -740,11 +777,11 @@ export default function FacultyView() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-lg border border-white/30 bg-white/50 py-1.5 pl-9 pr-3 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
             />
           </div>
 
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-2">
             {['', 'active', 'inactive', 'on-leave'].map((status) => (
               <button
                 key={status}
@@ -752,10 +789,11 @@ export default function FacultyView() {
                   setStatusFilter(status);
                   setPage(1);
                 }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                type="button"
+                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'border border-white/60 bg-white text-on-surface-variant hover:bg-slate-50'
+                    : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
                 }`}
               >
                 {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
@@ -765,12 +803,32 @@ export default function FacultyView() {
         </div>
 
         {updateError && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-            <AlertCircle size={14} />
-            {updateError}
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">
+            <AlertCircle size={16} />
+            <span>{updateError}</span>
           </div>
         )}
       </div>
+
+      {selectedFaculty.size > 0 && (
+        <div className="glass-panel mb-4 flex flex-col gap-3 rounded-2xl border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="font-semibold">{selectedFaculty.size} faculty selected</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-slate-100"
+            >
+              Export selected
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              Delete selected
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="glass-panel flex flex-col items-center justify-center py-16">
@@ -793,10 +851,10 @@ export default function FacultyView() {
         <div className="glass-panel overflow-hidden">
 
           <div className="max-h-[calc(100vh-18rem)] overflow-auto">
-            <table className="min-w-full w-full border-collapse text-left text-xs">
+            <table className="min-w-full w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="sticky top-0 z-20 border-b border-white bg-white">
-                  <th className="px-4 py-2 text-center w-12">
+                <tr className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+                  <th className="px-4 py-3 text-center w-12">
                     <input
                       type="checkbox"
                       checked={selectedFaculty.size > 0 && selectedFaculty.size === sortedFaculty.length}
@@ -806,17 +864,17 @@ export default function FacultyView() {
                     />
                   </th>
                   {columns.map(col => visibleColumns.has(col.key) && (
-                    <th key={col.key} className="px-4 py-2 text-left">
+                    <th key={col.key} className="px-4 py-3 text-left">
                       <button type="button" onClick={() => handleSort(col.key)} className={sortHeaderClass(col.key)}>
                         <span>{col.label}</span>
-                        <ArrowUpDown size={10} />
+                        <ArrowUpDown size={12} />
                       </button>
                     </th>
                   ))}
-                  <th className="sticky right-0 z-30 px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
+                  <th className="sticky right-0 z-30 px-4 py-3 text-center text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 bg-white">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black">
+              <tbody className="divide-y divide-slate-200">
                 {sortedFaculty.map((member) => {
                   const specializationItems = parseSpecializations(member.faculty_specialization);
                   const visibleSpecializations = specializationItems.slice(0, 2);
@@ -827,9 +885,9 @@ export default function FacultyView() {
                     <tr
                       key={member.faculty_id}
                       id={`faculty-row-${member.faculty_id}`}
-                      className={`group transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/45'}`}
+                      className={`group transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-slate-50'}`}
                     >
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-4 py-3 text-center align-top">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -839,12 +897,12 @@ export default function FacultyView() {
                         />
                       </td>
                       {columns.map(col => visibleColumns.has(col.key) && (
-                        <td key={col.key} className="px-4 py-2">
+                        <td key={col.key} className="px-4 py-3 align-top">
                           {col.key === 'faculty_name' && (
-                            <div>
-                              <p className="font-bold text-on-surface">{member.faculty_name}</p>
-                              <div className="mt-0.5 flex items-center gap-1 text-xs text-on-surface-variant/70">
-                                <Mail size={10} />
+                            <div className="min-w-0">
+                              <p className="font-semibold text-on-surface leading-5">{member.faculty_name}</p>
+                              <div className="mt-1 flex items-center gap-1 text-xs text-on-surface-variant/80">
+                                <Mail size={12} />
                                 <span className="truncate">
                                   {member.faculty_email ||
                                     `${String(member.faculty_name || '')
@@ -855,23 +913,23 @@ export default function FacultyView() {
                             </div>
                           )}
                           {col.key === 'department' && (
-                            <span className="text-xs font-medium text-on-surface-variant truncate">
+                            <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getDepartmentBadgeClass(member.departments?.department_name)}`}>
                               {member.departments?.department_name || 'Unassigned'}
                             </span>
                           )}
                           {col.key === 'faculty_role' && (
-                            <span className="text-xs text-on-surface-variant">{member.faculty_role}</span>
+                            <span className="text-sm text-on-surface-variant">{member.faculty_role}</span>
                           )}
                           {col.key === 'faculty_specialization' && (
-                            <div>
+                            <div className="flex flex-wrap items-center gap-1">
                               {specializationItems.length === 0 ? (
                                 <span className="text-xs text-on-surface-variant">—</span>
                               ) : (
-                                <div className="flex flex-wrap items-center gap-1">
+                                <> 
                                   {visibleSpecializations.map((specialization) => (
                                     <span
                                       key={`${member.faculty_id}-${specialization}`}
-                                      className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                                      className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary"
                                     >
                                       {specialization}
                                     </span>
@@ -879,60 +937,44 @@ export default function FacultyView() {
                                   {hiddenSpecializationCount > 0 && (
                                     <span
                                       title={specializationItems.join(', ')}
-                                      className="cursor-help rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+                                      className="cursor-help rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700"
                                     >
                                       +{hiddenSpecializationCount}
                                     </span>
                                   )}
-                                </div>
+                                </>
                               )}
                             </div>
                           )}
                           {col.key === 'faculty_max_units' && (
-                            <span className="text-center text-xs font-medium text-on-surface">
-                              {member.faculty_max_units ?? '—'}
-                            </span>
+                            <span className="text-sm font-medium text-on-surface">{member.faculty_max_units ?? '—'}</span>
                           )}
                           {col.key === 'faculty_status' && (
                             <div className="flex justify-center">
-                              <button
-                                onClick={() => handleStatusToggle(member.faculty_id, member.faculty_status)}
-                                disabled={updatingStatus === member.faculty_id}
-                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold transition-all ${getStatusBadgeClass(
-                                  member.faculty_status
-                                )} disabled:opacity-50`}
-                              >
-                                {updatingStatus === member.faculty_id ? (
-                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                                ) : String(member.faculty_status || '').toLowerCase() === 'active' ? (
-                                  <>
-                                    <Check size={12} />
-                                    Active
-                                  </>
-                                ) : (
-                                  <>
-                                    <X size={12} />
-                                    {String(member.faculty_status || 'inactive').replace('-', ' ')}
-                                  </>
-                                )}
-                              </button>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${getStatusBadgeClass(member.faculty_status)}`}>
+                                {String(member.faculty_status || 'inactive').replace('-', ' ')}
+                              </span>
                             </div>
                           )}
                         </td>
                       ))}
-                      <td className="sticky right-0 z-10 px-4 py-2 bg-white">
-                        <div className="flex items-center justify-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
+                      <td className="sticky right-0 z-10 px-4 py-3 bg-white">
+                        <div className="flex items-center justify-center gap-2 opacity-80 transition-opacity group-hover:opacity-100">
                           <button
                             onClick={() => handleEditFaculty(member)}
-                            className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-white hover:text-primary"
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
+                            type="button"
+                            aria-label={`Edit ${member.faculty_name}`}
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={16} />
                           </button>
                           <button
                             onClick={() => openDeleteConfirm(member)}
-                            className="rounded-lg bg-white/30 p-1 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500"
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-red-50 hover:text-red-600"
+                            type="button"
+                            aria-label={`Delete ${member.faculty_name}`}
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -944,40 +986,27 @@ export default function FacultyView() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/20 bg-white/30 px-4 py-2 flex-shrink-0">
-              <div className="text-xs text-on-surface-variant">
-                {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-600">
+                Showing {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
               </div>
+
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={16} />
                 </button>
-                <div className="flex items-center gap-2 rounded-lg border border-white/30 bg-white px-3 py-1">
-                  <span className="text-xs text-on-surface-variant">Page</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={pageInput}
-                    onChange={(e) => setPageInput(e.target.value)}
-                    onBlur={applyPageInput}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') applyPageInput();
-                    }}
-                    className="w-16 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-                  />
-                  <span className="text-xs text-on-surface-variant">of {totalPages}</span>
-                </div>
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 rounded-lg border border-white/30 bg-white px-2 py-1 text-xs font-bold text-on-surface transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  type="button"
                 >
-                  <ChevronRight size={14} />
+                  <ChevronRight size={16} />
                 </button>
               </div>
             </div>
