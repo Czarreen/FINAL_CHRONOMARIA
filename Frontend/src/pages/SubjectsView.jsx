@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, Settings } from 'lucide-react';
+import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
 import NotificationButton from '../components/NotificationButton';
@@ -914,6 +914,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             <NotificationButton
               panelSize="lg"
+              buttonClassName="btn-primary"
               items={visibleSubjectNotifications}
               title="Subject Notifications"
               emptyLabel="No subject issues"
@@ -938,29 +939,39 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             <button
               onClick={handleRescanNotifications}
               disabled={subjectNotificationsLoading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-on-surface-variant shadow-sm transition-colors hover:bg-slate-100 disabled:opacity-50"
+              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
               title="Re-detect all subject issues"
               type="button"
             >
               <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
-              <span>Rescan</span>
+              <span>{subjectNotificationsLoading ? 'Scanning' : 'Rescan'}</span>
             </button>
           </div>
 
-          <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             {selectedSubjects.size > 0 && (
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
                 {selectedSubjects.size} selected
               </span>
             )}
-            <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
+            <span className="inline-flex items-center rounded-full border border-primary/20 bg-white px-3 py-1.5 text-sm font-semibold text-primary shadow-sm">
               {total} subjects
             </span>
+            <button
+              onClick={() => loadSubjects()}
+              disabled={loading}
+              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
+              title="Reload subjects"
+              type="button"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <span>{loading ? 'Reloading' : 'Reload'}</span>
+            </button>
           </div>
 
           <button
             ref={colButtonRef}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-100"
+            className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
             onClick={() => setColMenuOpen((prev) => !prev)}
             type="button"
             title="Column visibility"
