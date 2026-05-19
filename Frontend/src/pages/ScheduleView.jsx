@@ -448,7 +448,23 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
         <tbody>
           {filteredRows.map((row, idx) => (
             <tr key={idx} className="border-b border-white/30 hover:bg-white/40 transition-colors">
-              <td className="px-4 py-3 text-on-surface font-medium">{row.code || '—'}</td>
+              <td className="px-4 py-3 text-on-surface font-medium">
+                <div className="flex flex-col gap-0.5">
+                  <span>{row.code || '—'}</span>
+                  {row.preflight_tag === 'general' && (
+                    <span className="flex gap-1 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">Original</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-300">General</span>
+                    </span>
+                  )}
+                  {row.preflight_tag === 'original' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300 self-start">Original</span>
+                  )}
+                  {!row.preflight_tag && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300 self-start">New!</span>
+                  )}
+                </div>
+              </td>
               <td className="px-4 py-3 text-on-surface">
                 <span className="inline-flex items-center gap-1.5 flex-wrap">
                   <span>{row.course_no || '—'}</span>
@@ -459,7 +475,14 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
               </td>
               <td className="px-4 py-3 text-on-surface">{row.section || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.department_name || '—'}</td>
-              <td className="px-4 py-3 text-on-surface max-w-xs truncate" title={row.descriptive_title}>{row.descriptive_title || '—'}</td>
+              <td className="px-4 py-3 text-on-surface max-w-xs" title={row.descriptive_title}>
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <span className="truncate">{row.descriptive_title || '—'}</span>
+                  {row.preflight_tag === 'general' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-300 shrink-0">General</span>
+                  )}
+                </span>
+              </td>
               <td className="px-4 py-3 text-on-surface">{row.lec_hrs || '—'}</td>
               <td className="px-4 py-3 text-on-surface">{row.lab_hrs || '—'}</td>
               <td className="px-4 py-3 text-on-surface text-xs">

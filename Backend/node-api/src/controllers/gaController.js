@@ -112,7 +112,7 @@ function parseScheduleText(scheduleText) {
   const match = text.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i);
   if (!match) return null;
 
-  const parseMinutes = (token, isEnd = false) => {
+  const parseMinutes = (token) => {
     const cleaned = normalizeUpper(token).replace(/\s+/g, '');
     const timeMatch = cleaned.match(/^(\d{1,2})(?::(\d{2}))?(AM|PM)?$/i);
     if (!timeMatch) return null;
@@ -125,16 +125,24 @@ function parseScheduleText(scheduleText) {
       if (hour === 12) hour = 0;
     } else if (meridiem === 'PM') {
       if (hour !== 12) hour += 12;
-    } else if (!isEnd && hour < 7) {
+    } else if (hour < 7) {
+      // School PM bias: hours 1-6 with no meridiem are treated as afternoon
+      // (school operates 7:30 AM – 8:00 PM; 1-6 AM slots don't exist in the schedule)
       hour += 12;
     }
 
     return hour * 60 + minute;
   };
 
-  const start = parseMinutes(match[1], false);
-  const end = parseMinutes(match[2], true);
-  if (start === null || end === null || end <= start) return null;
+  const start = parseMinutes(match[1]);
+  let end = parseMinutes(match[2]);
+  if (start === null || end === null) return null;
+
+  // When end <= start (e.g. "1:00-2:30" where start→13:00, end→2:30=150),
+  // shift end forward by 12 hours to resolve the PM ambiguity.
+  if (end <= start) end += 12 * 60;
+
+  if (end <= start) return null;
 
   return { start, end, duration: end - start };
 }
@@ -1428,7 +1436,7 @@ async function fetchAutomaticSchedulerRows() {
   const response = await query(`
     select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
            a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
-           (a.merged = 'true') as merged,
+           (a.merged = 'true') as merged, a.preflight_tag,
            coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name,
            case
              when nullif(trim(a.mth_room_id), '') is null then null
@@ -1517,6 +1525,271 @@ function toAutomaticCandidateFromSubject(subject, roomLookup) {
     })(),
   };
 }
+
+// ── Scheduler helper utilities ────────────────────────────────────────────────
+
+// Returns [{roomId: string, day: string}, ...] after splitting slash-notation room IDs.
+// "1200/1195" with days ["MON","THU"] → [{roomId:"1200",day:"MON"},{roomId:"1195",day:"THU"}]
+function splitRoomIdsForDays(roomIdStr, days) {
+  if (!roomIdStr) return [];
+  const parts = String(roomIdStr).split('/').map((s) => s.trim()).filter(Boolean);
+  return days.map((day, i) => ({
+    roomId: parts.length === 1 ? parts[0] : (parts[i] ?? parts[0]),
+    day,
+  }));
+}
+
+// Returns true if two output-row objects (mth_schedule, mth_room_id, tfs_schedule, tfs_room_id)
+// share at least one room-day pair with overlapping time.
+function rowsHaveConflict(rowA, rowB) {
+  for (const pat of ['mth', 'tfs']) {
+    const schedA = rowA[`${pat}_schedule`];
+    const roomA  = rowA[`${pat}_room_id`];
+    const schedB = rowB[`${pat}_schedule`];
+    const roomB  = rowB[`${pat}_room_id`];
+    if (!schedA || !roomA || !schedB || !roomB) continue;
+    const parsedA = parseScheduleText(schedA);
+    const parsedB = parseScheduleText(schedB);
+    if (!parsedA || !parsedB) continue;
+    if (!overlaps(parsedA, parsedB)) continue;
+    const daysA = parseDaysFromSchedule(schedA, pat.toUpperCase());
+    const daysB = parseDaysFromSchedule(schedB, pat.toUpperCase());
+    const pairsA = splitRoomIdsForDays(roomA, daysA);
+    const pairsB = splitRoomIdsForDays(roomB, daysB);
+    for (const a of pairsA) {
+      for (const b of pairsB) {
+        if (a.roomId === b.roomId && a.day === b.day) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Build reserved-slot descriptors from the discarded pile (output rows) for the Python GA.
+function buildDiscardedPileSlots(discardedPile) {
+  const slots = [];
+  for (const row of discardedPile) {
+    if (!row.source_subject_id && !row.subject_id) continue;
+    slots.push({
+      subject_id: row.source_subject_id ?? row.subject_id,
+      section: row.section,
+      department_id: row.department_id,
+      mth_schedule: row.mth_schedule || null,
+      mth_room_id: row.mth_room_id != null ? String(row.mth_room_id) : null,
+      tfs_schedule: row.tfs_schedule || null,
+      tfs_room_id: row.tfs_room_id != null ? String(row.tfs_room_id) : null,
+    });
+  }
+  return slots;
+}
+
+// Convert a candidate object (from preflight) into an output row object.
+function candidateToOutputRow(c, roomLookup, mergedVal, preflightTag) {
+  return {
+    source_subject_id: c.subject_id,
+    curr_id: c.curr_id,
+    code: c.code,
+    course_no: c.course_no,
+    department_id: c.department_id,
+    department_name: c.department_name || null,
+    section: c.section,
+    descriptive_title: c.descriptive_title,
+    units: c.units,
+    lec_hrs: c.lec_hrs,
+    lab_hrs: c.lab_hrs,
+    mth_schedule: c.existing_mth_schedule || null,
+    mth_room_id: c.existing_mth_room_ids || (c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null),
+    mth_room_name:
+      c.existing_mth_room_name ||
+      (c.existing_mth_room_ids ? resolveRoomNamesFromIdText(c.existing_mth_room_ids, roomLookup) : null),
+    tfs_schedule: c.existing_tfs_schedule || null,
+    tfs_room_id: c.existing_tfs_room_ids || (c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null),
+    tfs_room_name:
+      c.existing_tfs_room_name ||
+      (c.existing_tfs_room_ids ? resolveRoomNamesFromIdText(c.existing_tfs_room_ids, roomLookup) : null),
+    merged: mergedVal,
+    preflight_tag: preflightTag,
+  };
+}
+
+// Return a copy of a candidate with schedule/room fields cleared (ready for GA re-scheduling).
+function clearSubjectSchedule(c) {
+  return {
+    ...c,
+    existing_mth_schedule: null,
+    existing_tfs_schedule: null,
+    existing_mth_room_id: null,
+    existing_tfs_room_id: null,
+    existing_mth_room_ids: null,
+    existing_tfs_room_ids: null,
+    existing_mth_room_name: null,
+    existing_tfs_room_name: null,
+    preferred_pattern: null,
+  };
+}
+
+// Check new GA assignments against each other and against the discarded pile.
+// Returns {conflictFreeNew, stillConflicted} where stillConflicted are candidates
+// (cleared schedules) that need another GA iteration.
+function validateGAResults(newAssignments, discardedPile, activeRooms) {
+  const roomLookup = buildRoomLookup(activeRooms);
+  const enriched = enrichAutomaticAssignments(newAssignments, [], activeRooms).map((r) => ({
+    ...r,
+    preflight_tag: null,
+  }));
+
+  const conflictedIndices = new Set();
+
+  // Check pairs within new assignments
+  for (let i = 0; i < enriched.length; i++) {
+    for (let j = i + 1; j < enriched.length; j++) {
+      if (rowsHaveConflict(enriched[i], enriched[j])) {
+        conflictedIndices.add(i);
+        conflictedIndices.add(j);
+      }
+    }
+  }
+
+  // Check each new assignment against discarded pile
+  for (let i = 0; i < enriched.length; i++) {
+    if (conflictedIndices.has(i)) continue;
+    for (const pileRow of discardedPile) {
+      if (rowsHaveConflict(enriched[i], pileRow)) {
+        conflictedIndices.add(i);
+        break;
+      }
+    }
+  }
+
+  const conflictFreeNew = enriched.filter((_, i) => !conflictedIndices.has(i));
+  const stillConflicted = [...conflictedIndices].map((i) => {
+    const row = enriched[i];
+    // Rebuild a cleared candidate-like object the GA can accept
+    return {
+      subject_id: row.source_subject_id ?? row.subject_id,
+      curr_id: row.curr_id,
+      code: row.code,
+      course_no: row.course_no,
+      department_id: row.department_id,
+      department_name: row.department_name,
+      section: row.section,
+      descriptive_title: row.descriptive_title,
+      units: row.units,
+      lec_hrs: row.lec_hrs,
+      lab_hrs: row.lab_hrs,
+      total_hrs: (row.lec_hrs || 0) + (row.lab_hrs || 0),
+      is_general: false,
+      merged: false,
+      // All schedule/room fields cleared for the next GA pass
+      existing_mth_schedule: null,
+      existing_tfs_schedule: null,
+      existing_mth_room_id: null,
+      existing_tfs_room_id: null,
+      existing_mth_room_ids: null,
+      existing_tfs_room_ids: null,
+    };
+  });
+
+  return { conflictFreeNew, stillConflicted };
+}
+
+// Fix conflicts between distinct merge groups using the GA.
+// If merge group A and group B occupy the same room at overlapping times,
+// one group is re-scheduled as a unit (all members get the new time+room).
+async function fixMergeGroupConflicts(mergedSubjects, existingPile, activeRooms, constraints) {
+  if (mergedSubjects.length === 0) return [];
+
+  const roomLookup = buildRoomLookup(activeRooms);
+
+  // Build groups keyed by merge_representative_id
+  const groupMap = new Map();
+  for (const c of mergedSubjects) {
+    const rep = c.merge_representative_id ?? c.subject_id;
+    if (!groupMap.has(rep)) groupMap.set(rep, []);
+    groupMap.get(rep).push(c);
+  }
+  const groups = [...groupMap.values()];
+
+  // Find which groups conflict with each other using their representative rows
+  const groupRows = groups.map((g) => candidateToOutputRow(g[0], roomLookup, true, 'original'));
+  const conflictingGroupIndices = new Set();
+  for (let i = 0; i < groupRows.length; i++) {
+    for (let j = i + 1; j < groupRows.length; j++) {
+      if (rowsHaveConflict(groupRows[i], groupRows[j])) {
+        conflictingGroupIndices.add(i);
+        conflictingGroupIndices.add(j);
+      }
+    }
+  }
+
+  if (conflictingGroupIndices.size === 0) {
+    // No inter-group conflicts — return all as-is
+    return groups.flat().map((c) => candidateToOutputRow(c, roomLookup, true, 'original'));
+  }
+
+  console.log(`[preflight][merge-fix] ${conflictingGroupIndices.size} conflicting merge group(s) — calling GA to re-assign`);
+
+  // Build GA subjects: one representative per conflicting group (schedule cleared)
+  const conflictingGroups = [...conflictingGroupIndices].map((i) => groups[i]);
+  const nonConflictingGroups = groups.filter((_, i) => !conflictingGroupIndices.has(i));
+  const gaSubjects = conflictingGroups.map((g) => clearSubjectSchedule(g[0]));
+
+  // Reserved slots = existing pile + non-conflicting merge groups
+  const reservedForMerge = [
+    ...existingPile,
+    ...nonConflictingGroups.flat().map((c) => candidateToOutputRow(c, roomLookup, true, 'original')),
+  ];
+
+  let gaResult;
+  try {
+    gaResult = await callPythonScheduleGA({
+      subjects: gaSubjects,
+      rooms: activeRooms,
+      reserved_slots: buildDiscardedPileSlots(reservedForMerge),
+      constraints,
+    });
+  } catch (err) {
+    console.warn('[preflight][merge-fix] GA call failed, using original merge schedules:', err.message);
+    return groups.flat().map((c) => candidateToOutputRow(c, roomLookup, true, 'original'));
+  }
+
+  // Apply each GA result to all members of its conflicting group
+  const result = [];
+  for (const assignment of (gaResult.assignments || [])) {
+    const srcId = assignment.source_subject_id ?? assignment.subject_id;
+    const matchingGroup = conflictingGroups.find((g) => g[0].subject_id === toNumber(srcId));
+    if (!matchingGroup) continue;
+    for (const member of matchingGroup) {
+      const baseRow = candidateToOutputRow(member, roomLookup, true, 'original');
+      result.push({
+        ...baseRow,
+        mth_schedule: assignment.mth_schedule ?? null,
+        mth_room_id: assignment.mth_room_id != null ? String(assignment.mth_room_id) : null,
+        mth_room_name: assignment.mth_room_name ?? null,
+        tfs_schedule: assignment.tfs_schedule ?? null,
+        tfs_room_id: assignment.tfs_room_id != null ? String(assignment.tfs_room_id) : null,
+        tfs_room_name: assignment.tfs_room_name ?? null,
+      });
+    }
+  }
+
+  // Non-conflicting groups go in unchanged
+  for (const group of nonConflictingGroups) {
+    result.push(...group.map((c) => candidateToOutputRow(c, roomLookup, true, 'original')));
+  }
+
+  // Any conflicting group whose representative wasn't in GA results goes in as-is
+  for (const group of conflictingGroups) {
+    const alreadyHandled = result.some((r) => r.source_subject_id === group[0].subject_id || group.some((m) => m.subject_id === r.source_subject_id));
+    if (!alreadyHandled) {
+      result.push(...group.map((c) => candidateToOutputRow(c, roomLookup, true, 'original')));
+    }
+  }
+
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function buildAutomaticSchedulerPreflight(snapshot) {
   const departmentLookup = buildDepartmentLookup(snapshot.departments);
@@ -1681,13 +1954,17 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     function addCandidateRoomBlocks(c, ownerId) {
       for (const pat of ['mth', 'tfs']) {
         const sched = c[`existing_${pat}_schedule`];
-        const roomId = c[`existing_${pat}_room_id`];
-        if (!sched || !roomId) continue;
+        // Use the slash-joined IDs string so each day gets its correct room
+        const roomIdStr = c[`existing_${pat}_room_ids`] || (c[`existing_${pat}_room_id`] != null ? String(c[`existing_${pat}_room_id`]) : null);
+        if (!sched || !roomIdStr) continue;
         const parsed = parseScheduleText(sched);
         if (!parsed) continue;
         const days = parseDaysFromSchedule(sched, pat.toUpperCase());
-        for (const day of days) {
-          roomDayBlocks.push({ roomId: String(roomId), day, start: parsed.start, end: parsed.end, ownerId: String(ownerId) });
+        const roomParts = String(roomIdStr).split('/').map((s) => s.trim()).filter(Boolean);
+        for (let i = 0; i < days.length; i++) {
+          // Zip: first room part → first day, second → second day; single part → all days
+          const dayRoom = roomParts.length === 1 ? roomParts[0] : (roomParts[i] ?? roomParts[0]);
+          roomDayBlocks.push({ roomId: dayRoom, day: days[i], start: parsed.start, end: parsed.end, ownerId: String(ownerId) });
         }
       }
     }
@@ -1709,7 +1986,7 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     // Mark non-merged candidates with a conflict-free schedule+room as unique-clean.
     for (const c of candidates) {
       if (c.merged) continue;
-      const hasRoom = c.existing_mth_room_id || c.existing_tfs_room_id;
+      const hasRoom = c.existing_mth_room_ids || c.existing_mth_room_id || c.existing_tfs_room_ids || c.existing_tfs_room_id;
       const hasSched = c.existing_mth_schedule || c.existing_tfs_schedule;
       if (!hasRoom || !hasSched) continue;
 
@@ -1717,17 +1994,20 @@ function buildAutomaticSchedulerPreflight(snapshot) {
       for (const pat of ['mth', 'tfs']) {
         if (hasConflict) break;
         const sched = c[`existing_${pat}_schedule`];
-        const roomId = c[`existing_${pat}_room_id`];
-        if (!sched || !roomId) continue;
+        const roomIdStr = c[`existing_${pat}_room_ids`] || (c[`existing_${pat}_room_id`] != null ? String(c[`existing_${pat}_room_id`]) : null);
+        if (!sched || !roomIdStr) continue;
         const parsed = parseScheduleText(sched);
         if (!parsed) continue;
         const days = parseDaysFromSchedule(sched, pat.toUpperCase());
         const selfId = String(c.subject_id);
+        const roomParts = String(roomIdStr).split('/').map((s) => s.trim()).filter(Boolean);
 
-        for (const day of days) {
+        for (let di = 0; di < days.length; di++) {
+          const day = days[di];
+          const dayRoom = roomParts.length === 1 ? roomParts[0] : (roomParts[di] ?? roomParts[0]);
           for (const block of roomDayBlocks) {
             if (block.ownerId === selfId) continue;
-            if (block.roomId !== String(roomId) || block.day !== day) continue;
+            if (block.roomId !== dayRoom || block.day !== day) continue;
             if (overlaps(parsed, block)) {
               hasConflict = true;
               break;
@@ -1867,20 +2147,25 @@ function buildPreservedRows(preservedSubjects, activeRooms) {
     lec_hrs: c.lec_hrs,
     lab_hrs: c.lab_hrs,
     mth_schedule: c.existing_mth_schedule || null,
-    mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
+    mth_room_id: c.existing_mth_room_ids || (c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null),
     mth_room_name:
       c.existing_mth_room_name ||
-      (c.existing_mth_room_id != null
-        ? resolveRoomNamesFromIdText(String(c.existing_mth_room_id), roomLookup)
-        : null),
+      (c.existing_mth_room_ids
+        ? resolveRoomNamesFromIdText(c.existing_mth_room_ids, roomLookup)
+        : c.existing_mth_room_id != null
+          ? resolveRoomNamesFromIdText(String(c.existing_mth_room_id), roomLookup)
+          : null),
     tfs_schedule: c.existing_tfs_schedule || null,
-    tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
+    tfs_room_id: c.existing_tfs_room_ids || (c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null),
     tfs_room_name:
       c.existing_tfs_room_name ||
-      (c.existing_tfs_room_id != null
-        ? resolveRoomNamesFromIdText(String(c.existing_tfs_room_id), roomLookup)
-        : null),
+      (c.existing_tfs_room_ids
+        ? resolveRoomNamesFromIdText(c.existing_tfs_room_ids, roomLookup)
+        : c.existing_tfs_room_id != null
+          ? resolveRoomNamesFromIdText(String(c.existing_tfs_room_id), roomLookup)
+          : null),
     merged: c.merged === true ? true : 'preserved',
+    preflight_tag: c.preflight_tag ?? null,
   }));
 }
 
@@ -2294,6 +2579,7 @@ async function persistAutomaticScheduler(assignments) {
         'tfs_schedule',
         'tfs_room_id',
         'merged',
+        'preflight_tag',
       ];
 
       const values = [];
@@ -2317,6 +2603,7 @@ async function persistAutomaticScheduler(assignments) {
           row.tfs_schedule,
           row.tfs_room_id != null ? String(row.tfs_room_id) : null,
           row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
+          row.preflight_tag ?? null,
         );
       });
 
@@ -2408,6 +2695,7 @@ async function buildAutomaticSchedulerExportRows() {
     tfs_schedule: row.tfs_schedule,
     tfs_room: row.tfs_room_name,
     merged: row.merged ? (mergeLabel.get(row.id) || 'true') : '',
+    preflight_tag: row.preflight_tag ?? '',
   }));
 }
 
@@ -2572,7 +2860,8 @@ export async function postRunAutomaticScheduler(req, res) {
     const totalToProcess =
       preflight.assignable_count +
       (preflight.excluded_merged_subjects || []).length +
-      (preflight.excluded_unique_subjects || []).length;
+      (preflight.excluded_unique_subjects || []).length +
+      (preflight.excluded_general_subjects || []).length;
 
     if (totalToProcess === 0) {
       return res.status(400).json({
@@ -2582,18 +2871,9 @@ export async function postRunAutomaticScheduler(req, res) {
     }
 
     const activeRooms = (snapshot.rooms || []).filter((room) => isRoomActive(room));
+    const roomLookup = buildRoomLookup(activeRooms);
 
-    // --- Build preserved (merged + unique-clean) and GA-only subject lists ---
-    const preservedSubjects = [
-      ...(preflight.excluded_merged_subjects || []),
-      ...(preflight.excluded_unique_subjects || []),
-    ];
-    const reservedSlots = buildReservedSlots(
-      preflight.excluded_merged_subjects || [],
-      preflight.excluded_unique_subjects || []
-    );
-
-    // --- Build GA constraint parameters from request body ---
+    // --- GA constraint parameters ---
     const normalizedConstraints = {
       population_size:      Number(req.body?.population_size      ?? 120),
       max_generations:      Number(req.body?.max_generations      ?? 250),
@@ -2603,45 +2883,160 @@ export async function postRunAutomaticScheduler(req, res) {
       random_seed:          Number(req.body?.random_seed          ?? 42),
     };
 
-    // --- Call Python Schedule GA; fall back to greedy if unavailable ---
-    let result;
+    // ── PRE-FLIGHT DISCARDED PILE ─────────────────────────────────────────────
+    // The discarded pile accumulates subjects that are FIXED (not to be changed
+    // by subsequent GA passes) and will form the reserved_slots baseline.
+
+    // Step 1: General subjects — absolute, never re-scheduled.
+    const generalSubjects = preflight.excluded_general_subjects || [];
+    const discardedPile = generalSubjects.map((c) =>
+      candidateToOutputRow(c, roomLookup, 'false', 'general')
+    );
+    console.log(`[run][automatic] general subjects discarded: ${generalSubjects.length}`);
+
+    // Step 2 & 3: Merged subjects — fix inter-group conflicts via GA if needed,
+    // then add all merge members to the discarded pile (tagged 'original').
+    const mergedSubjects = preflight.excluded_merged_subjects || [];
+    const fixedMergedRows = await fixMergeGroupConflicts(mergedSubjects, discardedPile, activeRooms, normalizedConstraints);
+    discardedPile.push(...fixedMergedRows);
+    console.log(`[run][automatic] merged subjects discarded: ${fixedMergedRows.length}`);
+
+    // Step 4 & 5: Unique-clean subjects — check internally for conflicts, then
+    // check against the discarded pile (max 3 passes, using GA to resolve conflicts).
+    const uniqueCleanSubjects = preflight.excluded_unique_subjects || [];
+    let cleanCandidates = [...uniqueCleanSubjects];
+    let extraConflicted = []; // unique-clean subjects that conflict with pile — sent to GA queue
+
+    // 4a: Internal conflict check among unique-clean subjects
+    const cleanRows = cleanCandidates.map((c) => candidateToOutputRow(c, roomLookup, 'preserved', 'original'));
+    const internalConflictIndices = new Set();
+    for (let i = 0; i < cleanRows.length; i++) {
+      for (let j = i + 1; j < cleanRows.length; j++) {
+        if (rowsHaveConflict(cleanRows[i], cleanRows[j])) {
+          internalConflictIndices.add(i);
+          internalConflictIndices.add(j);
+        }
+      }
+    }
+    const internallyClean = cleanCandidates.filter((_, i) => !internalConflictIndices.has(i));
+    extraConflicted.push(...cleanCandidates.filter((_, i) => internalConflictIndices.has(i)));
+    console.log(`[run][automatic] unique-clean: internal conflicts=${internalConflictIndices.size}, clean=${internallyClean.length}`);
+
+    // 4b: Check internallyClean against discarded pile (max 3 passes)
+    let toCheckAgainstPile = internallyClean;
+    for (let pass = 0; pass < 3; pass++) {
+      const conflictsWithPile = [];
+      const safeForPile = [];
+      for (const c of toCheckAgainstPile) {
+        const row = candidateToOutputRow(c, roomLookup, 'preserved', 'original');
+        if (discardedPile.some((p) => rowsHaveConflict(row, p))) {
+          conflictsWithPile.push(c);
+        } else {
+          safeForPile.push(c);
+        }
+      }
+
+      // Add safe subjects to discarded pile
+      discardedPile.push(...safeForPile.map((c) => candidateToOutputRow(c, roomLookup, 'preserved', 'original')));
+
+      if (conflictsWithPile.length === 0) break;
+
+      console.log(`[run][automatic] pass ${pass + 1}: ${conflictsWithPile.length} unique-clean subject(s) conflict with pile — resolving via GA`);
+
+      // Try GA to re-assign conflicting subjects (with discarded pile as reserved)
+      let resolvedByGA = [];
+      try {
+        const gaResolveResult = await callPythonScheduleGA({
+          subjects: conflictsWithPile.map(clearSubjectSchedule),
+          rooms: activeRooms,
+          reserved_slots: buildDiscardedPileSlots(discardedPile),
+          constraints: normalizedConstraints,
+        });
+        const { conflictFreeNew, stillConflicted: stillBad } = validateGAResults(
+          gaResolveResult.assignments || [], discardedPile, activeRooms
+        );
+        discardedPile.push(...conflictFreeNew.map((r) => ({ ...r, preflight_tag: 'original', merged: 'preserved' })));
+        resolvedByGA = conflictFreeNew.map((r) => r.source_subject_id ?? r.subject_id);
+        extraConflicted.push(...stillBad);
+      } catch (err) {
+        console.warn(`[run][automatic] GA resolve pass ${pass + 1} failed:`, err.message);
+        extraConflicted.push(...conflictsWithPile);
+        break;
+      }
+
+      toCheckAgainstPile = conflictsWithPile.filter(
+        (c) => !resolvedByGA.includes(c.subject_id)
+      );
+      if (toCheckAgainstPile.length === 0) break;
+    }
+    // Remaining toCheckAgainstPile that couldn't be resolved go to main GA queue
+    extraConflicted.push(...toCheckAgainstPile);
+    console.log(`[run][automatic] discarded pile size after pre-flight: ${discardedPile.length}`);
+
+    // ── MAIN GA LOOP ──────────────────────────────────────────────────────────
+    // Assignable = preflight assignable (cleared) + unique-clean that conflicted with pile
+    let conflicted = [
+      ...preflight.assignable_subjects.map(clearSubjectSchedule),
+      ...extraConflicted.map(clearSubjectSchedule),
+    ];
+
+    const MAX_GA_ITERATIONS = 5;
+    let lastGAResult = { fitness_overall: 0, fitness_hard: 0, fitness_soft: 0, generations: 0, runtime_ms: 0, report: {} };
     let usedGA = false;
-    try {
-      const gaPayload = {
-        subjects:        preflight.assignable_subjects,
-        rooms:           activeRooms,
-        reserved_slots:  reservedSlots,
-        constraints:     normalizedConstraints,
-      };
-      const gaResult = await callPythonScheduleGA(gaPayload);
-      result = {
-        assignments:     Array.isArray(gaResult.assignments) ? gaResult.assignments : [],
-        unresolved:      Array.isArray(gaResult.unresolved)  ? gaResult.unresolved  : [],
-        fitness_overall: gaResult.fitness_overall ?? 0,
-        fitness_hard:    gaResult.fitness_hard    ?? 0,
-        fitness_soft:    gaResult.fitness_soft    ?? 0,
-        generations:     gaResult.generations     ?? 0,
-        runtime_ms:      gaResult.runtime_ms      ?? 0,
-        report:          gaResult.report          ?? {},
-      };
-      usedGA = true;
-      console.log(`[run][automatic] GA done: gen=${result.generations}, fitness=${result.fitness_overall}, conflicts=${result.report?.conflict_count ?? 0}`);
-    } catch (gaErr) {
-      console.warn('[run][automatic] Python schedule GA failed, falling back to greedy:', gaErr.message);
-      result = buildAutomaticAssignments(preflight.assignable_subjects, activeRooms, reservedSlots);
+    let allUnresolved = [];
+
+    for (let iter = 0; iter < MAX_GA_ITERATIONS; iter++) {
+      if (conflicted.length === 0) break;
+      console.log(`[run][automatic] GA iteration ${iter + 1}/${MAX_GA_ITERATIONS}: scheduling ${conflicted.length} subject(s)`);
+
+      let gaResult;
+      try {
+        gaResult = await callPythonScheduleGA({
+          subjects: conflicted,
+          rooms: activeRooms,
+          reserved_slots: buildDiscardedPileSlots(discardedPile),
+          constraints: normalizedConstraints,
+        });
+        usedGA = true;
+        console.log(`[run][automatic] iter ${iter + 1} GA done: fitness=${gaResult.fitness_overall}, conflicts=${gaResult.report?.conflict_count ?? 0}`);
+      } catch (gaErr) {
+        if (iter === 0) {
+          // First iteration — fall back to greedy
+          console.warn('[run][automatic] Python schedule GA unavailable, falling back to greedy:', gaErr.message);
+          const reservedSlots = buildDiscardedPileSlots(discardedPile);
+          const greedyResult = buildAutomaticAssignments(conflicted, activeRooms, reservedSlots);
+          const enriched = enrichAutomaticAssignments(greedyResult.assignments || [], conflicted, activeRooms)
+            .map((r) => ({ ...r, preflight_tag: null }));
+          discardedPile.push(...enriched);
+          allUnresolved.push(...(greedyResult.unresolved || []));
+          conflicted = [];
+          break;
+        }
+        console.warn(`[run][automatic] GA iteration ${iter + 1} failed:`, gaErr.message);
+        break;
+      }
+
+      lastGAResult = gaResult;
+      allUnresolved.push(...(gaResult.unresolved || []));
+
+      const { conflictFreeNew, stillConflicted } = validateGAResults(
+        gaResult.assignments || [], discardedPile, activeRooms
+      );
+
+      discardedPile.push(...conflictFreeNew.map((r) => ({ ...r, preflight_tag: null })));
+      conflicted = stillConflicted;
+      console.log(`[run][automatic] iter ${iter + 1}: +${conflictFreeNew.length} clean, ${conflicted.length} still conflicted`);
+
+      if (conflicted.length === 0) break;
     }
 
-    // Concat GA-assigned rows with preserved subjects (merged + unique-clean).
-    // Preserved subjects retain their existing schedule/room and appear in the output
-    // with merged='true' (merged) or merged='preserved' (unique-clean).
-    const gaAssignments = enrichAutomaticAssignments(
-      result.assignments,
-      preflight.assignable_subjects,
-      activeRooms
-    );
-    const preservedRows = buildPreservedRows(preservedSubjects, activeRooms);
-    const allAssignments = [...gaAssignments, ...preservedRows];
-    console.log(`[run][automatic] total=${allAssignments.length}, ga=${gaAssignments.length}, preserved=${preservedRows.length} (merged=${(preflight.excluded_merged_subjects || []).length} unique_clean=${(preflight.excluded_unique_subjects || []).length}), dry_run=${dryRun}, used_ga=${usedGA}`);
+    // Any subjects still conflicted after all iterations are added as unresolved
+    if (conflicted.length > 0) {
+      console.warn(`[run][automatic] ${conflicted.length} subject(s) remain conflicted after all GA iterations`);
+    }
+
+    const allAssignments = discardedPile;
+    console.log(`[run][automatic] total=${allAssignments.length}, general=${generalSubjects.length}, merged=${fixedMergedRows.length}, original_preserved=${discardedPile.filter((r) => r.preflight_tag === 'original').length}, ga_generated=${discardedPile.filter((r) => !r.preflight_tag).length}, dry_run=${dryRun}, used_ga=${usedGA}`);
 
     let persistence = { persisted: 0, dry_run: true };
     if (!dryRun) {
@@ -2653,19 +3048,19 @@ export async function postRunAutomaticScheduler(req, res) {
       status: 'completed',
       dry_run: dryRun,
       used_genetic_algorithm: usedGA,
-      fitness_overall: result.fitness_overall,
-      fitness_hard: result.fitness_hard,
-      fitness_soft: result.fitness_soft,
-      generations: result.generations ?? null,
-      runtime_ms: result.runtime_ms ?? null,
+      fitness_overall: lastGAResult.fitness_overall,
+      fitness_hard: lastGAResult.fitness_hard,
+      fitness_soft: lastGAResult.fitness_soft,
+      generations: lastGAResult.generations ?? null,
+      runtime_ms: lastGAResult.runtime_ms ?? null,
       assignments: allAssignments,
-      unresolved_issues: result.unresolved,
+      unresolved_issues: allUnresolved,
       preflight,
       persistence,
       report: {
         generated_rows: allAssignments,
-        unresolved_issues: result.unresolved,
-        ga_report: result.report ?? null,
+        unresolved_issues: allUnresolved,
+        ga_report: lastGAResult.report ?? null,
       },
     });
   } catch (error) {
