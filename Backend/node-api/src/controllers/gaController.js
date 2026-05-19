@@ -1374,6 +1374,12 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   mergedResult.report = {
     ...(mergedResult.report || {}),
     faculty_load_balance: enrichedLoadBalance,
+    unresolved_offerings: Array.isArray(optimizerResult?.report?.unresolved_offerings)
+      ? optimizerResult.report.unresolved_offerings.map((item) => ({
+          ...item,
+          department_name: describeDepartment(item.department_id, reportDeptLookup),
+        }))
+      : [],
     generated_rows: generatedRowsWithIssues,
     faculty_prefilter: {
       input_count: Array.isArray(snapshot.faculty) ? snapshot.faculty.length : 0,
