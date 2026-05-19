@@ -3,9 +3,12 @@ import { motion } from 'motion/react';
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpDown,
   BookOpen,
   Bolt,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Download,
   DoorOpen,
@@ -14,15 +17,19 @@ import {
   History,
   Play,
   RefreshCcw,
+  Search,
   ShieldAlert,
   Sparkles,
   Users,
   WandSparkles,
+  X,
 } from 'lucide-react';
 import { fetchGaPreFlight, runFacultyLoading } from '../services/gaApi.js';
 import { formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils.js';
 
 const LAST_FACULTY_LOADING_RUN_KEY = 'facultyLoadingLastRun';
+const LAST_FACULTY_LOADING_RESULT_KEY = 'facultyLoadingLastResult';
+const GENERATED_LIST_PAGE_SIZE = 50;
 
 function StatCard({ label, value, icon: Icon, tone = 'primary' }) {
   const toneClass =
@@ -100,6 +107,74 @@ function timestampForFileName(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
 }
 
+function humanizeField(field) {
+  if (!field) return '';
+  return String(field)
+    .replace(/_id$/i, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function compactIssueText(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\bcurr\s*:\s*\d+\b/gi, '')
+    .replace(/\bofferings\s+(\d+)\s+/gi, 'offerings ')
+    .replace(/\band\s+(\d+)\s+/gi, 'and ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function resolveIssuePage(issue) {
+  if (!issue || typeof issue !== 'object') {
+    return {
+      page: 'Subjects',
+      action: 'Open Subjects page and review the affected subject record.',
+    };
+  }
+
+  if (issue.type === 'room' || issue.type === 'room_conflict' || issue.field === 'mth_room_id' || issue.field === 'tfs_room_id' || issue.field === 'room_name') {
+    return {
+      page: 'Rooms',
+      action: 'Open Rooms page, search this room, then fix room status, room data, or conflicting time usage.',
+    };
+  }
+
+  if (issue.type === 'faculty' || issue.type === 'cross_reference' || issue.field === 'faculty_status' || issue.field === 'faculty_name' || issue.field === 'faculty_max_units') {
+    return {
+      page: 'Faculty',
+      action: 'Open Faculty page, check active faculty and max units for this department, then update assignments or faculty availability.',
+    };
+  }
+
+  return {
+    page: 'Subjects',
+    action: 'Open Subjects page, search this subject, and complete schedule, units, hours, and room references.',
+  };
+}
+
+function formatIssueForDisplay(issue) {
+  const fallbackName = issue?.type === 'room_conflict'
+    ? (issue?.room_label || `Room ${issue?.id || ''}`.trim())
+    : issue?.type === 'cross_reference'
+      ? issue?.department_name || issue?.entity_label || `Department ${issue?.id || ''}`.trim()
+      : issue?.type === 'faculty'
+        ? issue?.entity_label || `Faculty ${issue?.id || ''}`.trim()
+        : issue?.entity_label || `Subject ${issue?.id || ''}`.trim();
+
+  const issueText = compactIssueText(issue?.problem || issue?.message || issue?.description || 'Issue requires manual review.');
+  const location = resolveIssuePage(issue);
+  const meta = [issue?.type, humanizeField(issue?.field), issue?.department_name].filter(Boolean).join(' • ');
+
+  return {
+    name: fallbackName,
+    issueText,
+    page: location.page,
+    action: location.action,
+    meta,
+  };
+}
+
 function escapeCsvCell(value) {
   if (value === null || value === undefined) return '';
   const text = String(value);
@@ -165,6 +240,25 @@ export default function FacultyLoadingView() {
   const [error, setError] = useState('');
   const [dryRun, setDryRun] = useState(true);
   const [lastRunSummary, setLastRunSummary] = useState(null);
+  const [filterText, setFilterText] = useState('');
+  const [filterColumn, setFilterColumn] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key: 'section', direction: 'asc' });
+  const [generatedListPage, setGeneratedListPage] = useState(1);
+  const [generatedListPageInput, setGeneratedListPageInput] = useState(1);
+
+  const columns = [
+    { key: 'section', label: 'Section' },
+    { key: 'code', label: 'Course Code' },
+    { key: 'course_no', label: 'Course No' },
+    { key: 'descriptive_title', label: 'Descriptive Title' },
+    { key: 'units', label: 'Units' },
+    { key: 'mth_schedule', label: 'MTH' },
+    { key: 'tfs_schedule', label: 'TFS' },
+    { key: 'department_name', label: 'Department' },
+    { key: 'faculty_name', label: 'Faculty' },
+    { key: 'merged', label: 'Merged' },
+    { key: 'load_status', label: 'Status' },
+  ];
 
   async function loadPreflight() {
     try {
@@ -188,6 +282,15 @@ export default function FacultyLoadingView() {
         setLastRunSummary(JSON.parse(raw));
       } catch {
         setLastRunSummary(null);
+      }
+    }
+
+    const lastResultRaw = localStorage.getItem(LAST_FACULTY_LOADING_RESULT_KEY);
+    if (lastResultRaw) {
+      try {
+        setResult(JSON.parse(lastResultRaw));
+      } catch {
+        setResult(null);
       }
     }
   }, []);
@@ -228,6 +331,7 @@ export default function FacultyLoadingView() {
       };
       setLastRunSummary(summary);
       localStorage.setItem(LAST_FACULTY_LOADING_RUN_KEY, JSON.stringify(summary));
+      localStorage.setItem(LAST_FACULTY_LOADING_RESULT_KEY, JSON.stringify(response));
       await loadPreflight();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Faculty loading run failed.');
@@ -246,8 +350,7 @@ export default function FacultyLoadingView() {
   const hasFacultyLoadingResult = result !== null;
   const runQuality = qualityFromFitness(Number(result?.fitness_overall || 0));
   const runQualityClass = qualityTone(runQuality);
-  const generatedRows = result?.report?.generated_rows || result?.assignments || [];
-  const generalSubjects = generatedRows.filter((row) => row.load_status === 'general');
+  const generatedRows = result?.report?.generated_rows || result?.assignments || preflight?.faculty_loading || [];
   const unresolved_offerings = result?.report?.unresolved_offerings || [];
   const problematicOfferings = [
     ...(Array.isArray(result?.report?.problematic_offerings) ? result.report.problematic_offerings : []),
@@ -321,6 +424,75 @@ export default function FacultyLoadingView() {
     if (delta !== 0) return delta;
     return toNumber(right.total_units) - toNumber(left.total_units);
   });
+
+  function handleSort(key) {
+    setSortConfig((currentSort) => ({
+      key,
+      direction: currentSort.key === key && currentSort.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }
+
+  const filteredAndSortedRows = useMemo(() => {
+    let filtered = [...generatedRows];
+
+    // Apply filter
+    if (filterText) {
+      const searchLower = filterText.toLowerCase();
+      filtered = filtered.filter((row) => {
+        if (filterColumn === 'all') {
+          return columns.some((col) => {
+            const value = String(row[col.key] || '').toLowerCase();
+            return value.includes(searchLower);
+          });
+        } else {
+          const value = String(row[filterColumn] || '').toLowerCase();
+          return value.includes(searchLower);
+        }
+      });
+    }
+
+    // Apply sort
+    const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
+    filtered.sort((left, right) => {
+      let leftValue = left[sortConfig.key];
+      let rightValue = right[sortConfig.key];
+
+      if (sortConfig.key === 'units') {
+        leftValue = Number(leftValue || 0);
+        rightValue = Number(rightValue || 0);
+        return (leftValue - rightValue) * directionMultiplier;
+      }
+
+      leftValue = String(leftValue || '');
+      rightValue = String(rightValue || '');
+      return leftValue.localeCompare(rightValue, undefined, { sensitivity: 'base' }) * directionMultiplier;
+    });
+
+    return filtered;
+  }, [generatedRows, filterText, filterColumn, sortConfig]);
+
+  const totalGeneratedPages = Math.ceil(filteredAndSortedRows.length / GENERATED_LIST_PAGE_SIZE);
+  const startRowNum = filteredAndSortedRows.length === 0 ? 0 : (generatedListPage - 1) * GENERATED_LIST_PAGE_SIZE + 1;
+  const endRowNum = Math.min(generatedListPage * GENERATED_LIST_PAGE_SIZE, filteredAndSortedRows.length);
+
+  const paginatedRows = useMemo(() => {
+    const start = (generatedListPage - 1) * GENERATED_LIST_PAGE_SIZE;
+    const end = start + GENERATED_LIST_PAGE_SIZE;
+    return filteredAndSortedRows.slice(start, end);
+  }, [filteredAndSortedRows, generatedListPage]);
+
+  useEffect(() => {
+    setGeneratedListPageInput(generatedListPage);
+  }, [generatedListPage]);
+
+  const applyGeneratedListPageInput = () => {
+    const nextPage = Number(generatedListPageInput);
+    if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalGeneratedPages) {
+      setGeneratedListPage(nextPage);
+    } else {
+      setGeneratedListPageInput(generatedListPage);
+    }
+  };
 
   function handleExportGeneratedListCsv() {
     if (!generatedRows.length) return;
@@ -427,114 +599,155 @@ export default function FacultyLoadingView() {
               <StatCard label="Low issues" value={String(lowIssues)} icon={CheckCircle2} tone="success" />
             </div>
 
-            <details className="rounded-2xl border border-white/60 bg-white/80 p-4">
-              <summary className="cursor-pointer text-sm font-bold uppercase tracking-[0.22em] text-on-surface">Show full issue report</summary>
-              <div className="mt-4 space-y-4">
-                {['high', 'medium', 'low'].map((severity) => {
-                  const items = groupedIssues[severity] || [];
-                  if (!items.length) return null;
-                  return (
-                    <div key={severity}>
-                      <p className="text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">{severity} ({items.length})</p>
-                      <div className="mt-2 space-y-2">
-                        {items.map((issue, idx) => (
-                          <div key={`${severity}-${idx}`} className="rounded-xl border border-white/60 bg-white p-3 text-sm">
-                            <p className="font-semibold text-on-surface flex items-center gap-2"><FileWarning size={14} /> {issue.entity_label || issue.problem}</p>
-                            <p className="mt-1 text-sm text-on-surface-variant">{issue.problem}</p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-on-surface-variant">{issue.type}{issue.field ? ` • ${issue.field}` : ''}{issue.department_name ? ` • ${issue.department_name}` : ''}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Issue Rows + Full Issue Report</h4>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-error-container/40 px-2 py-1 text-xs font-bold text-error">Rows: {issueSubjects.length}</span>
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">Total issues: {issues.length}</span>
+                </div>
               </div>
-            </details>
+
+              <div className="mt-3 space-y-4">
+                <div className="w-full rounded-lg border border-white/60 bg-white p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Full issue report</p>
+                  <div className="mt-3 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+                    {['high', 'medium', 'low'].map((severity) => {
+                      const items = groupedIssues[severity] || [];
+                      if (!items.length) return null;
+                      return (
+                        <div key={severity}>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">{severity} ({items.length})</p>
+                          <div className="mt-2 space-y-2">
+                            {items.map((issue, idx) => {
+                              const display = formatIssueForDisplay(issue);
+                              return (
+                                <div key={`${severity}-${idx}`} className="rounded-lg border border-white/60 bg-white p-2.5 text-xs">
+                                  <p className="font-semibold text-on-surface flex items-center gap-1.5"><FileWarning size={12} /> {display.name}</p>
+                                  <p className="mt-1 text-on-surface-variant leading-5">{display.issueText}</p>
+                                  <p className="mt-1 text-[11px] font-semibold text-primary">Fix in: {display.page}</p>
+                                  <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant">{display.meta}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-full rounded-lg border border-error/15 bg-error-container/15 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Issue rows</p>
+                  <div className="mt-3 max-h-[24rem] space-y-2 overflow-y-auto pr-1">
+                    {issueSubjects.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">No issue rows reported.</p>
+                    ) : (
+                      issueSubjects.slice(0, 30).map((item, idx) => (
+                        <div key={`issue-${idx}`} className="rounded-lg border border-error/15 bg-white p-2.5 text-xs">
+                          <p className="font-semibold text-on-surface">{item.display_label || item.descriptive_title || item.title || item.code || 'Subject'}</p>
+                          <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant leading-5">{item.code || '-'} • {item.course_no || '-'} • {item.department_name || 'Unassigned department'} • {item.load_status || 'unassigned'}</p>
+                          {item.issue_reasons?.length ? <p className="mt-1 text-error">{item.issue_reasons.join(' | ')}</p> : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div>
           <div className="glass-panel rounded-2xl p-6">
-            <SectionHeader title="Faculty with Free Units" subtitle="Faculty still below max capacity, sorted by remaining units." />
-            <div className="mt-4 max-h-[230px] space-y-3 overflow-y-auto pr-1">
-              {uniqueFacultyWithFreeUnits.length === 0 ? (
-                <p className="rounded-xl border border-white/60 bg-white/80 p-3 text-sm text-on-surface-variant">No free-unit report available.</p>
+            <SectionHeader
+              title="Faculty Capacity Overview"
+              subtitle="Department Unit Capacity, Faculty Load Balance, and Faculty with Free Units in one block."
+              action={
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+                  {deptUnitsSummary.length} dept(s)
+                </div>
+              }
+            />
+
+            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Department Unit Capacity</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Combined used vs. max units across all faculty per department after loading.</p>
+              {deptUnitsSummary.length === 0 ? (
+                <div className="mt-3 rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">Run GA to see department unit usage.</div>
               ) : (
-                uniqueFacultyWithFreeUnits.slice(0, 20).map((row, idx) => (
-                  <div key={`free-${idx}`} className="rounded-xl border border-white/60 bg-white/80 p-3">
-                    <div className="flex items-start justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-on-surface">{row.faculty_name || row.name || `Faculty ${row.faculty_id || idx + 1}`}</p>
-                        <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                  {deptUnitsSummary.map((dept, idx) => {
+                    const pct = dept.max_units > 0 ? Math.min(100, (dept.used_units / dept.max_units) * 100) : 0;
+                    const barColor = pct >= 95 ? 'bg-error/70' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500/70';
+                    const textColor = pct >= 95 ? 'text-error' : pct >= 80 ? 'text-amber-700' : 'text-emerald-700';
+                    return (
+                      <div key={`dept-${idx}`} className="rounded-xl border border-white/60 bg-white p-3">
+                        <p className="text-sm font-bold text-on-surface truncate" title={dept.department_name}>{dept.department_name}</p>
+                        <p className="mt-1 text-xs text-on-surface-variant">{dept.faculty_count} faculty member{dept.faculty_count !== 1 ? 's' : ''}</p>
+                        <div className="mt-3 flex items-end justify-between gap-2">
+                          <span className={`text-lg font-extrabold ${textColor}`}>{dept.used_units}</span>
+                          <span className="text-xs text-on-surface-variant">/ {dept.max_units} max units</span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
+                          <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.max(4, pct)}%` }} />
+                        </div>
+                        <p className={`mt-1 text-right text-xs font-semibold ${textColor}`}>{pct.toFixed(0)}% used</p>
                       </div>
-                      <p className="text-on-surface-variant">{row.free_units ?? 0} free</p>
-                    </div>
-                  </div>
-                ))
+                    );
+                  })}
+                </div>
               )}
             </div>
-          </div>
 
-          <div className="glass-panel rounded-2xl p-6">
-            <SectionHeader title="Faculty Load Balance" subtitle="Sorted by imbalance so the most uneven loads appear first." />
-            <div className="mt-4 max-h-[260px] space-y-3 overflow-y-auto pr-1">
-              {uniqueLoadBalance.slice(0, 16).map((row, idx) => (
-                <div key={`balance-${row.faculty_id || idx}`} className="rounded-xl border border-white/60 bg-white/80 p-3">
-                  <div className="flex items-start justify-between gap-3 text-sm">
-                    <div>
-                      <p className="font-semibold text-on-surface">{row.faculty_name || `Faculty ${row.faculty_id || idx + 1}`}</p>
-                      <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
+            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty Load Balance</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Sorted by imbalance so the most uneven loads appear first.</p>
+              <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                {uniqueLoadBalance.slice(0, 16).map((row, idx) => (
+                  <div key={`balance-${row.faculty_id || idx}`} className="rounded-xl border border-white/60 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3 text-sm">
+                      <div>
+                        <p className="font-semibold text-on-surface">{row.faculty_name || `Faculty ${row.faculty_id || idx + 1}`}</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-on-surface-variant">{row.total_units ?? 0}/{row.max_units ?? 0} units</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">imbalance {row.imbalance_score ?? 0}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-on-surface-variant">{row.total_units ?? 0}/{row.max_units ?? 0} units</p>
-                      <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">imbalance {row.imbalance_score ?? 0}</p>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+                      <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100))}%` }} />
                     </div>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
-                    <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100))}%` }} />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty with Free Units</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Faculty still below max capacity, sorted by remaining units.</p>
+              <div className="mt-3 max-h-[230px] space-y-2 overflow-y-auto pr-1">
+                {uniqueFacultyWithFreeUnits.length === 0 ? (
+                  <p className="rounded-xl border border-white/60 bg-white p-3 text-sm text-on-surface-variant">No free-unit report available.</p>
+                ) : (
+                  uniqueFacultyWithFreeUnits.slice(0, 20).map((row, idx) => (
+                    <div key={`free-${idx}`} className="rounded-xl border border-white/60 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3 text-sm">
+                        <div>
+                          <p className="font-semibold text-on-surface">{row.faculty_name || row.name || `Faculty ${row.faculty_id || idx + 1}`}</p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
+                        </div>
+                        <p className="text-on-surface-variant">{row.free_units ?? 0} free</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader
-          title="Department Unit Capacity"
-          subtitle="Combined used vs. max units across all faculty per department after loading."
-          action={
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">
-              {deptUnitsSummary.length} dept(s)
-            </div>
-          }
-        />
-        {deptUnitsSummary.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">Run GA to see department unit usage.</div>
-        ) : (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {deptUnitsSummary.map((dept, idx) => {
-              const pct = dept.max_units > 0 ? Math.min(100, (dept.used_units / dept.max_units) * 100) : 0;
-              const barColor = pct >= 95 ? 'bg-error/70' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500/70';
-              const textColor = pct >= 95 ? 'text-error' : pct >= 80 ? 'text-amber-700' : 'text-emerald-700';
-              return (
-                <div key={`dept-${idx}`} className="rounded-xl border border-white/60 bg-white/80 p-4">
-                  <p className="text-sm font-bold text-on-surface truncate" title={dept.department_name}>{dept.department_name}</p>
-                  <p className="mt-1 text-xs text-on-surface-variant">{dept.faculty_count} faculty member{dept.faculty_count !== 1 ? 's' : ''}</p>
-                  <div className="mt-3 flex items-end justify-between gap-2">
-                    <span className={`text-lg font-extrabold ${textColor}`}>{dept.used_units}</span>
-                    <span className="text-xs text-on-surface-variant">/ {dept.max_units} max units</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
-                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.max(4, pct)}%` }} />
-                  </div>
-                  <p className={`mt-1 text-right text-xs font-semibold ${textColor}`}>{pct.toFixed(0)}% used</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       <div className="glass-panel rounded-2xl p-6">
@@ -560,110 +773,157 @@ export default function FacultyLoadingView() {
         {!generatedRows.length ? (
           <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">No generated list yet. Run GA to populate assignments.</div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-2xl border border-white/60 bg-white/80">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-primary-container/20 text-on-surface">
-                  <tr>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Section</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Course Code</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Course No</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Descriptive Title</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Units</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">MTH</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">TFS</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Department</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Faculty</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Merged</th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-[0.16em] text-xs">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {generatedRows.map((item, index) => (
-                    <tr key={`assignment-${index}`} className="border-t border-white/60">
-                      <td className="px-4 py-3 text-on-surface">{item.section || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface">{item.code || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface">{item.course_no || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface">{item.descriptive_title || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface">{item.units ?? '-'}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">
-                        <span className="inline-flex items-center gap-1 text-xs">
-                          {formatScheduleTimeDisplay(item.mth_schedule) || '-'}
-                          {getScheduleAmPm(item.mth_schedule) && (
-                            <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {getScheduleAmPm(item.mth_schedule)}
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-on-surface-variant">
-                        <span className="inline-flex items-center gap-1 text-xs">
-                          {formatScheduleTimeDisplay(item.tfs_schedule) || '-'}
-                          {getScheduleAmPm(item.tfs_schedule) && (
-                            <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {getScheduleAmPm(item.tfs_schedule)}
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-on-surface">{item.department_name || 'Unassigned department'}</td>
-                      <td className="px-4 py-3 text-on-surface">{item.faculty_name || '-'}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">{item.merged ? 'Merged' : ''}</td>
-                      <td className="px-4 py-3 text-on-surface-variant capitalize">{item.load_status?.replace(/_/g, ' ') || '-'}</td>
-                    </tr>
+          <>
+            {/* Search and Filter Controls */}
+            <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex gap-3 flex-1 xl:max-w-sm">
+                <select
+                  value={filterColumn}
+                  onChange={(e) => setFilterColumn(e.target.value)}
+                  aria-label="Search column"
+                  className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white min-h-[44px]"
+                >
+                  <option value="all">All cols</option>
+                  {columns.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+                <div className="relative flex-1">
+                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+                  <input
+                    type="text"
+                    placeholder={`Search ${filterColumn === 'all' ? 'all columns' : columns.find(c => c.key === filterColumn)?.label || filterColumn}...`}
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    aria-label="Search generated list"
+                    className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg min-h-[44px]"
+                  />
+                  {filterText && (
+                    <button
+                      onClick={() => setFilterText('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                      title="Clear search"
+                      aria-label="Clear search"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-xs text-on-surface-variant">{startRowNum}-{endRowNum} / {filteredAndSortedRows.length}</div>
             </div>
-          </div>
+
+            {/* Data Table */}
+            <div className="mt-6 overflow-hidden rounded-2xl border border-white/60 bg-white/80">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-primary-container/20 text-on-surface sticky top-0 z-10">
+                    <tr>
+                      {columns.map((col) => (
+                        <th key={col.key} className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => handleSort(col.key)}
+                            className={`flex items-center justify-start gap-1 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${
+                              sortConfig.key === col.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'
+                            }`}
+                            aria-pressed={sortConfig.key === col.key ? 'true' : 'false'}
+                          >
+                            <span>{col.label}</span>
+                            <ArrowUpDown size={12} />
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={columns.length} className="px-4 py-4 text-center text-xs text-on-surface-variant">No rows match your search.</td>
+                      </tr>
+                    ) : (
+                      paginatedRows.map((item, index) => (
+                        <tr key={`assignment-${index}`} className="border-t border-white/60">
+                          <td className="px-4 py-3 text-on-surface">{item.section || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface">{item.code || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface">{item.course_no || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface">{item.descriptive_title || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface">{item.units ?? '-'}</td>
+                          <td className="px-4 py-3 text-on-surface-variant">
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              {formatScheduleTimeDisplay(item.mth_schedule) || '-'}
+                              {getScheduleAmPm(item.mth_schedule) && (
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {getScheduleAmPm(item.mth_schedule)}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-on-surface-variant">
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              {formatScheduleTimeDisplay(item.tfs_schedule) || '-'}
+                              {getScheduleAmPm(item.tfs_schedule) && (
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(item.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {getScheduleAmPm(item.tfs_schedule)}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-on-surface">{item.department_name || 'Unassigned department'}</td>
+                          <td className="px-4 py-3 text-on-surface">{item.faculty_name || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface-variant">{item.merged ? 'Merged' : ''}</td>
+                          <td className="px-4 py-3 text-on-surface-variant capitalize">{item.load_status?.replace(/_/g, ' ') || '-'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Pagination Controls */}
+            {filteredAndSortedRows.length > 0 && (
+              <div className="mt-4 flex flex-col gap-4 rounded-lg border border-white/60 bg-white/80 p-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="text-xs text-on-surface-variant">
+                  {startRowNum}-{endRowNum} / {filteredAndSortedRows.length}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => setGeneratedListPage((p) => Math.max(1, p - 1))}
+                    disabled={generatedListPage === 1}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <ChevronLeft size={14} />
+                    <span>Prev</span>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="gen-list-page-input" className="text-xs font-semibold text-on-surface-variant uppercase tracking-[0.1em]">Page</label>
+                    <input
+                      id="gen-list-page-input"
+                      type="number"
+                      min="1"
+                      max={totalGeneratedPages}
+                      value={generatedListPageInput}
+                      onChange={(e) => setGeneratedListPageInput(e.target.value)}
+                      onBlur={applyGeneratedListPageInput}
+                      onKeyDown={(e) => e.key === 'Enter' && applyGeneratedListPageInput()}
+                      className="w-12 rounded border border-white/60 bg-white/80 px-2 py-1 text-center text-xs font-semibold text-on-surface outline-none transition-all hover:bg-white focus:border-primary focus:bg-white"
+                    />
+                    <span className="text-xs text-on-surface-variant font-semibold">of {totalGeneratedPages}</span>
+                  </div>
+                  <button
+                    onClick={() => setGeneratedListPage((p) => Math.min(totalGeneratedPages, p + 1))}
+                    disabled={generatedListPage === totalGeneratedPages}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span>Next</span>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
-      </div>
-
-      <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader title="Subject Coverage" subtitle="General subjects are included but intentionally left without faculty. Issue rows still need resolution." />
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/60 bg-white/80 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-bold uppercase tracking-[0.22em] text-on-surface">General Subjects</h4>
-              <span className="rounded-full bg-primary-container/20 px-2 py-1 text-xs font-bold text-primary">{generalSubjects.length}</span>
-            </div>
-            <p className="mt-2 text-xs text-on-surface-variant">Included in the generated list without faculty assignment by design.</p>
-            <div className="mt-4 max-h-[230px] space-y-2 overflow-y-auto pr-1">
-              {generalSubjects.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">No general subjects reported.</p>
-              ) : (
-                generalSubjects.slice(0, 20).map((item, idx) => (
-                  <div key={`general-${idx}`} className="rounded-xl border border-primary/10 bg-primary-container/10 p-3 text-sm">
-                    <p className="font-semibold text-on-surface">{item.display_label || item.descriptive_title || item.title || item.code || 'Subject'}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-on-surface-variant">{item.code || '-'} • {item.course_no || '-'} • {item.department_name || 'Unassigned department'}</p>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">General</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/60 bg-white/80 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-bold uppercase tracking-[0.22em] text-on-surface">Issue Rows</h4>
-              <span className="rounded-full bg-error-container/40 px-2 py-1 text-xs font-bold text-error">{issueSubjects.length}</span>
-            </div>
-            <p className="mt-2 text-xs text-on-surface-variant">These still need attention before they can be treated as normal loading rows.</p>
-            <div className="mt-4 max-h-[230px] space-y-2 overflow-y-auto pr-1">
-              {issueSubjects.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">No issue rows reported.</p>
-              ) : (
-                issueSubjects.slice(0, 20).map((item, idx) => (
-                  <div key={`issue-${idx}`} className="rounded-xl border border-error/15 bg-error-container/20 p-3 text-sm">
-                    <p className="font-semibold text-on-surface">{item.display_label || item.descriptive_title || item.title || item.code || 'Subject'}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-on-surface-variant">{item.code || '-'} • {item.course_no || '-'} • {item.department_name || 'Unassigned department'} • {item.load_status || 'unassigned'}</p>
-                    {item.issue_reasons?.length ? <p className="mt-2 text-xs text-error">{item.issue_reasons.join(' | ')}</p> : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="glass-panel rounded-2xl p-6">
@@ -682,6 +942,7 @@ export default function FacultyLoadingView() {
                       {item.code || 'N/A'} {item.course_no ? `(${item.course_no})` : ''} - Section {item.section || 'N/A'}
                     </p>
                     <p className="mt-1 text-sm text-on-surface-variant">{item.descriptive_title || 'No title'}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-on-surface-variant">Department: {item.department_name || 'Unassigned department'}</p>
                     <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-error">Reason: {item.reason || 'Unknown'}</p>
                   </div>
                 </div>
@@ -716,6 +977,37 @@ export default function FacultyLoadingView() {
           {error}
         </motion.div>
       ) : null}
+
+      {/* Full-screen Faculty Loading Overlay — freezes all interaction while running */}
+      {running && (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/20 bg-white/10 p-8 text-white shadow-2xl">
+            {/* Spinner */}
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+              <div className="absolute inset-2 animate-spin rounded-full border-4 border-white/10 border-t-white/60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
+            </div>
+
+            <div className="space-y-1.5 text-center">
+              <p className="text-lg font-bold tracking-tight">
+                {dryRun ? 'Running Dry Run…' : 'Running Faculty Loading…'}
+              </p>
+              <p className="text-sm text-white/70">
+                {dryRun
+                  ? 'Testing the GA configuration. Please wait.'
+                  : 'Processing assignments and persisting to database. Please wait.'}
+              </p>
+              <p className="text-xs text-white/50">Do not close or refresh this page.</p>
+            </div>
+
+            {!dryRun && (
+              <div className="w-full rounded-lg border border-orange-300/30 bg-orange-500/20 px-4 py-2.5 text-center text-xs text-orange-200">
+                Live run: assignments will be persisted to the database.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
