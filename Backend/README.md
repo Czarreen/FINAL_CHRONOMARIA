@@ -3,7 +3,7 @@
 ## Folders
 
 - `node-api/` Node.js API gateway (frontend-facing endpoints)
-- `python-ga/` Python optimization engine (GA/scoring logic)
+- `../../GeneticAlgorithm/` Python optimization engine (GA/scoring logic, started by run.py)
 - `shared/` shared backend helpers (config/db utilities)
 
 ## Env Source

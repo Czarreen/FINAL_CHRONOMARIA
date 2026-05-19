@@ -32,5 +32,5 @@ This repository follows the stack below for all future increments.
 
 - `Frontend/` -> React.js + JavaScript UI
 - `Backend/node-api/` -> Node.js API services
-- `Backend/python-ga/` -> Python genetic algorithm and optimization engine
+- `GeneticAlgorithm/` -> Python genetic algorithm and optimization engine (started by run.py)
 - `Supabase/` -> SQL schema, policies, and migration files

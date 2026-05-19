@@ -7,10 +7,10 @@
   - [x] Persist generated rows to `public.automatic_scheduler`
   - [x] Export rows for backup/import
   - [x] Update `course_offerings` with optional backup-first flow
-- [ ] Python GA: Extend `Backend/python-ga/optimizer.py` for automatic scheduling mode
-  - [ ] Enforce hard constraints (days/pattern/time bounds/no overlaps/room-type priority)
-  - [ ] Apply soft constraints and fitness scoring
-  - [ ] Generate unresolved issues + room/time suggestions
+- [x] Python GA: Automatic scheduling mode implemented in `GeneticAlgorithm/optimizer.py`
+  - [x] Enforce hard constraints (days/pattern/time bounds/no overlaps/room-type priority)
+  - [x] Apply soft constraints and fitness scoring
+  - [x] Generate unresolved issues + room/time suggestions
 - [ ] Frontend API: Add automatic scheduler API methods in `Frontend/src/services/gaApi.js`
 - [ ] Frontend UI: Implement Automatic Scheduler page in `Frontend/src/pages/ScheduleView.jsx`
   - [ ] List view for `automatic_scheduler` rows
@@ -31,5 +31,5 @@
 ## Current Task: Code-only alignment with DB schema for Automatic Scheduler + GA
 - [x] Confirm scope: no DB schema changes, code changes only
 - [ ] Normalize `merged` and room-id handling in `Backend/node-api/src/controllers/gaController.js`
-- [ ] Align `Backend/python-ga/optimizer.py` behavior with scheduler payload expectations
+- [x] Align `GeneticAlgorithm/optimizer.py` behavior with scheduler payload expectations
 - [ ] Run consistency checks (no schema edits, scheduler + GA variable/path alignment)
