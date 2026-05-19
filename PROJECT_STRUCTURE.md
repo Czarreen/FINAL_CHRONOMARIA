@@ -6,7 +6,7 @@ This structure follows `STACK_GUIDELINES.md` and is organized for long-term grow
 
 - `Frontend/` React client (JS/JSX only)
 - `Backend/node-api/` Node.js API gateway
-- `Backend/python-ga/` Python optimization engine
+- `GeneticAlgorithm/` Python optimization engine (started by run.py)
 - `Backend/shared/` shared backend config/db helpers
 - `Supabase/` SQL migrations, policies, and seed scripts (create as features grow)
 

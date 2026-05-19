@@ -43,10 +43,10 @@ export default function Sidebar({ currentView, onViewChange, onLogout, currentUs
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className={`flex w-full scale-95 items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-all duration-300 active:scale-90 ${
+              className={`flex w-full scale-95 items-center gap-3 rounded-lg border-l-4 px-4 py-3 text-left text-sm font-medium transition-all duration-300 active:scale-90 ${
                 isActive
-                  ? 'bg-white/60 text-indigo-600 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/40 hover:text-indigo-500'
+                  ? 'border-indigo-600 bg-indigo-50/50 text-indigo-600 shadow-md font-bold'
+                  : 'border-transparent text-slate-500 hover:bg-white/50 hover:text-indigo-600'
               }`}
             >
               <item.icon size={18} />
@@ -67,13 +67,6 @@ export default function Sidebar({ currentView, onViewChange, onLogout, currentUs
           </div>
         </div>
 
-        <button
-          onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-error transition-colors hover:bg-error-container/50"
-        >
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
       </div>
     </aside>
   );

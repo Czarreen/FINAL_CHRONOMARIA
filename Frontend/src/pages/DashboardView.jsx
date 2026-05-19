@@ -94,19 +94,19 @@ export default function DashboardView({ onNavigate }) {
 
   return (
     <div className="space-y-gutter animate-in fade-in duration-500">
-      <div className="mb-2 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div className="mb-6 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
         <div>
-          <h2 className="text-headline-xl font-headline-xl text-on-surface">Dashboard</h2>
-          <p className="mt-1 text-body-md text-on-surface-variant">Overview of the faculty loading system</p>
+          <h2 className="text-5xl font-bold text-on-surface">Dashboard</h2>
+          <p className="mt-2 text-body-md font-medium text-on-surface-variant">Overview of the faculty loading system</p>
         </div>
         <div className="relative">
           <button 
             onClick={() => onNavigate('schedule')}
             onMouseEnter={() => setShowScheduleInfo(true)}
             onMouseLeave={() => setShowScheduleInfo(false)}
-            className="flex w-fit items-center gap-2 rounded-lg bg-primary px-6 py-2.5 font-label-bold text-label-bold text-on-primary shadow-sm transition-colors hover:bg-primary/90"
+            className="flex w-fit items-center gap-2 rounded-lg bg-primary px-6 py-3 font-label-bold text-label-bold text-on-primary shadow-md transition-all hover:bg-primary/90 hover:shadow-lg active:shadow-sm"
           >
-            <Calendar size={18} />
+            <Calendar size={20} />
             Generate Schedules
           </button>
           
@@ -135,7 +135,7 @@ export default function DashboardView({ onNavigate }) {
       </div>
 
       <div className="grid grid-cols-1 gap-gutter md:grid-cols-12">
-        <div className="glass-panel col-span-1 flex min-h-[180px] flex-col justify-between rounded-xl p-container-padding md:col-span-4">
+        <div className="glass-panel col-span-1 flex min-h-[160px] flex-col justify-between rounded-xl p-6 md:col-span-3">
           <div className="flex items-start justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary-container/50 text-secondary">
               <CheckCircle2 size={24} />
@@ -145,10 +145,10 @@ export default function DashboardView({ onNavigate }) {
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-numeric-lg font-numeric-lg text-on-surface">{systemReadiness}%</p>
+            <p className="text-4xl font-bold text-on-surface">{systemReadiness}%</p>
             <p className="mt-1 text-body-sm font-medium text-on-surface-variant">System Readiness</p>
           </div>
-          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-variant">
+          <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-surface-variant">
             <div 
               className="h-full rounded-full bg-secondary transition-all duration-500" 
               style={{ width: `${systemReadiness}%` }}
@@ -156,37 +156,50 @@ export default function DashboardView({ onNavigate }) {
           </div>
         </div>
 
-        <div className="col-span-1 grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:col-span-8 lg:grid-cols-4">
-          {statCards.map((card) => (
-            <div key={card.label} className="glass-panel flex flex-col justify-center rounded-xl p-5">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-variant/50 text-tertiary">
-                  <card.icon size={18} />
+        <div className="col-span-1 grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
+          {statCards.map((card) => {
+            const isEmpty = card.label === 'Schedules Generated' && card.value === '0';
+            return (
+              <div 
+                key={card.label} 
+                className={`glass-panel flex flex-col justify-between rounded-xl p-4 transition-opacity duration-300 ${isEmpty ? 'opacity-70' : 'opacity-100'}`}
+              >
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{card.label}</h3>
+                  <p className={`mt-3 font-bold text-on-surface ${
+                    card.value === '0' ? 'text-4xl' : card.value.length > 2 ? 'text-5xl' : 'text-6xl'
+                  }`}>
+                    {card.value}
+                  </p>
                 </div>
-                <h3 className="text-label-bold font-label-bold text-on-surface-variant">{card.label}</h3>
+                {isEmpty && (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-on-surface-variant">
+                    <div className="h-1 w-1 rounded-full bg-on-surface-variant/50" />
+                    <span>No schedules yet</span>
+                  </div>
+                )}
               </div>
-              <p className="text-numeric-lg font-numeric-lg text-on-surface">{card.value}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <div className="mt-4">
-        <h3 className="mb-4 text-[18px] font-headline-lg text-on-surface">Quick Actions</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-8">
+        <h3 className="mb-5 text-[20px] font-bold text-on-surface">Quick Actions</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="relative">
             <button 
               onClick={() => onNavigate('faculty')}
               onMouseEnter={() => setShowFacultyInfo(true)}
               onMouseLeave={() => setShowFacultyInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl p-4 text-left transition-colors hover:bg-white/80"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-blue-50/20 p-5 text-left transition-all hover:border-blue-400/60 hover:bg-blue-50/50 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-variant/50 text-primary transition-colors group-hover:bg-primary-container/30">
-                <UserPlus size={20} />
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 transition-all group-hover:bg-blue-200 group-hover:scale-110">
+                <UserPlus size={24} />
               </div>
               <div>
-                <p className="text-label-bold font-label-bold text-on-surface">Manage Faculty</p>
-                <p className="mt-0.5 text-[11px] text-on-surface-variant">Add or edit instructors</p>
+                <p className="text-sm font-bold text-on-surface">Manage Faculty</p>
+                <p className="mt-1 text-[11px] text-on-surface-variant">Add or edit instructors</p>
               </div>
             </button>
             
@@ -210,14 +223,14 @@ export default function DashboardView({ onNavigate }) {
               onClick={() => onNavigate('subjects')}
               onMouseEnter={() => setShowSubjectsInfo(true)}
               onMouseLeave={() => setShowSubjectsInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl p-4 text-left transition-colors hover:bg-white/80"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-orange-50/20 p-5 text-left transition-all hover:border-orange-400/60 hover:bg-orange-50/50 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-variant/50 text-primary transition-colors group-hover:bg-primary-container/30">
-                <BookOpen size={20} />
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 transition-all group-hover:bg-orange-200 group-hover:scale-110">
+                <BookOpen size={24} />
               </div>
               <div>
-                <p className="text-label-bold font-label-bold text-on-surface">Manage Subjects</p>
-                <p className="mt-0.5 text-[11px] text-on-surface-variant">Update course offerings</p>
+                <p className="text-sm font-bold text-on-surface">Manage Subjects</p>
+                <p className="mt-1 text-[11px] text-on-surface-variant">Update course offerings</p>
               </div>
             </button>
             
@@ -241,14 +254,14 @@ export default function DashboardView({ onNavigate }) {
               onClick={() => onNavigate('rooms')}
               onMouseEnter={() => setShowRoomsInfo(true)}
               onMouseLeave={() => setShowRoomsInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl p-4 text-left transition-colors hover:bg-white/80"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-purple-50/20 p-5 text-left transition-all hover:border-purple-400/60 hover:bg-purple-50/50 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-variant/50 text-primary transition-colors group-hover:bg-primary-container/30">
-                <DoorOpen size={20} />
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600 transition-all group-hover:bg-purple-200 group-hover:scale-110">
+                <DoorOpen size={24} />
               </div>
               <div>
-                <p className="text-label-bold font-label-bold text-on-surface">Manage Rooms</p>
-                <p className="mt-0.5 text-[11px] text-on-surface-variant">Configure facilities</p>
+                <p className="text-sm font-bold text-on-surface">Manage Rooms</p>
+                <p className="mt-1 text-[11px] text-on-surface-variant">Configure facilities</p>
               </div>
             </button>
             
@@ -267,15 +280,15 @@ export default function DashboardView({ onNavigate }) {
             )}
           </div>
 
-          <div className="glass-panel rounded-xl p-4 sm:col-span-3 lg:col-span-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Upload size={16} className="text-primary" />
-              <p className="text-label-bold font-label-bold text-on-surface">Import Course Offerings CSV</p>
+          <div className="glass-panel col-span-1 rounded-xl p-6 sm:col-span-3">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                <Upload size={20} />
+              </div>
+              <h4 className="text-sm font-bold text-on-surface">Import Course Offerings</h4>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/60 bg-white/80 px-3 py-2 text-xs font-semibold text-on-surface-variant hover:bg-white">
-                <FileUp size={16} className="text-primary" />
-                <span>{selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}</span>
+            <div className="space-y-4">
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-surface-variant bg-surface-variant/20 px-6 py-8 text-center transition-all hover:border-blue-400 hover:bg-blue-50/30 active:bg-blue-50">
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -287,37 +300,120 @@ export default function DashboardView({ onNavigate }) {
                     setImportError('');
                   }}
                 />
+                <div className="flex flex-col items-center gap-2">
+                  <FileUp size={24} className="text-blue-600" />
+                  {selectedCsvFile ? (
+                    <div className="flex flex-col items-center">
+                      <p className="text-sm font-semibold text-on-surface">{selectedCsvFile.name}</p>
+                      <p className="text-xs text-on-surface-variant">Click to replace</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <p className="text-sm font-semibold text-on-surface">Click to select CSV file</p>
+                      <p className="text-xs text-on-surface-variant">or drag and drop</p>
+                    </div>
+                  )}
+                </div>
               </label>
               <button
                 type="button"
                 onClick={handleCsvImport}
-                disabled={importingCsv}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50"
+                disabled={!selectedCsvFile || importingCsv}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-blue-700 disabled:bg-surface-variant disabled:text-on-surface-variant disabled:cursor-not-allowed"
               >
-                <Upload size={14} />
+                <Upload size={16} />
                 {importingCsv ? 'Importing...' : 'Import CSV'}
               </button>
               <button
                 type="button"
                 onClick={() => onNavigate('course-offering')}
-                className="rounded-lg border border-white/60 bg-white px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
+                className="w-full rounded-lg border-2 border-outline bg-white px-4 py-2 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-blue-400/50"
               >
-                Open Course Offerings
+                View Course Offerings
               </button>
             </div>
             {importError && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700">
-                <AlertCircle size={14} />
-                {importError}
+              <div className="mt-4 flex items-start gap-3 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
+                <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-red-600" />
+                <div>
+                  <p className="text-sm font-semibold text-red-900">Import Failed</p>
+                  <p className="mt-1 text-xs text-red-700">{importError}</p>
+                </div>
               </div>
             )}
             {importSummary && (
-              <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-900">
-                <p className="font-semibold">
-                  Total {importSummary.totalRows} • Processed {importSummary.processedRows} • Inserted {importSummary.insertedRows} • Updated {importSummary.updatedRows} • Failed {importSummary.failedRows} • Skipped {importSummary.skippedRows}
-                </p>
+              <div className="mt-4 flex items-start gap-3 rounded-lg border-l-4 border-emerald-500 bg-emerald-50 p-4">
+                <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0 text-emerald-600" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900">Import Successful</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-emerald-800">
+                    <div>Total: {importSummary.totalRows}</div>
+                    <div>Processed: {importSummary.processedRows}</div>
+                    <div>Inserted: {importSummary.insertedRows}</div>
+                    <div>Updated: {importSummary.updatedRows}</div>
+                    <div>Failed: {importSummary.failedRows}</div>
+                    <div>Skipped: {importSummary.skippedRows}</div>
+                  </div>
+                </div>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <h3 className="mb-5 text-[20px] font-bold text-on-surface">System Status</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="glass-panel rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Faculty</p>
+                <p className="mt-3 text-3xl font-bold text-on-surface">{facultyCount > 0 ? '✓' : '–'}</p>
+              </div>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${facultyCount > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-surface-variant text-on-surface-variant'}`}>
+                <Users size={16} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-on-surface-variant">{facultyCount > 0 ? `${facultyCount} instructors loaded` : 'No faculty data'}</p>
+          </div>
+
+          <div className="glass-panel rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Subjects</p>
+                <p className="mt-3 text-3xl font-bold text-on-surface">{subjectsCount > 0 ? '✓' : '–'}</p>
+              </div>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${subjectsCount > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-surface-variant text-on-surface-variant'}`}>
+                <BookOpen size={16} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-on-surface-variant">{subjectsCount > 0 ? `${subjectsCount} subjects configured` : 'No subjects data'}</p>
+          </div>
+
+          <div className="glass-panel rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Rooms</p>
+                <p className="mt-3 text-3xl font-bold text-on-surface">{roomsCount > 0 ? '✓' : '–'}</p>
+              </div>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${roomsCount > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-surface-variant text-on-surface-variant'}`}>
+                <DoorOpen size={16} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-on-surface-variant">{roomsCount > 0 ? `${roomsCount} rooms available` : 'No rooms data'}</p>
+          </div>
+
+          <div className="glass-panel rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Scheduling</p>
+                <p className="mt-3 text-3xl font-bold text-on-surface">{schedulesCount > 0 ? '✓' : '–'}</p>
+              </div>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${schedulesCount > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-surface-variant text-on-surface-variant'}`}>
+                <Calendar size={16} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-on-surface-variant">{schedulesCount > 0 ? `${schedulesCount} schedules generated` : 'Ready to generate'}</p>
           </div>
         </div>
       </div>
