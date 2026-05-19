@@ -2776,6 +2776,8 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         backup = current.rows;
       }
 
+      await client.query('DELETE FROM public.subject_notifications');
+      await client.query('DELETE FROM public.subjects');
       await client.query('DELETE FROM public.course_offerings');
 
       const columns = [
@@ -2826,37 +2828,9 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         values
       );
 
-      // Sync scheduler output back to subjects so faculty loading can read it.
-      // Update existing subjects (including curr_id which was missing before).
-      // Lateral joins resolve slash-joined multi-room IDs to display names.
-      await client.query(`
-        UPDATE public.subjects s
-        SET
-          curr_id      = asch.curr_id,
-          mth_schedule = asch.mth_schedule,
-          tfs_schedule = asch.tfs_schedule,
-          mth_room     = COALESCE(mr.room_names, asch.mth_room_id),
-          tfs_room     = COALESCE(tf.room_names, asch.tfs_room_id)
-        FROM public.automatic_scheduler asch
-        LEFT JOIN LATERAL (
-          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
-          FROM regexp_split_to_table(COALESCE(asch.mth_room_id, ''), '[^0-9]+') AS token
-          JOIN public.rooms r ON r.room_id = token::integer
-          WHERE token ~ '^[0-9]+$'
-        ) mr ON true
-        LEFT JOIN LATERAL (
-          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
-          FROM regexp_split_to_table(COALESCE(asch.tfs_room_id, ''), '[^0-9]+') AS token
-          JOIN public.rooms r ON r.room_id = token::integer
-          WHERE token ~ '^[0-9]+$'
-        ) tf ON true
-        WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
-          AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
-          AND s.department_id                  = asch.department_id
-          AND lower(trim(s.subject_section))   = lower(trim(asch.section))
-      `);
-
-      // Insert subjects that have no matching row yet (e.g. after a prior broken run cleared subjects).
+      // Rebuild subjects from scratch — subjects were cleared above so every
+      // scheduler row must be inserted. Lateral joins resolve slash-joined
+      // multi-room IDs to display names.
       await client.query(`
         INSERT INTO public.subjects (
           subject_code, subject_course_no, subject_descriptive_title,
@@ -2886,13 +2860,6 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
           JOIN public.rooms r ON r.room_id = token::integer
           WHERE token ~ '^[0-9]+$'
         ) tf ON true
-        WHERE NOT EXISTS (
-          SELECT 1 FROM public.subjects s
-          WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
-            AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
-            AND s.department_id                  = asch.department_id
-            AND lower(trim(s.subject_section))   = lower(trim(asch.section))
-        )
       `);
 
       await client.query('COMMIT');
