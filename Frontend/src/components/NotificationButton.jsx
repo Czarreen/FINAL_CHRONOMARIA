@@ -129,7 +129,6 @@ export default function NotificationButton({
   title = 'Notifications',
   emptyLabel = 'No issues found.',
   buttonLabel = 'Notifications',
-  buttonClassName = '',
   panelSize = 'md',
   onItemJump,
   onItemEdit,
@@ -302,8 +301,9 @@ export default function NotificationButton({
 
   const statsTotal = Number(notificationStats?.total);
   const totalCount = Number.isFinite(statsTotal) ? statsTotal : items.length;
+  const hasIssues = totalCount > 0;
   const hasCritical = notificationStats.critical > 0;
-  const buttonStateClass = hasCritical
+  const buttonStateClass = hasIssues
     ? 'bg-error text-white hover:bg-error/90'
     : 'bg-primary text-white hover:bg-primary/90';
 
@@ -315,7 +315,7 @@ export default function NotificationButton({
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all active:scale-95 ${buttonStateClass} ${buttonClassName}`}
+        className={`relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all active:scale-95 ${buttonStateClass}`}
       >
         <Bell size={18} />
         <span>{buttonLabel}</span>
