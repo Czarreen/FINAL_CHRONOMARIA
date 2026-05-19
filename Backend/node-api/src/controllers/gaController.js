@@ -761,10 +761,6 @@ function buildPreflight(snapshot) {
       .filter((departmentId) => departmentId !== null)
   );
 
-  // CS and IT department IDs for fallback logic
-  const CS_DEPT = 11;
-  const IT_DEPT = 7;
-
   // Calculate unit needs for each department
   const deptUnitNeeds = new Map();
   for (const departmentId of departmentsWithOfferings) {
@@ -772,51 +768,66 @@ function buildPreflight(snapshot) {
     deptUnitNeeds.set(departmentId, unitNeeds);
   }
 
-  // Process departments for cross-reference issues with CS/IT fallback logic
-  const processedDepartments = new Set();
-  for (const departmentId of departmentsWithOfferings) {
-    if (processedDepartments.has(departmentId)) continue;
+  // CS and IT department IDs for fallback logic
+  const CS_DEPT = 11;
+  const IT_DEPT = 6; // dept 6 = Information Technology; dept 7 = Library Information Science
 
+  // Process departments for cross-reference issues with CS/IT one-way fallback logic.
+  // Allowed automatic fallback is IT -> CS only when CS has zero active faculty.
+  for (const departmentId of departmentsWithOfferings) {
     const unitNeeds = deptUnitNeeds.get(departmentId) || 0;
     const hasSufficient = hasSufficientFaculty(departmentId, activeFacultyByDepartment, unitNeeds);
     const hasActiveFaculty = (activeFacultyByDepartment.get(departmentId) || []).length > 0;
 
-    // Check if this is CS or IT
-    const isCSorIT = departmentId === CS_DEPT || departmentId === IT_DEPT;
-    const otherDeptId = departmentId === CS_DEPT ? IT_DEPT : CS_DEPT;
-    const otherHasOfferings = departmentsWithOfferings.has(otherDeptId);
-
-    if (isCSorIT && otherHasOfferings) {
-      // Both CS and IT have offerings - use OR logic (bidirectional fallback)
-      const otherUnitNeeds = deptUnitNeeds.get(otherDeptId) || 0;
-      const otherHasSufficient = hasSufficientFaculty(otherDeptId, activeFacultyByDepartment, otherUnitNeeds);
-
-      // Only flag error if BOTH departments are insufficient
-      if (!hasSufficient && !otherHasSufficient) {
+    if (departmentId === CS_DEPT) {
+      const itHasActiveFaculty = (activeFacultyByDepartment.get(IT_DEPT) || []).length > 0;
+      if (!hasActiveFaculty && !itHasActiveFaculty) {
         issues.push({
           type: 'cross_reference',
           id: departmentId,
           severity: 'high',
-          problem: `${describeDepartment(departmentId, departmentLookup)} has course offerings but insufficient faculty (no fallback available)`,
+          problem: `${describeDepartment(departmentId, departmentLookup)} has offerings but no active faculty. IT fallback is unavailable because IT also has no active faculty.`,
           entity_label: describeDepartment(departmentId, departmentLookup),
         });
-      }
-
-      // Mark both as processed to avoid duplicate checks
-      processedDepartments.add(departmentId);
-      processedDepartments.add(otherDeptId);
-    } else {
-      // Single department or non-CS/IT departments - regular check
-      if (!hasActiveFaculty) {
+      } else if (!hasActiveFaculty && itHasActiveFaculty) {
         issues.push({
           type: 'cross_reference',
           id: departmentId,
-          severity: 'high',
-          problem: `${describeDepartment(departmentId, departmentLookup)} has course offerings but no active faculty`,
+          severity: 'medium',
+          problem: `${describeDepartment(departmentId, departmentLookup)} has no active faculty. Automatic fallback is limited to IT faculty only.`,
+          entity_label: describeDepartment(departmentId, departmentLookup),
+        });
+      } else if (!hasSufficient) {
+        issues.push({
+          type: 'cross_reference',
+          id: departmentId,
+          severity: 'medium',
+          problem: `${describeDepartment(departmentId, departmentLookup)} faculty units appear fully used. Subjects may remain unassigned with recommendation-only fallback.`,
           entity_label: describeDepartment(departmentId, departmentLookup),
         });
       }
-      processedDepartments.add(departmentId);
+      continue;
+    }
+
+    if (!hasActiveFaculty) {
+      issues.push({
+        type: 'cross_reference',
+        id: departmentId,
+        severity: 'high',
+        problem: `${describeDepartment(departmentId, departmentLookup)} has course offerings but no active faculty`,
+        entity_label: describeDepartment(departmentId, departmentLookup),
+      });
+      continue;
+    }
+
+    if (!hasSufficient) {
+      issues.push({
+        type: 'cross_reference',
+        id: departmentId,
+        severity: 'medium',
+        problem: `${describeDepartment(departmentId, departmentLookup)} has active faculty but all available units may be consumed. Subject may remain unassigned with recommendation-only fallback.`,
+        entity_label: describeDepartment(departmentId, departmentLookup),
+      });
     }
   }
 
@@ -1273,6 +1284,24 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     .filter((faculty) => (toNumber(faculty.faculty_max_units) || 0) > 0)
     .filter((faculty) => (toNumber(faculty.available_units) || 0) > 0);
 
+  const departmentFacultyCounts = {};
+  const departmentAvailableFacultyCounts = {};
+
+  for (const faculty of Array.isArray(snapshot.faculty) ? snapshot.faculty : []) {
+    if (normalizeUpper(faculty.faculty_status) !== 'ACTIVE') continue;
+    const departmentId = toNumber(faculty.department_id);
+    if (departmentId === null) continue;
+    const key = String(departmentId);
+    departmentFacultyCounts[key] = (departmentFacultyCounts[key] || 0) + 1;
+  }
+
+  for (const faculty of gaFaculty) {
+    const departmentId = toNumber(faculty.department_id);
+    if (departmentId === null) continue;
+    const key = String(departmentId);
+    departmentAvailableFacultyCounts[key] = (departmentAvailableFacultyCounts[key] || 0) + 1;
+  }
+
   const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
     faculty: gaFaculty,
@@ -1280,6 +1309,8 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     rooms: snapshot.rooms,
     subjects: snapshot.subjects,
     faculty_loading: snapshot.faculty_loading || [],
+    department_faculty_counts: departmentFacultyCounts,
+    department_available_faculty_counts: departmentAvailableFacultyCounts,
     constraints: normalizedConstraints,
     run_id: runId,
   };
@@ -1298,9 +1329,44 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   }
 
   const generatedRows = buildFacultyLoadingDisplayRows(subjectDrivenSnapshot, optimizerResult.assignments || [], preFlight);
+  const unresolvedByOfferingId = new Map();
+  for (const item of Array.isArray(optimizerResult?.report?.unresolved_offerings) ? optimizerResult.report.unresolved_offerings : []) {
+    const offeringId = Number(item?.offering_id);
+    if (Number.isFinite(offeringId)) {
+      unresolvedByOfferingId.set(offeringId, item);
+    }
+  }
+
+  const generatedRowsWithIssues = generatedRows.map((row) => {
+    if (row.load_status !== 'unassigned') return row;
+    const unresolved = unresolvedByOfferingId.get(Number(row.id));
+    if (!unresolved) return row;
+    const reasons = [];
+    if (unresolved.reason) reasons.push(unresolved.reason);
+    if (Array.isArray(unresolved.recommendations)) {
+      for (const rec of unresolved.recommendations) {
+        if (rec) reasons.push(rec);
+      }
+    }
+    return {
+      ...row,
+      issue_reasons: reasons,
+    };
+  });
+
+  // Enrich faculty_load_balance rows with department_name using the snapshot's department list
+  const reportDeptLookup = buildDepartmentLookup(snapshot.departments);
+  const enrichedLoadBalance = Array.isArray(mergedResult.report?.faculty_load_balance)
+    ? mergedResult.report.faculty_load_balance.map((row) => ({
+        ...row,
+        department_name: describeDepartment(row.department_id, reportDeptLookup),
+      }))
+    : [];
+
   mergedResult.report = {
     ...(mergedResult.report || {}),
-    generated_rows: generatedRows,
+    faculty_load_balance: enrichedLoadBalance,
+    generated_rows: generatedRowsWithIssues,
     faculty_prefilter: {
       input_count: Array.isArray(snapshot.faculty) ? snapshot.faculty.length : 0,
       eligible_count: gaFaculty.length,

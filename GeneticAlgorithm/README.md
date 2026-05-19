@@ -55,9 +55,10 @@ Response (high-level):
 ## Rule coverage implemented
 
 - Faculty assignment priority:
-  1. Department match
-  2. Specialization affinity
-  3. Title/subject text affinity
+  1. Specialization match — any faculty from any department whose specialization matches the subject is eligible (cross-department allowed). FT preferred over PT.
+  2. Department match only — no specialization match found anywhere; restrict to same-department faculty with available units. FT preferred over PT.
+  3. Cross-department no-spec fallback — IT → CS only when CS has zero faculty records in the DB.
+  4. Unassigned + recommendation — subject flagged unassigned; system emits cross-department candidates for manual decision.
 - FT (`FT - Full time`) prioritized over PT.
 - Max units enforced.
 - No overlapping faculty schedules.
@@ -66,4 +67,18 @@ Response (high-level):
 - Max 4 preparations per faculty.
 - Reporting:
   - unassigned subjects
+  - unresolved offering reasons and recommendations
   - faculty with available free units
+
+### Fitness interpretation
+
+- Specialization match (any department): highest contribution.
+- Department-only match (no specialization): partial contribution.
+- Cross-department no-spec (IT → CS zero-faculty exception only): low contribution.
+- No faculty assigned: heavy hard penalty.
+- Exceeding faculty max units: hard violation.
+
+### Fallback behavior
+
+- If a department has faculty records but none are eligible (units exhausted/conflicts), subject is kept unassigned.
+- In that case, GA emits recommendation-only fallback guidance (manual cross-department choice by user; not auto-assigned).
