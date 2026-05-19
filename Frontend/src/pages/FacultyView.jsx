@@ -703,7 +703,7 @@ export default function FacultyView() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-1">
+          <div className="flex items-center gap-2 rounded-2xl bg-white px-2 py-1">
             {selectedFaculty.size > 0 && (
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
                 {selectedFaculty.size} selected
