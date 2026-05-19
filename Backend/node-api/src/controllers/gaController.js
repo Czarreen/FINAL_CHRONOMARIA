@@ -2705,6 +2705,16 @@ async function buildAutomaticSchedulerExportRows() {
   }));
 }
 
+function makeSchedulerKey(code, courseNo, deptId, section) {
+  return `${(code || '').trim().toUpperCase()}|${(courseNo || '').trim().toUpperCase()}|${deptId}|${(section || '').trim().toUpperCase()}`;
+}
+
+function resolveCurrId(row, fromOfferings, fromSubjects) {
+  if (row.curr_id != null) return row.curr_id;
+  const k = makeSchedulerKey(row.code, row.course_no, row.department_id, row.section);
+  return fromOfferings.get(k) ?? fromSubjects.get(k) ?? null;
+}
+
 async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false }) {
   const rows = await fetchAutomaticSchedulerRows();
   if (rows.length === 0) {
@@ -2717,6 +2727,38 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
     order by room_id asc
   `);
   const roomLookup = buildRoomLookup(roomResp.rows || []);
+
+  const offeringsCurrResp = await query(`
+    SELECT code, course_no, department_id, section, curr_id
+    FROM public.course_offerings
+    WHERE curr_id IS NOT NULL
+  `);
+  const currIdFromOfferings = new Map();
+  for (const r of offeringsCurrResp.rows) {
+    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
+    if (!currIdFromOfferings.has(k)) currIdFromOfferings.set(k, r.curr_id);
+  }
+
+  const subjectsCurrResp = await query(`
+    SELECT subject_code AS code, subject_course_no AS course_no, department_id, subject_section AS section, curr_id
+    FROM public.subjects
+    WHERE curr_id IS NOT NULL
+  `);
+  const currIdFromSubjects = new Map();
+  for (const r of subjectsCurrResp.rows) {
+    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
+    if (!currIdFromSubjects.has(k)) currIdFromSubjects.set(k, r.curr_id);
+  }
+
+  const nullCurrIdRows = rows.filter((r) => resolveCurrId(r, currIdFromOfferings, currIdFromSubjects) == null);
+  if (nullCurrIdRows.length > 0) {
+    const labels = nullCurrIdRows
+      .map((r) => `${r.code || r.course_no} (${r.section}, dept ${r.department_id})`)
+      .join('; ');
+    throw new Error(
+      `Cannot update Course Offering: ${nullCurrIdRows.length} scheduler row(s) are missing a curriculum assignment. Assign a curriculum to these subjects first: ${labels}`
+    );
+  }
 
   let backup = null;
 
@@ -2762,7 +2804,7 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         const normalizedMthRoomId = toCourseOfferingRoomIdText(row.mth_room_id, roomLookup);
         const normalizedTfsRoomId = toCourseOfferingRoomIdText(row.tfs_room_id, roomLookup);
         values.push(
-          row.curr_id,
+          resolveCurrId(row, currIdFromOfferings, currIdFromSubjects),
           row.code,
           row.course_no,
           row.department_id,
@@ -2786,17 +2828,28 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
 
       // Sync scheduler output back to subjects so faculty loading can read it.
       // Update existing subjects (including curr_id which was missing before).
+      // Lateral joins resolve slash-joined multi-room IDs to display names.
       await client.query(`
         UPDATE public.subjects s
         SET
           curr_id      = asch.curr_id,
           mth_schedule = asch.mth_schedule,
           tfs_schedule = asch.tfs_schedule,
-          mth_room     = COALESCE(rm.room_name, asch.mth_room_id),
-          tfs_room     = COALESCE(rf.room_name, asch.tfs_room_id)
+          mth_room     = COALESCE(mr.room_names, asch.mth_room_id),
+          tfs_room     = COALESCE(tf.room_names, asch.tfs_room_id)
         FROM public.automatic_scheduler asch
-        LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
-        LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.mth_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) mr ON true
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.tfs_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) tf ON true
         WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))
           AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
           AND s.department_id                  = asch.department_id
@@ -2817,12 +2870,22 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
           asch.curr_id, asch.department_id, asch.section,
           asch.units, asch.lec_hrs, asch.lab_hrs,
           asch.mth_schedule, asch.tfs_schedule,
-          COALESCE(rm.room_name, asch.mth_room_id),
-          COALESCE(rf.room_name, asch.tfs_room_id),
-          'active', false
+          COALESCE(mr.room_names, asch.mth_room_id),
+          COALESCE(tf.room_names, asch.tfs_room_id),
+          'active', COALESCE(asch.preflight_tag = 'general', false)
         FROM public.automatic_scheduler asch
-        LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
-        LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.mth_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) mr ON true
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT r.room_name, ' / ' ORDER BY r.room_name) AS room_names
+          FROM regexp_split_to_table(COALESCE(asch.tfs_room_id, ''), '[^0-9]+') AS token
+          JOIN public.rooms r ON r.room_id = token::integer
+          WHERE token ~ '^[0-9]+$'
+        ) tf ON true
         WHERE NOT EXISTS (
           SELECT 1 FROM public.subjects s
           WHERE lower(trim(s.subject_code))      = lower(trim(asch.code))

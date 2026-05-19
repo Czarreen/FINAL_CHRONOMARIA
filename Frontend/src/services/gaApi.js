@@ -10,8 +10,15 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API error (${response.status}): ${body}`);
+    let message = `Request failed (${response.status})`;
+    try {
+      const json = await response.json();
+      message = json.error || json.message || message;
+    } catch {
+      const text = await response.text().catch(() => '');
+      if (text) message = text;
+    }
+    throw new Error(message);
   }
 
   return response.json();

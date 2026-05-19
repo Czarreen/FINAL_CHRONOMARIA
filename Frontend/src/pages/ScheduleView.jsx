@@ -264,7 +264,7 @@ function isGymRoom(roomName) {
   return /gym/i.test(roomName || '');
 }
 
-function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
+function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRows }) {
   const normalizeKey = (v) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -419,13 +419,20 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick }) {
             <Download size={14} />
             Export CSV
           </button>
-          <button
-            onClick={onUpdateClick}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90"
-          >
-            <ArrowRight size={14} />
-            Update Course Offering
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={onUpdateClick}
+              disabled={isDryRunRows}
+              title={isDryRunRows ? 'Disable dry run and click Generate Schedule to save results first.' : undefined}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ArrowRight size={14} />
+              Update Course Offering
+            </button>
+            {isDryRunRows && (
+              <p className="text-[11px] text-amber-700">Dry run preview — save a real run first.</p>
+            )}
+          </div>
         </div>
       </div>
       <table className="w-full text-sm">
@@ -604,6 +611,10 @@ export default function ScheduleView({ onNavigate }) {
   const [notice, setNotice] = useState('');
   const [updateMode, setUpdateMode] = useState(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE);
   const [postUpdateNav, setPostUpdateNav] = useState(false);
+  const [isDryRunRows, setIsDryRunRows] = useState(false);
+  const [updateModalStep, setUpdateModalStep] = useState('select');
+  const [updateResult, setUpdateResult] = useState(null);
+  const [updateModalError, setUpdateModalError] = useState('');
 
   async function loadPreflight() {
     try {
@@ -623,12 +634,13 @@ export default function ScheduleView({ onNavigate }) {
     try {
       setLoadingRows(true);
       const data = await fetchAutomaticSchedulerRows();
-      // Ensure we always have an array
       const rowsArray = Array.isArray(data) ? data : (data?.rows && Array.isArray(data.rows) ? data.rows : []);
       setRows(rowsArray);
+      setIsDryRunRows(false);
     } catch (err) {
       console.error('Failed to load scheduler rows:', err);
       setRows([]);
+      setIsDryRunRows(false);
     } finally {
       setLoadingRows(false);
     }
@@ -701,6 +713,7 @@ export default function ScheduleView({ onNavigate }) {
         // Dry run does not persist to DB — show the generated assignments directly from the response
         const dryRunRows = Array.isArray(response?.assignments) ? response.assignments : [];
         setRows(dryRunRows);
+        setIsDryRunRows(true);
       } else {
         await loadRows();
       }
@@ -728,9 +741,17 @@ export default function ScheduleView({ onNavigate }) {
     }
   }
 
+  function closeUpdateModal() {
+    setShowUpdateModal(false);
+    setUpdateModalStep('select');
+    setUpdateResult(null);
+    setUpdateModalError('');
+  }
+
   async function handleUpdateCourseOffering() {
     try {
       setUpdating(true);
+      setUpdateModalError('');
       setError('');
       setNotice('');
       const response = await updateCourseOfferingFromScheduler({ mode: updateMode });
@@ -745,18 +766,19 @@ export default function ScheduleView({ onNavigate }) {
         );
       }
 
+      setUpdateResult(response);
+      setUpdateModalStep('success');
+      setPostUpdateNav(true);
       setNotice(
         response?.backup_created
           ? `Course Offering replaced with ${response?.updated || 0} schedule rows. A backup export was downloaded first.`
           : `Course Offering replaced with ${response?.updated || 0} schedule rows without creating a backup.`
       );
-      setShowUpdateModal(false);
-      setPostUpdateNav(true);
       await loadPreflight();
       await loadRows();
     } catch (err) {
       setPostUpdateNav(false);
-      setError(err instanceof Error ? err.message : 'Update failed.');
+      setUpdateModalError(err instanceof Error ? err.message : 'Update failed. Please try again.');
     } finally {
       setUpdating(false);
     }
@@ -1222,7 +1244,8 @@ export default function ScheduleView({ onNavigate }) {
           rows={rows}
           loading={loadingRows}
           onExportClick={() => setShowExportModal(true)}
-          onUpdateClick={() => setShowUpdateModal(true)}
+          onUpdateClick={() => { setUpdateModalStep('select'); setUpdateResult(null); setUpdateModalError(''); setShowUpdateModal(true); }}
+          isDryRunRows={isDryRunRows}
         />
       </div>
 
@@ -1271,53 +1294,151 @@ export default function ScheduleView({ onNavigate }) {
       {/* Update Modal */}
       {showUpdateModal && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-bold text-on-surface mb-4">Update Course Offering</h3>
-            <p className="text-on-surface-variant mb-6">Choose how to update Course Offering. Both choices clear and replace the current Course Offering table with the scheduler output.</p>
-            <div className="mb-6 space-y-3">
-              <button
-                onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE)}
-                className={`w-full rounded-xl border p-4 text-left transition-colors ${
-                  updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE
-                    ? 'border-primary bg-primary-container/20'
-                    : 'border-outline-variant bg-slate-50/80 hover:bg-white'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-on-surface">Choice 1: Backup export first, then update</div>
-                    <p className="mt-1 text-sm text-on-surface-variant">Downloads a backup of the current Course Offering table before the scheduler replaces it.</p>
-                  </div>
-                  {updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE && <CheckCircle2 size={18} className="text-primary flex-shrink-0" />}
-                </div>
-              </button>
+          <motion.div key={updateModalStep} initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
 
-              <button
-                onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP)}
-                className={`w-full rounded-xl border p-4 text-left transition-colors ${
-                  updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP
-                    ? 'border-amber-300 bg-amber-50/80'
-                    : 'border-outline-variant bg-slate-50/80 hover:bg-white'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-on-surface">Choice 2: Proceed with no backup</div>
-                    <p className="mt-1 text-sm text-on-surface-variant">Immediately clears and replaces the Course Offering table with no exported backup.</p>
+            {/* Step 1 — Select mode */}
+            {updateModalStep === 'select' && (
+              <>
+                <h3 className="text-2xl font-bold text-on-surface mb-4">Update Course Offering</h3>
+                {isDryRunRows && (
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900 flex items-start gap-2">
+                    <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-600" />
+                    <span>The table shows a <strong>dry run preview</strong> that was not saved. Disable dry run and click <strong>Generate Schedule</strong> first to persist the results before updating Course Offering.</span>
                   </div>
-                  {updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP && <CheckCircle2 size={18} className="text-amber-600 flex-shrink-0" />}
+                )}
+                <p className="text-on-surface-variant mb-6">Choose how to update Course Offering. Both choices clear and replace the current Course Offering table with the scheduler output.</p>
+                <div className="mb-6 space-y-3">
+                  <button
+                    onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE)}
+                    className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                      updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE
+                        ? 'border-primary bg-primary-container/20'
+                        : 'border-outline-variant bg-slate-50/80 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-on-surface">Choice 1: Backup export first, then update</div>
+                        <p className="mt-1 text-sm text-on-surface-variant">Downloads a backup of the current Course Offering table before the scheduler replaces it.</p>
+                      </div>
+                      {updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE && <CheckCircle2 size={18} className="text-primary flex-shrink-0" />}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setUpdateMode(COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP)}
+                    className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                      updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP
+                        ? 'border-amber-300 bg-amber-50/80'
+                        : 'border-outline-variant bg-slate-50/80 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-on-surface">Choice 2: Proceed with no backup</div>
+                        <p className="mt-1 text-sm text-on-surface-variant">Immediately clears and replaces the Course Offering table with no exported backup.</p>
+                      </div>
+                      {updateMode === COURSE_OFFERING_UPDATE_MODES.UPDATE_NO_BACKUP && <CheckCircle2 size={18} className="text-amber-600 flex-shrink-0" />}
+                    </div>
+                  </button>
                 </div>
-              </button>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowUpdateModal(false)} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleUpdateCourseOffering} disabled={updating} className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2">
-                {updating ? <RefreshCcw size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                {updating ? 'Updating...' : updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE ? 'Backup and Update' : 'Clear and Replace'}
-              </button>
-            </div>
+                <div className="flex gap-3">
+                  <button onClick={closeUpdateModal} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setUpdateModalStep('confirm')}
+                    disabled={isDryRunRows}
+                    className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  >
+                    <ArrowRight size={16} />
+                    Next
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2 — Confirm */}
+            {updateModalStep === 'confirm' && (
+              <>
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-error-container/40 flex-shrink-0">
+                    <AlertTriangle size={22} className="text-error" />
+                  </div>
+                  <h3 className="text-xl font-bold text-on-surface">Confirm Update</h3>
+                </div>
+                <div className="mb-5 rounded-xl border border-error/20 bg-error-container/20 p-4 text-sm text-on-surface space-y-2">
+                  <p className="font-semibold text-error">This action cannot be undone.</p>
+                  <p>All current Course Offering rows will be <strong>permanently deleted</strong> and replaced with the {rows.length} row{rows.length !== 1 ? 's' : ''} from the Automatic Scheduler.</p>
+                  {updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE
+                    ? <p className="text-emerald-800 font-medium">A JSON backup of the current data will be downloaded to your device first.</p>
+                    : <p className="text-amber-800 font-medium">No backup will be created. Proceeding means the existing data is gone.</p>
+                  }
+                </div>
+                <p className="mb-6 text-sm text-on-surface-variant">
+                  Selected: <span className="font-semibold text-on-surface">
+                    {updateMode === COURSE_OFFERING_UPDATE_MODES.BACKUP_THEN_UPDATE ? 'Backup then update' : 'Update without backup'}
+                  </span>
+                </p>
+                {updateModalError && (
+                  <div className="mb-4 rounded-xl border border-error/30 bg-error-container/30 p-3 text-sm text-error flex items-start gap-2">
+                    <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                    <span>{updateModalError}</span>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setUpdateModalStep('select'); setUpdateModalError(''); }}
+                    className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleUpdateCourseOffering}
+                    disabled={updating}
+                    className="flex-1 rounded-lg bg-error px-4 py-2 font-semibold text-white hover:bg-error/90 transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  >
+                    {updating ? <RefreshCcw size={16} className="animate-spin" /> : <AlertTriangle size={16} />}
+                    {updating ? 'Updating...' : 'Yes, Proceed'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 3 — Success */}
+            {updateModalStep === 'success' && (
+              <>
+                <div className="mb-6 flex flex-col items-center text-center gap-3">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                    <CheckCircle2 size={36} className="text-emerald-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-on-surface">Update Successful</h3>
+                  <p className="text-on-surface-variant text-sm">
+                    Course Offering has been replaced with{' '}
+                    <span className="font-bold text-on-surface">{updateResult?.updated ?? 0} row{(updateResult?.updated ?? 0) !== 1 ? 's' : ''}</span>{' '}
+                    from the Automatic Scheduler.
+                  </p>
+                  {updateResult?.backup_created && (
+                    <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm text-emerald-900 flex items-center gap-2">
+                      <CheckCircle2 size={15} className="flex-shrink-0 text-emerald-600" />
+                      <span>A backup of the previous data was downloaded to your device.</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={closeUpdateModal} className="flex-1 rounded-lg border border-outline-variant px-4 py-2 font-semibold text-on-surface hover:bg-gray-50 transition-colors">
+                    Close
+                  </button>
+                  <button
+                    onClick={() => { closeUpdateModal(); onNavigate?.('course-offering'); }}
+                    className="flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
+                  >
+                    <ArrowRight size={16} />
+                    View Course Offerings
+                  </button>
+                </div>
+              </>
+            )}
+
           </motion.div>
         </motion.div>
       )}
