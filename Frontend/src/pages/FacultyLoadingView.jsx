@@ -248,6 +248,7 @@ export default function FacultyLoadingView() {
   const runQualityClass = qualityTone(runQuality);
   const generatedRows = result?.report?.generated_rows || result?.assignments || [];
   const generalSubjects = generatedRows.filter((row) => row.load_status === 'general');
+  const unresolved_offerings = result?.report?.unresolved_offerings || [];
   const problematicOfferings = [
     ...(Array.isArray(result?.report?.problematic_offerings) ? result.report.problematic_offerings : []),
     ...(Array.isArray(preflight?.problematic_offerings) ? preflight.problematic_offerings : []),
@@ -298,6 +299,23 @@ export default function FacultyLoadingView() {
   }
 
   const uniqueFacultyWithFreeUnits = [...dedupeFacultyRows(facultyWithFreeUnits)].sort((left, right) => toNumber(right.free_units) - toNumber(left.free_units));
+
+  const deptUnitsSummary = useMemo(() => {
+    const map = new Map();
+    for (const row of dedupeFacultyRows(loadBalance)) {
+      const deptName = row.department_name || 'Unassigned';
+      const deptKey = row.department_id ?? deptName;
+      if (!map.has(deptKey)) {
+        map.set(deptKey, { department_name: deptName, used_units: 0, max_units: 0, faculty_count: 0 });
+      }
+      const entry = map.get(deptKey);
+      entry.used_units += toNumber(row.total_units);
+      entry.max_units += toNumber(row.max_units);
+      entry.faculty_count += 1;
+    }
+    return [...map.values()].sort((a, b) => a.department_name.localeCompare(b.department_name));
+  }, [loadBalance]);
+
   const uniqueLoadBalance = [...dedupeFacultyRows(loadBalance)].sort((left, right) => {
     const delta = toNumber(right.imbalance_score) - toNumber(left.imbalance_score);
     if (delta !== 0) return delta;
@@ -484,6 +502,43 @@ export default function FacultyLoadingView() {
 
       <div className="glass-panel rounded-2xl p-6">
         <SectionHeader
+          title="Department Unit Capacity"
+          subtitle="Combined used vs. max units across all faculty per department after loading."
+          action={
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+              {deptUnitsSummary.length} dept(s)
+            </div>
+          }
+        />
+        {deptUnitsSummary.length === 0 ? (
+          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">Run GA to see department unit usage.</div>
+        ) : (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {deptUnitsSummary.map((dept, idx) => {
+              const pct = dept.max_units > 0 ? Math.min(100, (dept.used_units / dept.max_units) * 100) : 0;
+              const barColor = pct >= 95 ? 'bg-error/70' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500/70';
+              const textColor = pct >= 95 ? 'text-error' : pct >= 80 ? 'text-amber-700' : 'text-emerald-700';
+              return (
+                <div key={`dept-${idx}`} className="rounded-xl border border-white/60 bg-white/80 p-4">
+                  <p className="text-sm font-bold text-on-surface truncate" title={dept.department_name}>{dept.department_name}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">{dept.faculty_count} faculty member{dept.faculty_count !== 1 ? 's' : ''}</p>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <span className={`text-lg font-extrabold ${textColor}`}>{dept.used_units}</span>
+                    <span className="text-xs text-on-surface-variant">/ {dept.max_units} max units</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
+                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.max(4, pct)}%` }} />
+                  </div>
+                  <p className={`mt-1 text-right text-xs font-semibold ${textColor}`}>{pct.toFixed(0)}% used</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="glass-panel rounded-2xl p-6">
+        <SectionHeader
           title="Generated Faculty Loading List"
           subtitle="Old master-list concept adapted to current result assignments."
           action={(
@@ -609,6 +664,44 @@ export default function FacultyLoadingView() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="glass-panel rounded-2xl p-6">
+        <SectionHeader title="Unassigned Subjects" subtitle="Subjects that could not be assigned to faculty. Review reasons and recommendations for resolution." />
+        {unresolved_offerings.length === 0 ? (
+          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">
+            All offerings were successfully assigned or marked as general subjects.
+          </div>
+        ) : (
+          <div className="mt-6 space-y-3">
+            {unresolved_offerings.map((item, idx) => (
+              <div key={`unresolved-${idx}`} className="rounded-xl border border-error/15 bg-error-container/20 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="font-semibold text-on-surface">
+                      {item.code || 'N/A'} {item.course_no ? `(${item.course_no})` : ''} - Section {item.section || 'N/A'}
+                    </p>
+                    <p className="mt-1 text-sm text-on-surface-variant">{item.descriptive_title || 'No title'}</p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-error">Reason: {item.reason || 'Unknown'}</p>
+                  </div>
+                </div>
+                {item.recommendations && item.recommendations.length > 0 ? (
+                  <div className="mt-3 rounded-lg bg-white/50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant mb-2">Recommendations:</p>
+                    <ul className="space-y-1 text-xs text-on-surface-variant">
+                      {item.recommendations.map((rec, recIdx) => (
+                        <li key={recIdx} className="flex gap-2">
+                          <span className="mt-0.5 text-primary">→</span>
+                          <span>{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-white/60 bg-white/80 p-4 text-sm text-on-surface-variant">
