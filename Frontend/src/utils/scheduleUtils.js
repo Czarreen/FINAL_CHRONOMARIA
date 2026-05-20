@@ -203,10 +203,30 @@ export function getScheduleAmPm(scheduleStr) {
  */
 export function getScheduleTimeRange(scheduleStr) {
   if (!scheduleStr) return null;
-  const match = String(scheduleStr).match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+
+  // Normalize "HH:MM AM/PM" → 24-hour so the range regex can always match
+  const normalized = String(scheduleStr).replace(
+    /(\d{1,2}:\d{2})\s*(AM|PM)/gi,
+    (_, time, meridiem) => {
+      const [h, m] = time.split(':').map(Number);
+      let hours = h;
+      if (/pm/i.test(meridiem) && hours !== 12) hours += 12;
+      if (/am/i.test(meridiem) && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  );
+
+  const match = normalized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
   if (!match) return null;
-  const start = Number(match[1]) * 60 + Number(match[2]);
-  const end = Number(match[3]) * 60 + Number(match[4]);
+
+  let startH = Number(match[1]);
+  let endH   = Number(match[3]);
+  // Hours 1–5 without a meridiem marker must be PM — no class starts at 1–5 AM
+  if (startH >= 1 && startH <= 5) startH += 12;
+  if (endH   >= 1 && endH   <= 5) endH   += 12;
+
+  const start = startH * 60 + Number(match[2]);
+  const end   = endH   * 60 + Number(match[4]);
   if (end <= start) return null;
   return { start, end };
 }
