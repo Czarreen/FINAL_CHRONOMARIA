@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import {
+  fetchAllFacultySubjectPreferences,
   fetchFacultySubjectPreferencesForFaculty,
   saveFacultySubjectPreference,
   deleteFacultySubjectPreference,
@@ -14,6 +15,23 @@ import {
 import { recordAuditLog } from '../lib/auditLogger.js';
 
 const router = Router();
+
+/**
+ * GET /api/faculty/subject-preferences/all
+ * Fetch all subject preferences for every faculty in one query.
+ * Returns: { [facultyId]: [{ subject_tag, priority_level }] }
+ */
+router.get('/subject-preferences/all', async (req, res) => {
+  try {
+    const map = await fetchAllFacultySubjectPreferences();
+    return res.json({ preferences: map });
+  } catch (err) {
+    console.error('Error fetching all faculty subject preferences:', err);
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Failed to fetch subject preferences',
+    });
+  }
+});
 
 /**
  * GET /api/faculty/:id/subject-preferences

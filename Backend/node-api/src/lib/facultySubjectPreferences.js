@@ -10,6 +10,33 @@ import { supabaseAdmin } from './supabase.js';
  * @param {number} facultyId - Faculty ID
  * @returns {Promise<Array>} Array of subject preferences with subject details
  */
+/**
+ * Fetch all subject preferences for every faculty in one query.
+ * Returns a map: { [facultyId]: [{ subject_tag, priority_level }] }
+ */
+export async function fetchAllFacultySubjectPreferences() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('faculty_subject_tags')
+      .select('faculty_id, subject_tag, priority_level')
+      .order('faculty_id', { ascending: true })
+      .order('priority_level', { ascending: true });
+
+    if (error) throw error;
+
+    const map = {};
+    for (const row of data || []) {
+      const key = String(row.faculty_id);
+      if (!map[key]) map[key] = [];
+      map[key].push({ subject_tag: row.subject_tag, priority_level: row.priority_level });
+    }
+    return map;
+  } catch (err) {
+    console.error('fetchAllFacultySubjectPreferences error:', err);
+    throw err;
+  }
+}
+
 export async function fetchFacultySubjectPreferencesForFaculty(facultyId) {
   try {
     const { data, error } = await supabaseAdmin

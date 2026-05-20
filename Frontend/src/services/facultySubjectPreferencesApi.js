@@ -10,6 +10,24 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
  * @param {number} facultyId - Faculty ID
  * @returns {Promise<Array>} Array of subject preferences
  */
+export async function fetchAllFacultySubjectPreferences() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty/subject-preferences/all`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+    const payload = await response.json();
+    // Returns { [facultyId]: [{ subject_tag, priority_level }] }
+    return payload.preferences || {};
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(`Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/subject-preferences/all`);
+    }
+    throw err;
+  }
+}
+
 export async function fetchFacultySubjectPreferences(facultyId) {
   try {
     const response = await fetch(

@@ -30,6 +30,7 @@ import {
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
 import FacultySubjectPreferencesModal from '../components/FacultySubjectPreferencesModal.jsx';
+import { fetchAllFacultySubjectPreferences } from '../services/facultySubjectPreferencesApi.js';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
@@ -65,6 +66,7 @@ export default function FacultyView() {
   const [facultyToDelete, setFacultyToDelete] = useState(null);
   const [deletingFaculty, setDeletingFaculty] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [allSubjectPreferences, setAllSubjectPreferences] = useState({});
   const [newFaculty, setNewFaculty] = useState({
     faculty_name: '',
     faculty_role: '',
@@ -87,6 +89,7 @@ export default function FacultyView() {
     { key: 'department', label: 'Department' },
     { key: 'faculty_role', label: 'Role' },
     { key: 'faculty_specialization', label: 'Specialization' },
+    { key: 'subject_tags', label: 'Subject Tags' },
     { key: 'faculty_max_units', label: 'Units' },
   ];
 
@@ -311,15 +314,14 @@ export default function FacultyView() {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchFaculty({
-        page,
-        limit,
-        search,
-        status: statusFilter,
-      });
+      const [data, prefsMap] = await Promise.all([
+        fetchFaculty({ page, limit, search, status: statusFilter }),
+        fetchAllFacultySubjectPreferences().catch(() => ({})),
+      ]);
       setFaculty(data.rows || []);
       setTotal(Number(data.total || 0));
       setActiveCount(Number(data.activeCount || 0));
+      setAllSubjectPreferences(prefsMap);
     } catch (err) {
       setError(err.message || 'Failed to load faculty members');
       setFaculty([]);
@@ -961,6 +963,30 @@ export default function FacultyView() {
                           {col.key === 'faculty_max_units' && (
                             <span className="text-sm font-medium text-on-surface">{member.faculty_max_units ?? '—'}</span>
                           )}
+                          {col.key === 'subject_tags' && (() => {
+                            const tags = allSubjectPreferences[String(member.faculty_id)] || [];
+                            if (tags.length === 0) return <span className="text-xs text-on-surface-variant">—</span>;
+                            const priorityStyle = {
+                              1: 'bg-amber-100 text-amber-800',
+                              2: 'bg-blue-100 text-blue-700',
+                              3: 'bg-slate-100 text-slate-600',
+                            };
+                            const priorityLabel = { 1: 'High', 2: 'Capable', 3: 'Fallback' };
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {tags.map((t) => (
+                                  <span
+                                    key={t.subject_tag}
+                                    title={`Priority: ${priorityLabel[t.priority_level] ?? t.priority_level}`}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${priorityStyle[t.priority_level] ?? 'bg-slate-100 text-slate-600'}`}
+                                  >
+                                    {t.subject_tag}
+                                    <span className="opacity-60 font-normal">P{t.priority_level}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {col.key === 'faculty_status' && (
                             <div className="flex justify-center">
                               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${getStatusBadgeClass(member.faculty_status)}`}>
@@ -1430,7 +1456,10 @@ export default function FacultyView() {
         <FacultySubjectPreferencesModal
           facultyId={preferencesModalFacultyId}
           facultyName={preferencesModalFacultyName}
-          onClose={() => setShowPreferencesModal(false)}
+          onClose={() => {
+            setShowPreferencesModal(false);
+            fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
+          }}
         />
       )}
     </div>
