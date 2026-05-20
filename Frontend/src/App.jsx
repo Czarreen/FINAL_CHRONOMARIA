@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Sidebar from './components/Sidebar';
 import TopAppBar from './components/TopAppBar';
@@ -24,6 +24,14 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [authRefreshKey, setAuthRefreshKey] = useState(0);
   const [subjectMutationKey, setSubjectMutationKey] = useState(0);
+
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      setCurrentAuthUser(currentUser);
+    } else {
+      clearCurrentAuthUser();
+    }
+  }, [currentUser, isAuthenticated]);
 
   const handleOpenSettings = () => {
     setCurrentView('settings');

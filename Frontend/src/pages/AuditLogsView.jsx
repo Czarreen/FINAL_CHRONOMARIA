@@ -12,8 +12,10 @@ import {
   ShieldCheck,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react';
 import { deleteAuditLogsOlderThan30Days, fetchAuditLogs } from '../services/auditLogsApi.js';
+import { fetchDepartments } from '../services/departmentsApi.js';
 
 const PAGE_SIZE = 25;
 const DESCRIPTION_PREVIEW_LENGTH = 120;
@@ -44,6 +46,13 @@ const BASE_ACTIONS_BY_MODULE = {
     'course_offerings_exported',
     'course_offering_notification_resolved',
     'course_offering_notifications_rescanned',
+  ],
+  rooms: [
+    'room_created',
+    'room_updated',
+    'room_deleted',
+    'room_notification_resolved',
+    'room_notifications_rescanned',
   ],
 };
 
@@ -89,7 +98,184 @@ function getAffectedRecord(log) {
   const row = log?.changes_after || log?.changes_before || {};
   if (row.username) return row.username;
   if (row.user_id) return `User #${row.user_id}`;
+  if (row.room_name) return row.room_name;
+  if (row.room_id) return `Room #${row.room_id}`;
   return null;
+}
+
+const FIELD_LABELS = {
+  created_at: 'Created At',
+  updated_at: 'Updated At',
+  user_id: 'User ID',
+  username: 'Username',
+  email: 'Email',
+  role: 'Role',
+  status: 'Status',
+  room_id: 'Room ID',
+  room_name: 'Room Name',
+  room_type: 'Room Type',
+  room_status: 'Room Status',
+  room_department_id: 'Primary Department',
+  room_department_ids: 'Departments',
+  room_department_names: 'Departments',
+  department_id: 'Department',
+};
+
+const DEPARTMENT_FIELD_KEYS = new Set(['department_id', 'room_department_id', 'room_department_ids', 'room_department_names']);
+const HIDDEN_AUDIT_DETAIL_KEYS = new Set([
+  'id',
+  'user_id',
+  'room_id',
+  'entity_id',
+  'subject_id',
+  'faculty_id',
+  'offering_id',
+  'course_offering_id',
+  'facloading_id',
+]);
+
+function shouldHideAuditDetailKey(key, source = {}) {
+  if (HIDDEN_AUDIT_DETAIL_KEYS.has(key)) return true;
+  if (key === 'curr_id') return true;
+  if (['room_department_id', 'room_department_ids'].includes(key) && source?.room_department_names !== undefined) return true;
+  return false;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatFieldLabel(key) {
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  return String(key || 'Field')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function normalizeDetailValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeDetailValue(item));
+  }
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, normalizeDetailValue(nestedValue)])
+    );
+  }
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  return value;
+}
+
+function areDetailValuesEqual(beforeValue, afterValue) {
+  return JSON.stringify(normalizeDetailValue(beforeValue)) === JSON.stringify(normalizeDetailValue(afterValue));
+}
+
+function formatDetailValue(value) {
+  const normalized = normalizeDetailValue(value);
+  if (normalized === null) return 'none';
+  if (Array.isArray(normalized)) {
+    if (normalized.length === 0) return 'none';
+    if (normalized.every((item) => item === null || ['string', 'number', 'boolean'].includes(typeof item))) {
+      return normalized.map((item) => (item === null ? 'none' : String(item))).join(', ');
+    }
+    return JSON.stringify(normalized, null, 2);
+  }
+  if (isPlainObject(normalized)) return JSON.stringify(normalized, null, 2);
+  return String(normalized);
+}
+
+function isBooleanDetailValue(value) {
+  return typeof normalizeDetailValue(value) === 'boolean';
+}
+
+function hasRenderableDetailValue(value) {
+  const normalized = normalizeDetailValue(value);
+  if (typeof normalized === 'boolean') return false;
+  if (Array.isArray(normalized)) return normalized.some(hasRenderableDetailValue);
+  if (isPlainObject(normalized)) {
+    return Object.values(normalized).some(hasRenderableDetailValue);
+  }
+  return true;
+}
+
+function getDescriptionParts(description) {
+  const text = String(description || '').trim();
+  if (!text) return ['No description provided.'];
+  return text.split(/\s*;\s*/).map((part) => part.trim()).filter(Boolean);
+}
+
+function getDescriptionPreview(description) {
+  return getDescriptionParts(description).join(', ');
+}
+
+function getAuditChangeItems(log) {
+  const before = log?.changes_before;
+  const after = log?.changes_after;
+  const action = String(log?.action || '').toLowerCase();
+
+  if (before === undefined && after === undefined) return [];
+
+  if (!isPlainObject(before) || !isPlainObject(after)) {
+    if (isPlainObject(before) || isPlainObject(after)) {
+      const source = isPlainObject(after) ? after : before;
+      const mode = !isPlainObject(before) && isPlainObject(after)
+        ? 'created'
+        : isPlainObject(before) && !isPlainObject(after)
+          ? 'deleted'
+          : 'changed';
+      return Object.keys(source || {})
+        .filter((key) => !shouldHideAuditDetailKey(key, source))
+        .sort()
+        .filter((key) => !isBooleanDetailValue(source?.[key]))
+        .map((key) => ({
+          key,
+          label: formatFieldLabel(key),
+          beforeValue: isPlainObject(before) ? before[key] : undefined,
+          afterValue: isPlainObject(after) ? after[key] : undefined,
+          mode,
+        }));
+    }
+
+    return [{
+      key: 'details',
+      label: 'Details',
+      beforeValue: before,
+      afterValue: after,
+      mode: before === undefined ? 'created' : after === undefined ? 'deleted' : 'changed',
+    }];
+  }
+
+  const mode = action.includes('created')
+    ? 'created'
+    : action.includes('deleted')
+      ? 'deleted'
+      : 'changed';
+
+  const hasDepartmentNames = before.room_department_names !== undefined || after.room_department_names !== undefined;
+
+  return Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+    .filter((key) => {
+      const source = before[key] !== undefined ? before : after;
+      if (hasDepartmentNames && ['room_department_id', 'room_department_ids'].includes(key)) return false;
+      return !shouldHideAuditDetailKey(key, source);
+    })
+    .sort()
+    .map((key) => ({
+      key,
+      label: formatFieldLabel(key),
+      beforeValue: before[key],
+      afterValue: after[key],
+      mode,
+    }))
+    .filter((item) => {
+      if (isBooleanDetailValue(item.beforeValue) || isBooleanDetailValue(item.afterValue)) return false;
+      if (!hasRenderableDetailValue(item.beforeValue) && !hasRenderableDetailValue(item.afterValue)) return false;
+      return item.mode !== 'changed' || !areDetailValuesEqual(item.beforeValue, item.afterValue);
+    });
 }
 
 export default function AuditLogsView({ currentUser, embedded = false }) {
@@ -103,7 +289,8 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
   const [actionFilter, setActionFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
-  const [expandedDescriptionIds, setExpandedDescriptionIds] = useState(new Set());
+  const [selectedAuditLog, setSelectedAuditLog] = useState(null);
+  const [departmentNameById, setDepartmentNameById] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [error, setError] = useState('');
@@ -113,7 +300,7 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const moduleOptions = useMemo(() => {
-    return [...new Set(['authentication', 'users', 'course_offerings', ...(options.modules || [])])].filter(Boolean).sort();
+    return [...new Set(['authentication', 'users', 'course_offerings', 'rooms', ...(options.modules || [])])].filter(Boolean).sort();
   }, [options.modules]);
 
   const actionOptions = useMemo(() => {
@@ -172,6 +359,45 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
     loadLogs();
   }, [isSuperAdmin, page, search, moduleFilter, actionFilter, statusFilter, sortConfig]);
 
+  useEffect(() => {
+    if (!isSuperAdmin) return undefined;
+
+    let isMounted = true;
+    fetchDepartments()
+      .then((rows) => {
+        if (!isMounted) return;
+        setDepartmentNameById(
+          new Map(
+            (rows || []).map((department) => [
+              Number(department.department_id),
+              department.department_name || `Department #${department.department_id}`,
+            ])
+          )
+        );
+      })
+      .catch((err) => {
+        console.error('Failed to load departments for audit details:', err);
+        if (isMounted) setDepartmentNameById(new Map());
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!selectedAuditLog) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedAuditLog(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedAuditLog]);
+
   const resetPage = (setter) => (value) => {
     setPage(1);
     setter(value);
@@ -207,40 +433,216 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
       : <ArrowDown size={12} className="shrink-0" />;
   }
 
-  function toggleDescription(logId) {
-    setExpandedDescriptionIds((current) => {
-      const next = new Set(current);
-      if (next.has(logId)) {
-        next.delete(logId);
-      } else {
-        next.add(logId);
-      }
-      return next;
-    });
-  }
-
   function renderDescription(log) {
-    const description = String(log.description || '-');
-    if (description.length <= DESCRIPTION_PREVIEW_LENGTH) {
-      return description;
-    }
-
-    const isExpanded = expandedDescriptionIds.has(log.id);
-    const visibleDescription = isExpanded
-      ? description
-      : `${description.slice(0, DESCRIPTION_PREVIEW_LENGTH).trimEnd()}...`;
+    const description = getDescriptionPreview(log.description || '-');
+    const hasDetails = getAuditChangeItems(log).length > 0;
+    const visibleDescription = hasDetails && description.length > DESCRIPTION_PREVIEW_LENGTH
+      ? `${description.slice(0, DESCRIPTION_PREVIEW_LENGTH).trimEnd()}...`
+      : description;
 
     return (
       <>
         {visibleDescription}{' '}
-        <button
-          type="button"
-          onClick={() => toggleDescription(log.id)}
-          className="font-semibold text-primary underline-offset-2 hover:underline"
-        >
-          {isExpanded ? 'Show Less' : 'Show More'}
-        </button>
+        {hasDetails && (
+          <button
+            type="button"
+            onClick={() => setSelectedAuditLog(log)}
+            className="font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            Show More
+          </button>
+        )}
       </>
+    );
+  }
+
+  function getDepartmentName(value) {
+    const normalized = normalizeDetailValue(value);
+    if (normalized === null) return 'none';
+    const departmentId = Number(normalized);
+    if (Number.isInteger(departmentId) && departmentNameById.has(departmentId)) {
+      return departmentNameById.get(departmentId);
+    }
+    if (!Number.isInteger(departmentId)) {
+      return String(normalized);
+    }
+    return `Department #${normalized}`;
+  }
+
+  function getDepartmentDetailItems(value) {
+    const normalized = normalizeDetailValue(value);
+    if (normalized === null) return [];
+    const values = Array.isArray(normalized) ? normalized : [normalized];
+    return values.map(getDepartmentName).filter((name) => name && name !== 'none');
+  }
+
+  function renderNestedDetailValue(value, depth = 0) {
+    const normalized = normalizeDetailValue(value);
+    if (typeof normalized === 'boolean') return null;
+    if (normalized === null) return <span className="text-sm text-on-surface">none</span>;
+
+    if (Array.isArray(normalized)) {
+      const items = normalized.filter(hasRenderableDetailValue);
+      if (items.length === 0) return <span className="text-sm text-on-surface">none</span>;
+
+      return (
+        <ul className={`${depth === 0 ? 'mt-1' : 'mt-2'} list-disc space-y-1 pl-5 text-sm text-on-surface`}>
+          {items.map((item, index) => (
+            <li key={`${index}-${formatDetailValue(item).slice(0, 32)}`}>
+              {renderNestedDetailValue(item, depth + 1)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (isPlainObject(normalized)) {
+      const entries = Object.entries(normalized)
+        .filter(([, nestedValue]) => hasRenderableDetailValue(nestedValue));
+
+      if (entries.length === 0) return <span className="text-sm text-on-surface">none</span>;
+
+      return (
+        <div className={`${depth === 0 ? 'mt-1' : 'mt-2'} space-y-2 text-sm text-on-surface`}>
+          {entries.map(([key, nestedValue]) => (
+            <div key={key}>
+              <span className="font-semibold text-on-surface">{formatFieldLabel(key)}: </span>
+              {renderNestedDetailValue(nestedValue, depth + 1)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <span className="text-sm text-on-surface">{String(normalized)}</span>;
+  }
+
+  function renderSummaryDetailValue(value) {
+    const summary = normalizeDetailValue(value);
+    if (!isPlainObject(summary)) return renderNestedDetailValue(value);
+
+    const metricEntries = Object.entries(summary)
+      .filter(([key, nestedValue]) => {
+        if (['errors', 'warnings', 'fileName', 'replaceMode'].includes(key)) return false;
+        if (!hasRenderableDetailValue(nestedValue)) return false;
+        return !Array.isArray(nestedValue) && !isPlainObject(nestedValue);
+      });
+    const errors = Array.isArray(summary.errors) ? summary.errors : [];
+    const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+
+    if (metricEntries.length === 0 && errors.length === 0 && warnings.length === 0) {
+      return <span className="text-sm text-on-surface">none</span>;
+    }
+
+    return (
+      <div className="mt-1 space-y-4 text-sm text-on-surface">
+        {metricEntries.length > 0 && (
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Counts</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {metricEntries.map(([key, nestedValue]) => (
+                <li key={key}>
+                  <span className="font-semibold">{formatFieldLabel(key)}:</span> {formatDetailValue(nestedValue)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {errors.length > 0 && (
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Errors</div>
+            <ul className="mt-2 list-disc space-y-3 pl-5">
+              {errors.map((errorItem, index) => {
+                const rowLabel = errorItem?.row ? `Row ${errorItem.row}` : `Error ${index + 1}`;
+                const messages = Array.isArray(errorItem?.messages) ? errorItem.messages : [];
+
+                return (
+                  <li key={`${rowLabel}-${index}`}>
+                    <span className="font-semibold">{rowLabel}</span>
+                    {messages.length > 0 ? (
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {messages.map((message) => (
+                          <li key={message}>{message}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="mt-1">{renderNestedDetailValue(errorItem, 1)}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Warnings</div>
+            {renderNestedDetailValue(warnings)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderDetailValue(value, fieldKey = '') {
+    const isDepartmentField = DEPARTMENT_FIELD_KEYS.has(fieldKey);
+    if (isDepartmentField) {
+      const departmentItems = getDepartmentDetailItems(value);
+      if (departmentItems.length > 1) {
+        return (
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-on-surface">
+            {departmentItems.map((departmentName) => (
+              <li key={departmentName}>{departmentName}</li>
+            ))}
+          </ul>
+        );
+      }
+
+      return <span className="text-sm text-on-surface">{departmentItems[0] || 'none'}</span>;
+    }
+
+    if (fieldKey === 'summary') {
+      return renderSummaryDetailValue(value);
+    }
+
+    return renderNestedDetailValue(value);
+  }
+
+  function renderChangeItem(item) {
+    if (item.mode === 'created') {
+      return (
+        <div key={item.key} className="grid grid-cols-[minmax(110px,0.75fr)_minmax(0,1.5fr)] gap-4 border-t border-slate-100 px-4 py-3 first:border-t-0">
+          <div className="break-words text-sm font-semibold text-on-surface">{item.label}</div>
+          <div className="min-w-0">{renderDetailValue(item.afterValue, item.key)}</div>
+        </div>
+      );
+    }
+
+    if (item.mode === 'deleted') {
+      return (
+        <div key={item.key} className="grid grid-cols-[minmax(110px,0.75fr)_minmax(0,1.5fr)] gap-4 border-t border-slate-100 px-4 py-3 first:border-t-0">
+          <div className="break-words text-sm font-semibold text-on-surface">{item.label}</div>
+          <div className="min-w-0">{renderDetailValue(item.beforeValue, item.key)}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={item.key} className="grid grid-cols-[minmax(110px,0.75fr)_minmax(0,1.5fr)] gap-4 border-t border-slate-100 px-4 py-3 first:border-t-0">
+        <div className="break-words text-sm font-semibold text-on-surface">{item.label}</div>
+        <div className="min-w-0 grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Before</div>
+            {renderDetailValue(item.beforeValue, item.key)}
+          </div>
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">After</div>
+            {renderDetailValue(item.afterValue, item.key)}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -263,7 +665,7 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
             <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-on-surface-variant/60">Security</p>
             <h2 className="mt-2 text-headline-xl font-headline-xl text-on-surface">Audit Logs</h2>
             <p className="mt-1 max-w-2xl text-body-md text-on-surface-variant">
-              Review authentication and user administration activity from the existing audit log.
+              Review authentication, administration, course offering, and room activity from the existing audit log.
             </p>
           </div>
 
@@ -528,6 +930,103 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
           </div>
         </div>
       </div>
+
+      {selectedAuditLog && (() => {
+        const changeItems = getAuditChangeItems(selectedAuditLog);
+        const descriptionParts = getDescriptionParts(selectedAuditLog.description);
+        const affectedRecord = getAffectedRecord(selectedAuditLog);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setSelectedAuditLog(null);
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Audit log details"
+              className="my-8 w-full max-w-4xl rounded-3xl border border-white/70 bg-white p-6 shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-on-surface-variant/60">
+                    Audit Details
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-on-surface">
+                    {formatAction(selectedAuditLog.action)}
+                  </h3>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    {formatTimestamp(selectedAuditLog.timestamp || selectedAuditLog.created_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuditLog(null)}
+                  aria-label="Close audit details"
+                  className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-slate-100 hover:text-on-surface"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">User</div>
+                  <div className="mt-1 font-semibold text-on-surface">{selectedAuditLog.username || 'system'}</div>
+                  <div className="text-xs text-on-surface-variant">{selectedAuditLog.role || '-'}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Module</div>
+                  <div className="mt-1 font-semibold text-on-surface">{formatAction(selectedAuditLog.module)}</div>
+                  <div className="text-xs text-on-surface-variant">{selectedAuditLog.status || 'success'}</div>
+                </div>
+                {affectedRecord && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">Affected Record</div>
+                    <div className="mt-1 font-semibold text-on-surface">{affectedRecord}</div>
+                  </div>
+                )}
+                {selectedAuditLog.ip_address && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">IP Address</div>
+                    <div className="mt-1 font-semibold text-on-surface">{selectedAuditLog.ip_address}</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-slate-200 p-5">
+                <h4 className="text-sm font-bold uppercase tracking-[0.18em] text-on-surface-variant">Summary</h4>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-on-surface-variant">
+                  {descriptionParts.map((part) => (
+                    <li key={part}>{part}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 p-5">
+                <h4 className="text-sm font-bold uppercase tracking-[0.18em] text-on-surface-variant">Change Details</h4>
+                {changeItems.length > 0 ? (
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 text-sm text-on-surface-variant">
+                    <div className="grid grid-cols-[minmax(110px,0.75fr)_minmax(0,1.5fr)] gap-4 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/70">
+                      <div>Title</div>
+                      <div>Value</div>
+                    </div>
+                    {changeItems.map(renderChangeItem)}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-on-surface-variant">
+                    No before or after values were saved for this audit log.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

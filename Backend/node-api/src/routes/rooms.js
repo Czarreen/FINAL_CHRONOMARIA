@@ -1,7 +1,16 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { recordAuditLog } from '../lib/auditLogger.js';
 
 const router = Router();
+const ROOMS_AUDIT_MODULE = 'rooms';
+const ROOM_SELECT_FIELDS = 'room_id, room_name, room_type, room_status, room_department_id';
+const ROOM_AUDIT_FIELDS = [
+  { key: 'room_name', label: 'Name' },
+  { key: 'room_type', label: 'Type' },
+  { key: 'room_status', label: 'Status' },
+  { key: 'room_department_names', label: 'Departments' },
+];
 
 function normalizeDepartmentIds(input) {
   if (input === undefined) return undefined;
@@ -91,6 +100,138 @@ async function fetchRoomDepartmentMap(roomIds = []) {
   });
 
   return map;
+}
+
+async function fetchDepartmentNameMap(departmentIds = []) {
+  const ids = Array.from(
+    new Set(
+      (departmentIds ?? [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )
+  );
+
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await supabaseAdmin
+    .from('departments')
+    .select('department_id, department_name')
+    .in('department_id', ids);
+
+  if (error) {
+    console.error('Department names query error:', error.message);
+    return new Map();
+  }
+
+  return new Map(
+    (data ?? []).map((department) => [
+      Number(department.department_id),
+      department.department_name || `Department #${department.department_id}`,
+    ])
+  );
+}
+
+async function attachRoomDepartmentIds(rooms = []) {
+  const roomIds = (rooms ?? [])
+    .map((room) => Number(room.room_id))
+    .filter((id) => Number.isInteger(id));
+  const departmentMap = await fetchRoomDepartmentMap(roomIds);
+  const rowsWithDepartmentIds = (rooms ?? []).map((room) => {
+    const mappedIds = departmentMap.get(Number(room.room_id)) || [];
+    const fallbackId = Number(room.room_department_id);
+    const roomDepartmentIds = mappedIds.length > 0
+      ? Array.from(new Set(mappedIds))
+      : (Number.isInteger(fallbackId) && fallbackId > 0 ? [fallbackId] : []);
+
+    return {
+      ...room,
+      room_department_ids: roomDepartmentIds,
+    };
+  });
+
+  const departmentNameMap = await fetchDepartmentNameMap(
+    rowsWithDepartmentIds.flatMap((room) => room.room_department_ids || [])
+  );
+
+  return rowsWithDepartmentIds.map((room) => ({
+    ...room,
+    room_department_names: (room.room_department_ids || [])
+      .map((departmentId) => departmentNameMap.get(Number(departmentId)) || `Department #${departmentId}`),
+  }));
+}
+
+async function fetchRoomForAudit(roomId) {
+  const { data, error } = await supabaseAdmin
+    .from('rooms')
+    .select(ROOM_SELECT_FIELDS)
+    .eq('room_id', roomId)
+    .limit(1);
+
+  if (error) throw new Error(error.message || 'Failed to fetch room');
+
+  const [room] = await attachRoomDepartmentIds(data ?? []);
+  return room || null;
+}
+
+function formatRoomAuditLabel(room = {}, fallbackId = null) {
+  const roomId = room?.room_id ?? fallbackId;
+  const roomName = String(room?.room_name || '').trim();
+  if (roomName && roomId) return `${roomName} (#${roomId})`;
+  if (roomName) return roomName;
+  return `Room #${roomId || 'unknown'}`;
+}
+
+function normalizeAuditValue(value) {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => String(item ?? '').trim())
+          .filter(Boolean)
+      )
+    ).sort((left, right) => {
+      const leftNumber = Number(left);
+      const rightNumber = Number(right);
+      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+        return leftNumber - rightNumber;
+      }
+      return left.localeCompare(right);
+    });
+  }
+
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function areAuditValuesEqual(beforeValue, afterValue) {
+  return JSON.stringify(normalizeAuditValue(beforeValue)) === JSON.stringify(normalizeAuditValue(afterValue));
+}
+
+function formatAuditValue(value) {
+  const normalized = normalizeAuditValue(value);
+  if (Array.isArray(normalized)) return normalized.length > 0 ? normalized.join(', ') : 'none';
+  return normalized || 'none';
+}
+
+function buildRoomCreatedAuditDescription(room = {}) {
+  const details = ROOM_AUDIT_FIELDS
+    .filter(({ key }) => key !== 'room_name')
+    .map(({ key, label }) => `${label}: ${formatAuditValue(room[key])}`);
+
+  return `Created room ${formatRoomAuditLabel(room)} with ${details.join(', ')}`;
+}
+
+function buildRoomUpdatedAuditDescription(before = {}, after = {}, fallbackId = null) {
+  const changes = ROOM_AUDIT_FIELDS
+    .filter(({ key }) => !areAuditValuesEqual(before[key], after[key]))
+    .map(({ key, label }) => `${label} from ${formatAuditValue(before[key])} to ${formatAuditValue(after[key])}`);
+
+  if (changes.length === 0) {
+    return `Updated room ${formatRoomAuditLabel(after, fallbackId)} with no field changes detected`;
+  }
+
+  return `Updated room ${formatRoomAuditLabel(after, fallbackId)}: ${changes.join(', ')}`;
 }
 
 async function ensureRoomDepartmentsTableExists() {
@@ -196,7 +337,7 @@ router.get('/', async (req, res) => {
 
     const { data, error, count } = await supabaseAdmin
       .from('rooms')
-      .select('room_id, room_name, room_type, room_status, room_department_id', { count: 'exact' })
+      .select(ROOM_SELECT_FIELDS, { count: 'exact' })
       .order('room_id', { ascending: true })
       .range(from, to);
 
@@ -210,20 +351,7 @@ router.get('/', async (req, res) => {
       });
     }
 
-    const roomIds = (data ?? []).map((room) => Number(room.room_id)).filter((id) => Number.isInteger(id));
-    const departmentMap = await fetchRoomDepartmentMap(roomIds);
-    const rows = (data ?? []).map((room) => {
-      const mappedIds = departmentMap.get(Number(room.room_id)) || [];
-      const fallbackId = Number(room.room_department_id);
-      const roomDepartmentIds = mappedIds.length > 0
-        ? Array.from(new Set(mappedIds))
-        : (Number.isInteger(fallbackId) && fallbackId > 0 ? [fallbackId] : []);
-
-      return {
-        ...room,
-        room_department_ids: roomDepartmentIds,
-      };
-    });
+    const rows = await attachRoomDepartmentIds(data ?? []);
 
     return res.json({
       page,
@@ -252,7 +380,7 @@ router.post('/', async (req, res) => {
     }
 
     const incomingDepartmentIds = room_department_id ?? room_departmnet_id ?? department_id;
-    const normalizedDepartmentIds = normalizeDepartmentIds(incomingDepartmentIds);
+    const normalizedDepartmentIds = normalizeDepartmentIds(incomingDepartmentIds) ?? [];
     const validation = await validateDepartmentIds(normalizedDepartmentIds);
     if (!validation.isValid) {
       if (validation.error) {
@@ -296,13 +424,19 @@ router.post('/', async (req, res) => {
       }
     }
 
+    const [insertedRoom] = await attachRoomDepartmentIds([data[0]]);
+
+    await recordAuditLog(req, {
+      action: 'room_created',
+      module: ROOMS_AUDIT_MODULE,
+      description: buildRoomCreatedAuditDescription(insertedRoom),
+      changes_after: insertedRoom,
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Room created successfully',
-      data: {
-        ...data[0],
-        room_department_ids: normalizedDepartmentIds,
-      },
+      data: insertedRoom,
     });
   } catch (err) {
     console.error('Room creation route error:', err);
@@ -329,7 +463,7 @@ router.put('/:room_id', async (req, res) => {
 
     const incomingDepartmentIds = room_department_id ?? room_departmnet_id ?? department_id;
     if (incomingDepartmentIds !== undefined) {
-      normalizedDepartmentIds = normalizeDepartmentIds(incomingDepartmentIds);
+      normalizedDepartmentIds = normalizeDepartmentIds(incomingDepartmentIds) ?? [];
       const validation = await validateDepartmentIds(normalizedDepartmentIds);
       if (!validation.isValid) {
         if (validation.error) {
@@ -347,6 +481,11 @@ router.put('/:room_id', async (req, res) => {
 
       updateData.room_department_id = normalizedDepartmentIds.length > 0 ? normalizedDepartmentIds[0] : null;
       shouldUpdateRoomDepartments = true;
+    }
+
+    const existingRoom = await fetchRoomForAudit(room_id);
+    if (!existingRoom) {
+      return res.status(404).json({ error: 'Room not found' });
     }
 
     const { data, error } = await supabaseAdmin
@@ -373,15 +512,20 @@ router.put('/:room_id', async (req, res) => {
       console.error('Failed to sync room notifications:', syncErr);
     }
 
+    const [updatedRoom] = await attachRoomDepartmentIds([data[0]]);
+
+    await recordAuditLog(req, {
+      action: 'room_updated',
+      module: ROOMS_AUDIT_MODULE,
+      description: buildRoomUpdatedAuditDescription(existingRoom, updatedRoom, room_id),
+      changes_before: existingRoom,
+      changes_after: updatedRoom,
+    });
+
     return res.json({
       success: true,
       message: 'Room updated successfully',
-      data: {
-        ...data[0],
-        room_department_ids: shouldUpdateRoomDepartments
-          ? normalizedDepartmentIds
-          : undefined,
-      },
+      data: updatedRoom,
     });
   } catch (err) {
     console.error('Room update route error:', err);
@@ -396,6 +540,11 @@ router.delete('/:room_id', async (req, res) => {
 
     if (!room_id) {
       return res.status(400).json({ error: 'room_id is required' });
+    }
+
+    const targetRoom = await fetchRoomForAudit(room_id);
+    if (!targetRoom) {
+      return res.status(404).json({ error: 'Room not found' });
     }
 
     const { error } = await supabaseAdmin
@@ -413,6 +562,13 @@ router.delete('/:room_id', async (req, res) => {
     } catch (deleteErr) {
       console.error('Failed to delete room notifications:', deleteErr);
     }
+
+    await recordAuditLog(req, {
+      action: 'room_deleted',
+      module: ROOMS_AUDIT_MODULE,
+      description: `Deleted room ${formatRoomAuditLabel(targetRoom, room_id)}`,
+      changes_before: targetRoom,
+    });
 
     return res.json({
       success: true,
