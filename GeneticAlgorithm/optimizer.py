@@ -405,23 +405,27 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
     # Priority 2 (Capable) and 3 (Fallback) already receive score bonuses in
     # match_specialization_score (+50 / +15), so the main GA loop will still
     # strongly prefer them — but without locking them in prematurely.
+    #
+    # Offering-centric approach: for each offering, ALL P1-tagged faculty are
+    # considered and the one with the lowest current load wins — eliminating
+    # the "first faculty in dict order always wins" bias that caused some P1
+    # faculty to never receive their tagged subject.
     if faculty_preferences:
-        # Collect only priority=1 (primary) triples
-        pref_triples = []
+        # Build a map: subject_code → list of faculty indices with P1 tag
+        p1_by_code: Dict[str, List[int]] = {}
         for fid_str, tag_map in faculty_preferences.items():
-            for code_tag, priority in tag_map.items():
-                if priority == 1:
-                    pref_triples.append((priority, fid_str, normalize_upper(code_tag)))
-        pref_triples.sort(key=lambda t: t[0])  # priority 1 first (only priority 1 here)
-
-        for priority, fid_str, pref_code in pref_triples:
             fi_pref = fid_to_fi.get(fid_str)
             if fi_pref is None:
                 continue  # faculty not in GA pool
-            # Find all unassigned offerings matching this preference code.
-            # Sort by total units descending (lec + lab) so the largest subjects fill
-            # the faculty's cap first — smallest is bumped last, not random DB order.
-            matching_offerings = sorted(
+            for code_tag, priority in tag_map.items():
+                if priority == 1:
+                    code = normalize_upper(code_tag)
+                    p1_by_code.setdefault(code, []).append(fi_pref)
+
+        # Process each subject code's offerings in units-descending order.
+        # For each offering, pick the eligible P1 faculty with the lowest load.
+        for pref_code, candidate_fis in p1_by_code.items():
+            code_offerings = sorted(
                 ((oi, o) for oi, o in enumerate(offerings)
                  if oi not in chosen and normalize_upper(o.get("code") or "") == pref_code),
                 key=lambda x: -(
@@ -430,7 +434,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     or 0.0
                 ),
             )
-            for oi, offering in matching_offerings:
+            for oi, offering in code_offerings:
                 off_blocks = build_schedule_blocks(offering)
                 if is_sat_only_blocks(off_blocks):
                     chosen[oi] = -1
@@ -440,24 +444,36 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
                     or 0.0
                 )
-                max_u = max(0.0, to_number(faculties[fi_pref].get("faculty_max_units")) or 0.0)
-                if max_u > 0 and loads[fi_pref] + units > max_u:
-                    continue  # over capacity — fall through to regular GA
-                if faculty_has_conflict(blocks[fi_pref], off_blocks):
-                    continue  # time conflict — fall through to regular GA
-                if any(consecutive_minutes_for_day(blocks[fi_pref] + off_blocks, d) > 240.0
-                       for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
-                    continue
-                # Pre-assign this faculty to this offering
-                chosen[oi] = fi_pref
-                loads[fi_pref] += units
-                blocks[fi_pref].extend(off_blocks)
+                # Pick the eligible P1 faculty with the lowest current load
+                best_fi: Optional[int] = None
+                best_load = float("inf")
+                for fi_cand in candidate_fis:
+                    max_u = max(0.0, to_number(faculties[fi_cand].get("faculty_max_units")) or 0.0)
+                    if max_u > 0 and loads[fi_cand] + units > max_u:
+                        continue  # over capacity
+                    if faculty_has_conflict(blocks[fi_cand], off_blocks):
+                        continue  # time conflict
+                    if any(consecutive_minutes_for_day(blocks[fi_cand] + off_blocks, d) > 240.0
+                           for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
+                        continue
+                    if loads[fi_cand] < best_load:
+                        best_load = loads[fi_cand]
+                        best_fi = fi_cand
+                if best_fi is None:
+                    continue  # no eligible P1 faculty — fall through to main GA loop
+                chosen[oi] = best_fi
+                loads[best_fi] += units
+                blocks[best_fi].extend(off_blocks)
                 prep_key = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
-                preps[fi_pref].add(prep_key)
+                preps[best_fi].add(prep_key)
 
     ordering = sorted(
         enumerate(offerings),
-        key=lambda x: -((to_number(x[1].get("units")) or to_number(x[1].get("lec_hrs")) or 0.0)),
+        key=lambda x: -(
+            to_number(x[1].get("units"))
+            or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
+            or 0.0
+        ),
     )
 
     for oi, offering in ordering:
@@ -468,7 +484,11 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         if is_sat_only_blocks(off_blocks):
             chosen[oi] = -1
             continue
-        units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
+        units = (
+            to_number(offering.get("units"))
+            or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+            or 0.0
+        )
         subject = subject_index.get(build_offering_key(offering))
 
         # ── Two-pass candidate selection ─────────────────────────────────
@@ -577,7 +597,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     print(f"[ga-debug] NO candidates for code={offering_code}. faculty_id={fac_dbg.get('faculty_id')} status: overload={overload}({loads[fi_dbg]:.1f}/{max_u_dbg}), conflict={conflict}, consec={consec}")
                     break
             else:
-                print(f"[ga-debug] NO candidates for code={offering_code}. faculty_id=7 NOT in faculties list at all!")
+                print(f"[ga-debug] NO candidates for code={offering_code}. Tagged faculty_ids={_dbg_pref_fids} NOT in faculties list at all!")
         if fi < 0:
             chosen[oi] = -1
             continue
