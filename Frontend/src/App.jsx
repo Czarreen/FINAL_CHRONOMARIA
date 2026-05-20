@@ -6,6 +6,7 @@ import LoginView from './components/LoginView';
 import DashboardView from './pages/DashboardView';
 import FacultyView from './pages/FacultyView';
 import FacultyLoadingView from './pages/FacultyLoadingView';
+import FacultyLoadingFinalizeView from './pages/FacultyLoadingFinalizeView';
 import SubjectsView from './pages/SubjectsView';
 import RoomsView from './pages/RoomsView';
 import ScheduleView from './pages/ScheduleView';
@@ -75,7 +76,8 @@ export default function App() {
       case 'subjects': return <SubjectsView subjectMutationKey={subjectMutationKey} />;
       case 'rooms': return <RoomsView authRefreshKey={authRefreshKey} />;
       case 'schedule': return <ScheduleView onNavigate={setCurrentView} />;
-      case 'faculty-loading': return <FacultyLoadingView />;
+      case 'faculty-loading': return <FacultyLoadingView onNavigate={handleViewChange} />;
+      case 'faculty-loading-finalize': return <FacultyLoadingFinalizeView onNavigate={handleViewChange} />;
       case 'course-offering': return <CourseOfferingView onSubjectMutated={() => setSubjectMutationKey((k) => k + 1)} />;
       case 'settings': return <SettingsView currentUser={currentUser} onUserUpdate={handleCurrentUserUpdate} />;
       default: return <DashboardView />;
@@ -83,6 +85,10 @@ export default function App() {
   };
 
   const getTitle = () => {
+    if (currentView === 'faculty-loading-finalize') {
+      return 'Finalize Faculty Loading';
+    }
+
     return currentView
       .split('-')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -92,10 +98,10 @@ export default function App() {
   return (
     <RowHighlightProvider>
       <NotificationProvider authRefreshKey={authRefreshKey}>
-        <div className="min-h-screen text-on-surface">
+        <div className="min-h-screen overflow-x-hidden text-on-surface">
           <div className="fixed inset-0 bg-mesh -z-10" />
 
-          <div className="min-h-screen flex">
+          <div className="min-h-screen flex min-w-0">
             <Sidebar
               currentView={currentView}
               onViewChange={handleViewChange}
@@ -103,17 +109,18 @@ export default function App() {
               currentUser={currentUser}
             />
 
-            <main className="flex-1 min-h-screen ml-[260px] pt-16">
+            <main className="flex-1 min-h-screen min-w-0 ml-[260px] pt-16 overflow-x-hidden">
               <TopAppBar
                 title={getTitle()}
                 onLogout={handleLogout}
                 onSettings={handleOpenSettings}
               />
 
-              <div className="px-margin py-gutter max-w-7xl mx-auto w-full pb-16">
+              <div className="px-margin py-gutter max-w-7xl mx-auto w-full min-w-0 pb-16">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentView}
+                    className="min-w-0"
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
