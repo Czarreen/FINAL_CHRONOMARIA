@@ -1590,6 +1590,95 @@ router.post('/import-csv', async (req, res) => {
   }
 });
 
+// POST - Bulk sync subjects from all course offerings
+router.post('/sync-subjects', async (req, res) => {
+  try {
+    const { data: allOfferings, error: coError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('*');
+
+    if (coError) throw new Error(`Failed to fetch course offerings: ${coError.message}`);
+
+    const offerings = Array.isArray(allOfferings) ? allOfferings : [];
+    if (offerings.length === 0) {
+      return res.json({ synced: 0, created: 0, failed: 0 });
+    }
+
+    const subjectMaps = await preloadSubjectLookups();
+
+    const CHUNK_SIZE = 500;
+    const UPDATE_CONCURRENCY = 50;
+    const subjectToInsert = [];
+    const subjectToUpdate = [];
+    const pendingSubjectKeys = new Map();
+
+    for (const offering of offerings) {
+      const subjectCode = normalizeCell(offering.code);
+      if (!subjectCode) continue;
+
+      const subjectPayload = buildSubjectPayloadFromCourseOffering(offering);
+      const section = normalizeCell(offering.section) ?? '';
+      const deptId = offering.department_id;
+      const existing = lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps);
+
+      if (existing) {
+        subjectToUpdate.push({ subject_id: existing.subject_id, subject_status: existing.subject_status, subjectPayload });
+        continue;
+      }
+
+      const pendingKey = `${subjectCode}|${section}|${deptId ?? ''}`;
+      if (pendingSubjectKeys.has(pendingKey)) {
+        subjectToInsert[pendingSubjectKeys.get(pendingKey)].subjectPayload = subjectPayload;
+      } else {
+        pendingSubjectKeys.set(pendingKey, subjectToInsert.length);
+        subjectToInsert.push({ subjectPayload });
+      }
+    }
+
+    let created = 0;
+    let synced = 0;
+    let failed = 0;
+
+    for (let i = 0; i < subjectToInsert.length; i += CHUNK_SIZE) {
+      const chunk = subjectToInsert.slice(i, i + CHUNK_SIZE);
+      const { error: insertError } = await supabaseAdmin
+        .from('subjects')
+        .insert(chunk.map((e) => ({ ...e.subjectPayload, subject_status: 'active' })));
+
+      if (insertError) {
+        failed += chunk.length;
+      } else {
+        created += chunk.length;
+      }
+    }
+
+    for (let i = 0; i < subjectToUpdate.length; i += UPDATE_CONCURRENCY) {
+      const chunk = subjectToUpdate.slice(i, i + UPDATE_CONCURRENCY);
+      const results = await Promise.allSettled(
+        chunk.map(({ subject_id, subject_status, subjectPayload }) =>
+          supabaseAdmin
+            .from('subjects')
+            .update({ ...subjectPayload, subject_status: subject_status || 'active' })
+            .eq('subject_id', subject_id)
+        )
+      );
+
+      for (const result of results) {
+        const errMsg = result.status === 'rejected'
+          ? (result.reason?.message ?? 'Unknown error')
+          : (result.value?.error?.message ?? null);
+        if (errMsg) { failed += 1; } else { synced += 1; }
+      }
+    }
+
+    return res.json({ synced, created, failed });
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unknown error during subject sync.',
+    });
+  }
+});
+
 // POST - Create new course offering
 router.post('/', async (req, res) => {
   try {

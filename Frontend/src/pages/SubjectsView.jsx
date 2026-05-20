@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
+import { syncSubjectsFromOfferings } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
 import { syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
@@ -407,6 +408,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   }
 
   async function loadSubjects() {
+    try {
+      await syncSubjectsFromOfferings();
+    } catch (_) {}
     try {
       setLoading(true);
       setError(null);

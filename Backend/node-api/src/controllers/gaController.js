@@ -2565,6 +2565,23 @@ async function persistAutomaticScheduler(assignments) {
     return { persisted: 0 };
   }
 
+  // Resolve curr_id for rows whose source subjects had no curriculum assigned.
+  // course_offerings carries curr_id across cycles, so this enriches subjects
+  // that were imported without curriculum data.
+  const offeringsCurrResp = await query(
+    `SELECT code, course_no, department_id, section, curr_id FROM public.course_offerings WHERE curr_id IS NOT NULL`
+  );
+  const currIdFromOfferings = new Map();
+  for (const r of offeringsCurrResp.rows) {
+    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
+    if (!currIdFromOfferings.has(k)) currIdFromOfferings.set(k, r.curr_id);
+  }
+  const resolvedAssignments = assignments.map((row) => {
+    if (row.curr_id != null) return row;
+    const resolved = currIdFromOfferings.get(makeSchedulerKey(row.code, row.course_no, row.department_id, row.section)) ?? null;
+    return resolved != null ? { ...row, curr_id: resolved } : row;
+  });
+
   const columns = [
     'curr_id',
     'code',
@@ -2590,8 +2607,8 @@ async function persistAutomaticScheduler(assignments) {
       await client.query('BEGIN');
       await client.query('DELETE FROM public.automatic_scheduler');
 
-      for (let offset = 0; offset < assignments.length; offset += CHUNK_SIZE) {
-        const chunk = assignments.slice(offset, offset + CHUNK_SIZE);
+      for (let offset = 0; offset < resolvedAssignments.length; offset += CHUNK_SIZE) {
+        const chunk = resolvedAssignments.slice(offset, offset + CHUNK_SIZE);
         const values = [];
         const placeholders = [];
 
