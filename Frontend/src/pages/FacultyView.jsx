@@ -17,6 +17,7 @@ import {
   RotateCcw,
   RefreshCw,
   Settings,
+  Tag,
 } from 'lucide-react';
 import {
   fetchFaculty,
@@ -28,6 +29,7 @@ import {
 } from '../services/facultyApi.js';
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
+import FacultySubjectPreferencesModal from '../components/FacultySubjectPreferencesModal.jsx';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
@@ -49,6 +51,9 @@ export default function FacultyView() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [preferencesModalFacultyId, setPreferencesModalFacultyId] = useState(null);
+  const [preferencesModalFacultyName, setPreferencesModalFacultyName] = useState(null);
   const [savingFaculty, setSavingFaculty] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [facultyError, setFacultyError] = useState(null);
@@ -526,6 +531,12 @@ export default function FacultyView() {
     setShowEditModal(true);
   }
 
+  function handleOpenPreferencesModal(member) {
+    setPreferencesModalFacultyId(member.faculty_id);
+    setPreferencesModalFacultyName(member.faculty_name);
+    setShowPreferencesModal(true);
+  }
+
   async function handleSaveEdit() {
     if (!editingFaculty || !editingData.faculty_name?.trim()) {
       setEditError('Faculty name is required');
@@ -961,6 +972,15 @@ export default function FacultyView() {
                       ))}
                       <td className="sticky right-0 z-10 px-4 py-3 bg-white">
                         <div className="flex items-center justify-center gap-2 opacity-80 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleOpenPreferencesModal(member)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-blue-50 hover:text-blue-600"
+                            type="button"
+                            aria-label={`Subject preferences for ${member.faculty_name}`}
+                            title="Subject preferences"
+                          >
+                            <Tag size={16} />
+                          </button>
                           <button
                             onClick={() => handleEditFaculty(member)}
                             className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
@@ -1404,6 +1424,14 @@ export default function FacultyView() {
             </div>
           </div>
         </div>
+      )}
+
+      {showPreferencesModal && preferencesModalFacultyId !== null && (
+        <FacultySubjectPreferencesModal
+          facultyId={preferencesModalFacultyId}
+          facultyName={preferencesModalFacultyName}
+          onClose={() => setShowPreferencesModal(false)}
+        />
       )}
     </div>
   );
