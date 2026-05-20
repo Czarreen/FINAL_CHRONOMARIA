@@ -1,0 +1,33 @@
+PRE-FLIGHT
+  ├─ Tag all subjects: GENERAL | MERGED | REGULAR
+  ├─ LOCKED ← all GENERAL subjects (tag: "General")
+  ├─ MERGED_GROUPS ← all detected merge sets (tag: "Original" if pre-existing)
+  └─ PENDING ← everything else
+
+STAGE 1: Fix MERGED_GROUPS
+  ├─ For each merged group:
+  │    └─ Check conflict against LOCKED
+  │         └─ If conflict → reschedule group as a unit (GA optimizer)
+  ├─ Then check merged-vs-merged conflicts
+  │    └─ Reschedule conflicting groups as units
+  └─ RESOLVED ← LOCKED ∪ fixed MERGED_GROUPS
+
+STAGE 2: Triage PENDING
+  ├─ For each pending subject:
+  │    ├─ Conflict with RESOLVED? → keep in PENDING for GA
+  │    └─ No conflict? → move to RESOLVED
+  └─ Loop until stable
+
+STAGE 3: GA Optimizer on PENDING
+  ├─ Clear schedules/rooms of PENDING subjects
+  ├─ Run GA with RESOLVED as hard constraints
+  ├─ Validate output:
+  │    ├─ Internal conflicts within new schedule?
+  │    └─ Conflicts against RESOLVED?
+  ├─ Conflict-free new subjects → move to RESOLVED
+  ├─ Still-conflicted → back to PENDING
+  └─ Repeat (max N iterations, then escalate)
+
+OUTPUT
+  └─ Concat RESOLVED (LOCKED + MERGED_GROUPS + GA-generated)
+     with tags preserved.
