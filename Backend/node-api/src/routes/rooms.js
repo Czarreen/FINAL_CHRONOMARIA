@@ -135,6 +135,57 @@ async function replaceRoomDepartments(roomId, departmentIds) {
   }
 }
 
+// GET - All room bookings (course_offerings + subjects) for client-side conflict detection
+router.get('/bookings', async (_req, res) => {
+  try {
+    function splitRoomIds(val) {
+      if (!val) return [];
+      return String(val).split('/').map((s) => s.trim()).filter(Boolean);
+    }
+
+    const [{ data: cos, error: coError }, { data: subs, error: subError }] = await Promise.all([
+      supabaseAdmin
+        .from('course_offerings')
+        .select('id, code, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
+        .or('mth_room_id.not.is.null,tfs_room_id.not.is.null'),
+      supabaseAdmin
+        .from('subjects')
+        .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room, mth_room_id, tfs_room_id')
+        .or('mth_room.not.is.null,tfs_room.not.is.null,mth_room_id.not.is.null,tfs_room_id.not.is.null'),
+    ]);
+
+    if (coError) console.error('Bookings CO query error:', coError);
+    if (subError) console.error('Bookings subjects query error:', subError);
+
+    const rows = [];
+
+    for (const co of cos ?? []) {
+      for (const roomId of splitRoomIds(co.mth_room_id)) {
+        rows.push({ id: co.id, code: co.code, mth_schedule: co.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
+      }
+      for (const roomId of splitRoomIds(co.tfs_room_id)) {
+        rows.push({ id: co.id, code: co.code, mth_schedule: null, tfs_schedule: co.tfs_schedule, room_id: roomId, slot: 'tfs' });
+      }
+    }
+
+    for (const sub of subs ?? []) {
+      const mthRoom = sub.mth_room || sub.mth_room_id;
+      const tfsRoom = sub.tfs_room || sub.tfs_room_id;
+      for (const roomId of splitRoomIds(mthRoom)) {
+        rows.push({ subject_id: sub.subject_id, subject_code: sub.subject_code, mth_schedule: sub.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
+      }
+      for (const roomId of splitRoomIds(tfsRoom)) {
+        rows.push({ subject_id: sub.subject_id, subject_code: sub.subject_code, mth_schedule: null, tfs_schedule: sub.tfs_schedule, room_id: roomId, slot: 'tfs' });
+      }
+    }
+
+    return res.json({ rows });
+  } catch (err) {
+    console.error('Room bookings route error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // GET - Fetch rooms with pagination
 router.get('/', async (req, res) => {
   try {

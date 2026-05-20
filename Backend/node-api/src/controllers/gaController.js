@@ -2965,11 +2965,17 @@ export async function postRunAutomaticScheduler(req, res) {
     // by subsequent GA passes) and will form the reserved_slots baseline.
 
     // Step 1: General subjects — absolute, never re-scheduled.
+    // GENERAL+EMPTY subjects (no existing schedule) are included in the output
+    // as-is with schedule_missing=true so the admin is warned without losing the row.
     const generalSubjects = preflight.excluded_general_subjects || [];
-    const discardedPile = generalSubjects.map((c) =>
-      candidateToOutputRow(c, roomLookup, 'false', 'general')
-    );
-    console.log(`[run][automatic] general subjects discarded: ${generalSubjects.length}`);
+    const discardedPile = generalSubjects.map((c) => {
+      const row = candidateToOutputRow(c, roomLookup, 'false', 'general');
+      if (!c.existing_mth_schedule && !c.existing_tfs_schedule) {
+        row.schedule_missing = true;
+      }
+      return row;
+    });
+    console.log(`[run][automatic] general subjects discarded: ${generalSubjects.length} (empty=${generalSubjects.filter((c) => !c.existing_mth_schedule && !c.existing_tfs_schedule).length})`);
 
     // Step 2 & 3: Merged subjects — fix inter-group conflicts via GA if needed,
     // then add all merge members to the discarded pile (tagged 'original').
@@ -3161,13 +3167,14 @@ export async function postRunAutomaticScheduler(req, res) {
       pending = stillConflicted;
     }
 
-    // Any subjects still pending after all iterations → stored as unresolved
+    // Any subjects still pending after all iterations → human_review (UNRESOLVABLE)
     if (pending.length > 0) {
-      console.warn(`[run][automatic] ${pending.length} subject(s) remain pending — stored as unresolved`);
+      console.warn(`[run][automatic] ${pending.length} subject(s) remain pending — stored as unresolvable`);
       discardedPile.push(...pending.map((c) => candidateToOutputRow(c, roomLookup, 'unresolved', null)));
       allUnresolved.push(...pending.map((c) => ({
         ...c,
         reason: 'Could not be scheduled after all GA iterations — manual assignment required.',
+        reason_type: 'unresolvable_conflict',
       })));
     }
 
@@ -3180,6 +3187,8 @@ export async function postRunAutomaticScheduler(req, res) {
       console.log(`[run][automatic] persisted=${persistence.persisted}`);
     }
 
+    const humanReview = allUnresolved.filter((u) => u.reason_type === 'unresolvable_conflict');
+
     return res.json({
       status: 'completed',
       dry_run: dryRun,
@@ -3191,11 +3200,13 @@ export async function postRunAutomaticScheduler(req, res) {
       runtime_ms: lastGAResult.runtime_ms ?? null,
       assignments: allAssignments,
       unresolved_issues: allUnresolved,
+      human_review: humanReview,
       preflight,
       persistence,
       report: {
         generated_rows: allAssignments,
         unresolved_issues: allUnresolved,
+        human_review: humanReview,
         ga_report: lastGAResult.report ?? null,
       },
     });

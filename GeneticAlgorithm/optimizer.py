@@ -2117,6 +2117,58 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     rng = random.Random(seed)
 
+    # ── Pre-flight: extract GENERAL subjects before GA touches anything ──────
+    # All general subjects are LOCKED — the GA must not auto-fill or modify them.
+    # GENERAL+SCHEDULED → kept in assignments output as-is (visual tag "General").
+    # GENERAL+EMPTY → same, but flagged with schedule_missing=True so the
+    #   frontend can warn the admin; they stay in the output so they are never
+    #   lost when the user later updates the course offering.
+    locked_general: List[Dict[str, Any]] = []
+    non_general_subjects: List[Dict[str, Any]] = []
+    for s in subjects:
+        if s.get("is_general"):
+            locked_general.append(s)
+        else:
+            non_general_subjects.append(s)
+    subjects = non_general_subjects
+
+    locked_general_assignments: List[Dict[str, Any]] = []
+    for s in locked_general:
+        mth_sched = s.get("mth_schedule")
+        tfs_sched = s.get("tfs_schedule")
+        is_empty  = not mth_sched and not tfs_sched
+        row: Dict[str, Any] = {
+            "subject_id":        to_number(s.get("subject_id")),
+            "source_subject_id": to_number(s.get("subject_id")),
+            "curr_id":           to_number(s.get("curr_id")),
+            "code":              normalize_text(s.get("code") or s.get("subject_code")),
+            "course_no":         normalize_text(s.get("course_no") or s.get("subject_course_no")),
+            "department_id":     to_number(s.get("department_id")),
+            "section":           normalize_text(s.get("section") or s.get("subject_section")),
+            "descriptive_title": normalize_text(s.get("descriptive_title") or s.get("subject_descriptive_title")),
+            "units":             to_number(s.get("units") or s.get("subject_units")),
+            "lec_hrs":           to_number(s.get("lec_hrs")),
+            "lab_hrs":           to_number(s.get("lab_hrs")),
+            "merged":            False,
+            "is_general":        True,
+            "mth_schedule":      mth_sched,
+            "mth_room_id":       s.get("mth_room_id"),
+            "mth_room_name":     normalize_text(s.get("mth_room_name") or ""),
+            "tfs_schedule":      tfs_sched,
+            "tfs_room_id":       s.get("tfs_room_id"),
+            "tfs_room_name":     normalize_text(s.get("tfs_room_name") or ""),
+        }
+        if is_empty:
+            row["schedule_missing"] = True
+        locked_general_assignments.append(row)
+
+    if locked_general:
+        print(
+            f"[GA-DIAG] locked_general={len(locked_general)} "
+            f"(empty={sum(1 for s in locked_general if not s.get('mth_schedule') and not s.get('tfs_schedule'))})",
+            flush=True,
+        )
+
     # ── Section capacity triage ───────────────────────────────────────────────
     # Each section can hold at most 10 hrs (600 min) per pattern day × 2 patterns
     # = 1200 min total.  Subjects that exceed this budget for their section are
@@ -2162,6 +2214,28 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"{len(subjects)+len(deferred_subjects)} deferred={len(deferred_subjects)}",
             flush=True,
         )
+
+    # If all subjects were general (LOCKED), skip the GA entirely.
+    if not subjects:
+        return {
+            "assignments":     locked_general_assignments,
+            "unresolved":      [],
+            "human_review":    [],
+            "fitness_overall": 100.0,
+            "fitness_hard":    100.0,
+            "fitness_soft":    100.0,
+            "generations":     0,
+            "runtime_ms":      int((time.perf_counter() - started) * 1000),
+            "run_id":          sha1(
+                json.dumps({"seed": seed, "n": 0}, sort_keys=True).encode()
+            ).hexdigest()[:16],
+            "constraints":     constraints,
+            "report": {
+                "summary":        "All subjects are general (locked) — no GA run needed.",
+                "conflicts":      [],
+                "conflict_count": 0,
+            },
+        }
 
     # Seed population: one greedy start + random fill.
     # Multiple greedy starts were tested but the init overhead cut into the GA time budget.
@@ -2307,8 +2381,9 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             )
 
     return {
-        "assignments":     assignments,
+        "assignments":     locked_general_assignments + assignments,
         "unresolved":      unresolved,
+        "human_review":    [],
         "fitness_overall": round(overall, 2),
         "fitness_hard":    round(hard_score, 2),
         "fitness_soft":    round(soft_score, 2),

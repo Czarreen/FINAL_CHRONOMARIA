@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } fr
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
-import { fetchRooms } from '../services/roomsApi';
+import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
+import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
 import { syncSubjectsFromOfferings } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
 import { syncSubjectNotifications } from '../services/notificationsApi';
@@ -47,6 +48,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
   const [roomNameById, setRoomNameById] = useState({});
+  const [roomBookings, setRoomBookings] = useState([]);
 
   // Structured schedule card state shared between Add and Edit modals
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
@@ -293,6 +295,16 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
   useEffect(() => {
     loadRoomLookup();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchRoomBookings()
+      .then((rows) => { if (active) setRoomBookings(rows); })
+      .catch((err) => console.error('Failed to load room bookings:', err));
+
+    return () => { active = false; };
   }, []);
 
   // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
@@ -882,23 +894,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     [roomNameById]
   );
 
-  // Room → subjects map for conflict detection in ScheduleCardInput
-  const subjectRoomConflictMap = useMemo(() => {
-    const map = new Map();
-    for (const s of subjects) {
-      for (const slot of ['mth', 'tfs']) {
-        const roomId = String(s[`${slot}_room`] ?? s[`${slot}_room_id`] ?? '').trim();
-        if (!roomId) continue;
-        const key = `${roomId}:${slot}`;
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push(s);
-      }
-    }
-    return map;
-  }, [subjects]);
-
-  const getSubjectConflictingOfferings = (roomId, slot) =>
-    subjectRoomConflictMap.get(`${roomId}:${slot}`) || [];
+  const { getConflictingOfferings } = useRoomConflictMap(roomBookings);
 
   function getSubjectIssueState(subjectId) {
     const id = Number(subjectId);
@@ -1407,178 +1403,203 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-6">
               {subjectError && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                  <AlertCircle size={16} />
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
+                  <AlertCircle size={18} />
                   {subjectError}
                 </div>
               )}
 
-              <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    Subject Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={newSubject.subject_code}
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_code: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., 4700"
+              <div className="space-y-6">
+                {/* Basic Information Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                    Basic Information
+                  </h4>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Subject Code *
+                      </label>
+                      <input
+                        type="text"
+                        value={newSubject.subject_code}
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_code: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                        placeholder="e.g., 4700"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Course No
+                      </label>
+                      <input
+                        type="text"
+                        value={newSubject.subject_course_no}
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                        placeholder="e.g., HCI-101"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Curriculum ID
+                      </label>
+                      <input
+                        type="number"
+                        value={newSubject.curr_id}
+                        onChange={(e) => setNewSubject({ ...newSubject, curr_id: e.target.value ? parseInt(e.target.value) : '' })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                        placeholder="e.g., 1"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Descriptive Title
+                      </label>
+                      <input
+                        type="text"
+                        value={newSubject.subject_descriptive_title}
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                        placeholder="e.g., Introduction to Human Computer Interactions"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hours and Units Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                    Hours & Units
+                  </h4>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Units
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={newSubject.subject_units}
+                        step="0.5"
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseFloat(e.target.value) || 0 })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Lecture Hours
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newSubject.subject_lec_hrs}
+                        step="0.5"
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseFloat(e.target.value) || 0 })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Lab Hours
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newSubject.subject_lab_hrs}
+                        step="0.5"
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseFloat(e.target.value) || 0 })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Schedules Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                    Schedules & Rooms (At least one required *)
+                  </h4>
+                  <ScheduleCardInput
+                    slot="mth"
+                    value={mthCard}
+                    onChange={setMthCard}
+                    onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                    canDisable={tfsCard.enabled}
+                    roomId={newSubject.mth_room || null}
+                    onRoomChange={(id) => setNewSubject((s) => ({ ...s, mth_room: id || '' }))}
+                    rooms={roomsArray}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={null}
+                  />
+                  <ScheduleCardInput
+                    slot="tfs"
+                    value={tfsCard}
+                    onChange={setTfsCard}
+                    onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                    canDisable={mthCard.enabled}
+                    roomId={newSubject.tfs_room || null}
+                    onRoomChange={(id) => setNewSubject((s) => ({ ...s, tfs_room: id || '' }))}
+                    rooms={roomsArray}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={null}
                   />
                 </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Course No
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.subject_course_no}
-                  onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="e.g., HCI-101"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Curriculum ID
-                </label>
-                <input
-                  type="number"
-                  value={newSubject.curr_id}
-                  onChange={(e) => setNewSubject({ ...newSubject, curr_id: e.target.value ? parseInt(e.target.value) : '' })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="e.g., 1"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Descriptive Title
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.subject_descriptive_title}
-                  onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="e.g., Introduction to Human Computer Interactions"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <ScheduleCardInput
-                  slot="mth"
-                  value={mthCard}
-                  onChange={setMthCard}
-                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
-                  canDisable={tfsCard.enabled}
-                  roomId={newSubject.mth_room || null}
-                  onRoomChange={(id) => setNewSubject((s) => ({ ...s, mth_room: id || '' }))}
-                  rooms={roomsArray}
-                  getConflictingOfferings={getSubjectConflictingOfferings}
-                  editingId={null}
-                />
-                <ScheduleCardInput
-                  slot="tfs"
-                  value={tfsCard}
-                  onChange={setTfsCard}
-                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
-                  canDisable={mthCard.enabled}
-                  roomId={newSubject.tfs_room || null}
-                  onRoomChange={(id) => setNewSubject((s) => ({ ...s, tfs_room: id || '' }))}
-                  rooms={roomsArray}
-                  getConflictingOfferings={getSubjectConflictingOfferings}
-                  editingId={null}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    Units
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={newSubject.subject_units}
-                    step="0.5"
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_units: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+                {/* Classification Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                    Classification
+                  </h4>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        General / In scope
+                      </label>
+                      <select
+                        value={newSubject.is_general ? 'true' : 'false'}
+                        onChange={(e) => setNewSubject({ ...newSubject, is_general: e.target.value === 'true' })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      >
+                        <option value="false">In scope</option>
+                        <option value="true">General</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Status
+                      </label>
+                      <select
+                        value={newSubject.subject_status}
+                        onChange={(e) => setNewSubject({ ...newSubject, subject_status: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    Lec Hrs
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newSubject.subject_lec_hrs}
-                    step="0.5"
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_lec_hrs: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+
+                {/* Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <button
+                    onClick={() => { setShowAddModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
+                    className="flex-1 rounded-lg border border-slate-300 bg-white px-5 py-3 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 text-base min-h-[48px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddSubject}
+                    disabled={savingSubject}
+                    className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 text-base min-h-[48px]"
+                  >
+                    {savingSubject ? 'Saving...' : 'Save Subject'}
+                  </button>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                    Lab Hrs
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newSubject.subject_lab_hrs}
-                    step="0.5"
-                    onChange={(e) => setNewSubject({ ...newSubject, subject_lab_hrs: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  General / In scope
-                </label>
-                <select
-                  value={newSubject.is_general ? 'true' : 'false'}
-                  onChange={(e) => setNewSubject({ ...newSubject, is_general: e.target.value === 'true' })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="false">In scope</option>
-                  <option value="true">General</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                  Status
-                </label>
-                <select
-                  value={newSubject.subject_status}
-                  onChange={(e) => setNewSubject({ ...newSubject, subject_status: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-6">
-                <button
-                  onClick={() => { setShowAddModal(false); setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); }}
-                  className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddSubject}
-                  disabled={savingSubject}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {savingSubject ? 'Saving...' : 'Save Subject'}
-                </button>
               </div>
             </div>
           </div>
@@ -1680,7 +1701,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                   roomId={editingData.mth_room || null}
                   onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room: id || '' }))}
                   rooms={roomsArray}
-                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  getConflictingOfferings={getConflictingOfferings}
                   editingId={editingSubject?.subject_id ?? null}
                   isMissing={
                     editingSubject?._fromNotification &&
@@ -1701,7 +1722,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                   roomId={editingData.tfs_room || null}
                   onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room: id || '' }))}
                   rooms={roomsArray}
-                  getConflictingOfferings={getSubjectConflictingOfferings}
+                  getConflictingOfferings={getConflictingOfferings}
                   editingId={editingSubject?.subject_id ?? null}
                   isMissing={
                     editingSubject?._fromNotification &&
