@@ -77,7 +77,7 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
     issues.push({
       field_name: 'schedule',
       issue_type: 'missing',
-      severity: 'medium',
+      severity: 'high',
       message: 'No schedule assigned',
     });
   }
@@ -114,6 +114,11 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
         conflicting_subject_id: conflict.entityId,
       });
     }
+  }
+
+  const hasHigh = issues.some((i) => i.severity === 'high');
+  if (!hasHigh && issues.length >= 4) {
+    issues.forEach((i) => { i.severity = 'high'; });
   }
 
   return issues;

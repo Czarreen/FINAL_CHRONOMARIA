@@ -1981,15 +1981,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             <div className="px-6 py-5 space-y-4">
 
             {offeringError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
-                <AlertCircle size={18} />
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+                <AlertCircle size={16} />
                 {offeringError}
               </div>
             )}
 
             {editingFromNotification && (
-              <div className="mb-4 flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-                <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-amber-500" />
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-amber-500" />
                 <div>
                   <p className="font-semibold">Fixing missing data</p>
                   <p className="text-sm mt-1 text-amber-700">Filled fields are locked. Only highlighted fields need your attention.</p>
@@ -1998,91 +1998,75 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             )}
 
             {editingId && (
-              <div className="space-y-6">
-                {columnGroups.map((group) => (
-                  <div key={group.title} className={`space-y-4 rounded-xl ${group.color} p-5`}>
-                    <h4 className={`text-lg font-bold uppercase tracking-[0.2em] ${group.titleColor}`}>
-                      {group.title}
-                    </h4>
-                    {group.title === 'Schedule' ? (
-                      /* Schedule group: render structured card inputs instead of plain text fields */
-                      <div className="space-y-4">
-                        {(() => {
-                          const mthLocked = editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id');
-                          const tfsLocked = editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id');
-                          const mthMissing = editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'));
-                          const tfsMissing = editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'));
-                          return (
-                            <>
-                              <ScheduleCardInput
-                                slot="mth"
-                                value={mthCard}
-                                onChange={setMthCard}
-                                onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
-                                canDisable={tfsCard.enabled}
-                                roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
-                                onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
-                                rooms={rooms}
-                                getConflictingOfferings={getConflictingOfferings}
-                                editingId={editingId}
-                                isMissing={mthMissing}
-                                disabled={mthLocked}
-                              />
-                              <ScheduleCardInput
-                                slot="tfs"
-                                value={tfsCard}
-                                onChange={setTfsCard}
-                                onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
-                                canDisable={mthCard.enabled}
-                                roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
-                                onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
-                                rooms={rooms}
-                                getConflictingOfferings={getConflictingOfferings}
-                                editingId={editingId}
-                                isMissing={tfsMissing}
-                                disabled={tfsLocked}
-                              />
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        {group.columns.map((col) => {
-                          const isLocked = editableKeys !== null && !editableKeys.has(col.key);
-                          const isMissing = editableKeys !== null && editableKeys.has(col.key);
-                          return (
-                            <div key={col.key}>
-                              <label className={`mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] ${isLocked ? 'text-slate-400' : 'text-on-surface-variant/70'}`}>
-                                {col.label}
-                                {isLocked && <Lock size={12} className="text-slate-300" />}
-                                {isMissing && <span className="text-xs text-amber-600 font-bold normal-case tracking-normal">MISSING</span>}
-                              </label>
-                              {isLocked ? (
-                                <div className="flex items-center gap-2 w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-base text-slate-400 cursor-not-allowed select-none">
-                                  <Lock size={13} className="flex-shrink-0 text-slate-300" />
-                                  <span className="truncate">{(() => { const v = editingData[col.key]; return (v !== undefined && v !== null && v !== '' && v !== 0) ? String(v) : '—'; })()}</span>
-                                </div>
-                              ) : (
-                                <input
-                                  type={numericCols.has(col.key) ? 'number' : 'text'}
-                                  value={editingData[col.key] ?? ''}
-                                  onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                                  className={`w-full rounded-lg border px-4 py-3 text-base text-on-surface outline-none transition-all ${
-                                    isMissing
-                                      ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
-                                      : 'border-white/60 bg-white/70 focus:border-primary focus:ring-2 focus:ring-primary/20'
-                                  }`}
+              <div className="space-y-4">
+                {columnGroups.flatMap((group) =>
+                  group.title === 'Schedule'
+                    ? [
+                        <div key="schedule" className="space-y-3">
+                          {(() => {
+                            const mthLocked = editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id');
+                            const tfsLocked = editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id');
+                            const mthMissing = editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'));
+                            const tfsMissing = editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'));
+                            return (
+                              <>
+                                <ScheduleCardInput
+                                  slot="mth"
+                                  value={mthCard}
+                                  onChange={setMthCard}
+                                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                  canDisable={tfsCard.enabled}
+                                  roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
+                                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
+                                  rooms={rooms}
+                                  getConflictingOfferings={getConflictingOfferings}
+                                  editingId={editingId}
+                                  isMissing={mthMissing}
+                                  disabled={mthLocked}
                                 />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="flex gap-4 pt-6">
+                                <ScheduleCardInput
+                                  slot="tfs"
+                                  value={tfsCard}
+                                  onChange={setTfsCard}
+                                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                  canDisable={mthCard.enabled}
+                                  roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
+                                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
+                                  rooms={rooms}
+                                  getConflictingOfferings={getConflictingOfferings}
+                                  editingId={editingId}
+                                  isMissing={tfsMissing}
+                                  disabled={tfsLocked}
+                                />
+                              </>
+                            );
+                          })()}
+                        </div>,
+                      ]
+                    : group.columns.map((col) => {
+                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
+                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
+                        return (
+                          <div key={col.key}>
+                            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                              {col.label}
+                            </label>
+                            <input
+                              type={numericCols.has(col.key) ? 'number' : 'text'}
+                              value={editingData[col.key] ?? ''}
+                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
+                              disabled={isLocked}
+                              className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
+                                isMissing
+                                  ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
+                                  : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'
+                              }`}
+                            />
+                          </div>
+                        );
+                      })
+                )}
+                <div className="flex gap-3 pt-6">
                   <button
                     onClick={() => {
                       setEditingId(null);
@@ -2091,14 +2075,14 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                       setEditingFromNotification(false);
                       setNotificationMissingFields(new Set());
                     }}
-                    className="flex-1 rounded-lg border border-white/60 bg-white px-5 py-3 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 text-base min-h-[48px]"
+                    className="flex-1 rounded-lg border border-white/60 bg-white px-4 py-2.5 font-semibold text-on-surface-variant transition-colors hover:bg-slate-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveEdit}
                     disabled={savingOffering}
-                    className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 text-base min-h-[48px]"
+                    className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
                   >
                     {savingOffering ? 'Saving...' : 'Save Changes'}
                   </button>

@@ -323,13 +323,13 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     setNotificationsLoading(true);
     try {
       if (forceRescan) {
-        await rescanAllRoomNotifications();
+        await rescanAllRoomNotifications(true);
       }
 
       let data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
 
       if (!forceRescan && (data.total ?? 0) === 0) {
-        await rescanAllRoomNotifications();
+        await rescanAllRoomNotifications(false);
         data = await fetchRoomNotifications({ page: 1, limit: 200, unresolvedOnly: true });
       }
 

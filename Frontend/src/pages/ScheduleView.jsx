@@ -165,10 +165,19 @@ function timestampForFileName(date = new Date()) {
 
 function normalizeUnresolvedIssues(result) {
   const list = result?.unresolved || result?.unresolved_issues || result?.report?.unresolved_issues || [];
-  return Array.isArray(list) ? list : [];
+  const humanReview = result?.human_review || result?.report?.human_review || [];
+  const combined = [...(Array.isArray(list) ? list : []), ...(Array.isArray(humanReview) ? humanReview : [])];
+  const seen = new Set();
+  return combined.filter((item) => {
+    const key = item?.subject_id ?? item?.code ?? JSON.stringify(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function issueCategories(issue) {
+  if (issue?.reason_type === 'unresolvable_conflict') return ['Needs manual review'];
   if (issue?.conflict_type) {
     if (issue.conflict_type === 'section') return ['Time conflict'];
     if (issue.conflict_type === 'room') return ['Room conflict'];
@@ -553,6 +562,13 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
                   const isMerged = isMergedRow(row);
                   const isUnresolved = row.merged === 'unresolved';
                   const isPreserved = row.merged === 'preserved';
+                  if (row.schedule_missing) {
+                    return (
+                      <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200 self-start">
+                        No Schedule
+                      </span>
+                    );
+                  }
                   if (isUnresolved) {
                     return (
                       <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 self-start">

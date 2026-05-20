@@ -217,8 +217,12 @@ export async function fetchRoomNotifications({ page = 1, limit = 200, unresolved
   return res.json();
 }
 
-export async function rescanAllRoomNotifications() {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/rescan-all`, { method: 'POST' });
+export async function rescanAllRoomNotifications(force = false) {
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/rescan-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ force }),
+  });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to rescan room notifications: ${res.status}`);
@@ -227,7 +231,10 @@ export async function rescanAllRoomNotifications() {
 }
 
 export async function resolveRoomNotification(id) {
-  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/${id}/resolve`, { method: 'PATCH' });
+  const res = await fetch(`${API_BASE_URL}/api/notifications/rooms/${id}/resolve`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `Failed to resolve notification: ${res.status}`);

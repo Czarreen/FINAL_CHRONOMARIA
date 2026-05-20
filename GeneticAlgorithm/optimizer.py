@@ -1769,10 +1769,13 @@ def sched_build_conflict_report(
     chromosome: List[Tuple[int, int, int, int]],
     subjects: List[Dict[str, Any]],
     rooms: List[Dict[str, Any]],
+    pre_occ: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Build a list of room and section conflicts from the best chromosome.
 
     Tracks per-day rooms correctly: day1_room_idx on day1, day2_room_idx on day2.
+    pre_occ entries are seeded with label "_reserved_" so conflicts between new
+    GA assignments and preserved subjects are detected consistently with sched_evaluate.
     """
     conflicts: List[Dict[str, Any]] = []
     # Non-GYM rooms: standard slot tracking
@@ -1780,6 +1783,14 @@ def sched_build_conflict_report(
     # GYM rooms: per-dept tracking with (start, end, label, dept_id)
     gym_room_day_dept: Dict[str, List[Tuple[int, int, str, int]]] = {}
     section_day: Dict[str, List[Tuple[int, int, str]]] = {}
+
+    # Pre-populate from reserved (preserved) subjects using the same pre_occ structure
+    # as sched_evaluate so the conflict report is consistent with the fitness function.
+    if pre_occ:
+        for room_idx, day, start, end in pre_occ.get("room_entries", []):
+            room_day.setdefault(f"{room_idx}|{day}", []).append((start, end, "_reserved_"))
+        for sec_key, day, start, end in pre_occ.get("section_entries", []):
+            section_day.setdefault(f"{sec_key}|{day}", []).append((start, end, "_reserved_"))
 
     for si, gene in enumerate(chromosome):
         pat_idx, start, day1_room_idx, day2_room_idx = gene
@@ -2181,6 +2192,78 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     rng = random.Random(seed)
 
+    # ── Pre-flight: extract GENERAL subjects before GA touches anything ──────
+    # All general subjects are LOCKED — the GA must not auto-fill or modify them.
+    # GENERAL+SCHEDULED → kept in assignments output as-is (visual tag "General").
+    # GENERAL+EMPTY → same, but flagged with schedule_missing=True so the
+    #   frontend can warn the admin; they stay in the output so they are never
+    #   lost when the user later updates the course offering.
+    locked_general: List[Dict[str, Any]] = []
+    non_general_subjects: List[Dict[str, Any]] = []
+    for s in subjects:
+        if s.get("is_general"):
+            locked_general.append(s)
+        else:
+            non_general_subjects.append(s)
+    subjects = non_general_subjects
+
+    locked_general_assignments: List[Dict[str, Any]] = []
+    for s in locked_general:
+        mth_sched = s.get("mth_schedule")
+        tfs_sched = s.get("tfs_schedule")
+        is_empty  = not mth_sched and not tfs_sched
+        row: Dict[str, Any] = {
+            "subject_id":        to_number(s.get("subject_id")),
+            "source_subject_id": to_number(s.get("subject_id")),
+            "curr_id":           to_number(s.get("curr_id")),
+            "code":              normalize_text(s.get("code") or s.get("subject_code")),
+            "course_no":         normalize_text(s.get("course_no") or s.get("subject_course_no")),
+            "department_id":     to_number(s.get("department_id")),
+            "section":           normalize_text(s.get("section") or s.get("subject_section")),
+            "descriptive_title": normalize_text(s.get("descriptive_title") or s.get("subject_descriptive_title")),
+            "units":             to_number(s.get("units") or s.get("subject_units")),
+            "lec_hrs":           to_number(s.get("lec_hrs")),
+            "lab_hrs":           to_number(s.get("lab_hrs")),
+            "merged":            False,
+            "is_general":        True,
+            "mth_schedule":      mth_sched,
+            "mth_room_id":       s.get("mth_room_id"),
+            "mth_room_name":     normalize_text(s.get("mth_room_name") or ""),
+            "tfs_schedule":      tfs_sched,
+            "tfs_room_id":       s.get("tfs_room_id"),
+            "tfs_room_name":     normalize_text(s.get("tfs_room_name") or ""),
+        }
+        if is_empty:
+            row["schedule_missing"] = True
+        locked_general_assignments.append(row)
+
+    if locked_general:
+        print(
+            f"[GA-DIAG] locked_general={len(locked_general)} "
+            f"(empty={sum(1 for s in locked_general if not s.get('mth_schedule') and not s.get('tfs_schedule'))})",
+            flush=True,
+        )
+
+    # Merge LOCKED general subjects (SCHEDULED only) into pre_occ so the GA
+    # treats their time slots and rooms as hard constraints.
+    scheduled_locked_assignments = [
+        a for a in locked_general_assignments
+        if a.get("mth_schedule") or a.get("tfs_schedule")
+    ]
+    if scheduled_locked_assignments:
+        locked_pre_occ = _build_pre_occupied(scheduled_locked_assignments, rooms)
+        if pre_occ is None:
+            pre_occ = locked_pre_occ
+        else:
+            pre_occ["room_entries"].extend(locked_pre_occ["room_entries"])
+            pre_occ["section_entries"].extend(locked_pre_occ["section_entries"])
+        print(
+            f"[GA-DIAG] locked_general_constraints={len(scheduled_locked_assignments)} "
+            f"added room_entries={len(locked_pre_occ['room_entries'])} "
+            f"section_entries={len(locked_pre_occ['section_entries'])}",
+            flush=True,
+        )
+
     # ── Section capacity triage ───────────────────────────────────────────────
     # Each section can hold at most 10 hrs (600 min) per pattern day × 2 patterns
     # = 1200 min total.  Subjects that exceed this budget for their section are
@@ -2226,6 +2309,28 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"{len(subjects)+len(deferred_subjects)} deferred={len(deferred_subjects)}",
             flush=True,
         )
+
+    # If all subjects were general (LOCKED), skip the GA entirely.
+    if not subjects:
+        return {
+            "assignments":     locked_general_assignments,
+            "unresolved":      [],
+            "human_review":    [],
+            "fitness_overall": 100.0,
+            "fitness_hard":    100.0,
+            "fitness_soft":    100.0,
+            "generations":     0,
+            "runtime_ms":      int((time.perf_counter() - started) * 1000),
+            "run_id":          sha1(
+                json.dumps({"seed": seed, "n": 0}, sort_keys=True).encode()
+            ).hexdigest()[:16],
+            "constraints":     constraints,
+            "report": {
+                "summary":        "All subjects are general (locked) — no GA run needed.",
+                "conflicts":      [],
+                "conflict_count": 0,
+            },
+        }
 
     # Seed population: one greedy start + random fill.
     # Multiple greedy starts were tested but the init overhead cut into the GA time budget.
@@ -2298,7 +2403,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[GA-DIAG] repair skipped (time_remaining={time_remaining:.1f}s)", flush=True)
 
     assignments = sched_chromosome_to_assignments(best, subjects, rooms)
-    conflicts   = sched_build_conflict_report(best, subjects, rooms)
+    conflicts   = sched_build_conflict_report(best, subjects, rooms, pre_occ=pre_occ)
     # sched_evaluate already returns (overall, hard_score, soft_score) all in 0–100
     overall, hard_score, soft_score = best_score, best_hard, best_soft
 
@@ -2320,8 +2425,9 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     ]
 
     return {
-        "assignments":     assignments,
+        "assignments":     locked_general_assignments + assignments,
         "unresolved":      unresolved,
+        "human_review":    [],
         "fitness_overall": round(overall, 2),
         "fitness_hard":    round(hard_score, 2),
         "fitness_soft":    round(soft_score, 2),

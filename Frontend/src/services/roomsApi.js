@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authContext.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function fetchRoomsPage(page = 1, limit = 50) {
@@ -26,7 +28,7 @@ export async function fetchRooms({ page = 1, limit = 50, search = '' } = {}) {
 export async function createRoom({ room_name, room_type, room_status = 'available', room_department_id } = {}) {
   const response = await fetch(`${API_BASE_URL}/api/rooms`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ room_name, room_type, room_status, room_department_id }),
   });
 
@@ -47,7 +49,7 @@ export async function createRoom({ room_name, room_type, room_status = 'availabl
 export async function updateRoom(room_id, { room_name, room_type, room_status, room_department_id } = {}) {
   const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ room_name, room_type, room_status, room_department_id }),
   });
 
@@ -68,7 +70,7 @@ export async function updateRoom(room_id, { room_name, room_type, room_status, r
 export async function deleteRoom(room_id) {
   const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
@@ -82,6 +84,19 @@ export async function deleteRoom(room_id) {
   }
 
   return payload;
+}
+
+// GET - All room bookings across both tables for conflict detection
+export async function fetchRoomBookings() {
+  const response = await fetch(`${API_BASE_URL}/api/rooms/bookings`);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload.rows) ? payload.rows : [];
 }
 
 // GET - Fetch all course offerings for a room
