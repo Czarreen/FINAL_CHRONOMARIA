@@ -257,7 +257,7 @@ export default function SettingsView({ currentUser, onUserUpdate }) {
   const settingsTitle = isUsersPanel ? 'User Administration' : 'Audit Logs';
   const settingsDescription = isUsersPanel
     ? 'Manage app users, update credentials, change roles, and deactivate accounts from one place.'
-    : 'Review authentication and user administration activity from the existing audit log.';
+    : 'Review authentication, administration, course offering, and room activity from the existing audit log.';
 
   // Admin personalized settings view
   if (isAdmin) {

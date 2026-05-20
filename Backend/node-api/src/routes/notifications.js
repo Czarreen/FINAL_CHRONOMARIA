@@ -7,6 +7,30 @@ import { findConflictingSchedules, isRoomGym, parseScheduleString, timeRangesOve
 
 const router = Router();
 const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
+const ROOMS_AUDIT_MODULE = 'rooms';
+
+async function fetchRoomForNotificationAudit(roomId) {
+  const { data, error } = await supabaseAdmin
+    .from('rooms')
+    .select('room_id, room_name, room_type, room_status, room_department_id')
+    .eq('room_id', roomId)
+    .limit(1);
+
+  if (error) {
+    console.error('Room audit lookup error:', error.message);
+    return null;
+  }
+
+  return data?.[0] || null;
+}
+
+function formatRoomAuditLabel(room = {}, fallbackId = null) {
+  const roomId = room?.room_id ?? fallbackId;
+  const roomName = String(room?.room_name || '').trim();
+  if (roomName && roomId) return `${roomName} (#${roomId})`;
+  if (roomName) return roomName;
+  return `Room #${roomId || 'unknown'}`;
+}
 
 // GET /api/notifications/course-offerings
 router.get('/course-offerings', async (req, res) => {
@@ -317,8 +341,9 @@ router.get('/rooms', async (req, res) => {
 });
 
 // POST /api/notifications/rooms/rescan-all
-router.post('/rooms/rescan-all', async (_req, res) => {
+router.post('/rooms/rescan-all', async (req, res) => {
   try {
+    const force = req.body?.force === true || req.query?.force === 'true';
     const { data: roomRows, error: fetchErr } = await supabaseAdmin
       .from('rooms')
       .select('room_id');
@@ -328,7 +353,18 @@ router.post('/rooms/rescan-all', async (_req, res) => {
     const { error: refreshErr } = await supabaseAdmin.rpc('refresh_all_room_notifications');
     if (refreshErr) return res.status(500).json({ error: refreshErr.message });
 
-    return res.json({ scanned: (roomRows || []).length, refreshed: true });
+    const scanned = (roomRows || []).length;
+
+    if (force) {
+      await recordAuditLog(req, {
+        action: 'room_notifications_rescanned',
+        module: ROOMS_AUDIT_MODULE,
+        description: `Rescanned room notifications (${scanned} room(s) scanned)`,
+        changes_after: { force, scanned, refreshed: true },
+      });
+    }
+
+    return res.json({ scanned, refreshed: true });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
@@ -363,14 +399,35 @@ router.patch('/rooms/:id/resolve', async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('data_quality_notifications')
+      .select('id, entity_type, entity_id, field_name, issue_type, severity, message, details, is_resolved, created_at, updated_at')
+      .eq('entity_type', 'room')
+      .eq('entity_id', id)
+      .eq('is_resolved', false);
+
+    if (existingError) return res.status(500).json({ error: existingError.message });
+    if (!existingRows || existingRows.length === 0) return res.status(404).json({ error: 'Notification not found' });
+
     const resp = await supabaseAdmin
       .from('data_quality_notifications')
       .update({ is_resolved: true, updated_at: new Date().toISOString() })
       .eq('entity_type', 'room')
       .eq('entity_id', id)
-      .eq('is_resolved', false);
+      .eq('is_resolved', false)
+      .select('id, entity_type, entity_id, field_name, issue_type, severity, message, details, is_resolved, created_at, updated_at');
 
     if (resp.error) return res.status(500).json({ error: resp.error.message });
+    const room = await fetchRoomForNotificationAudit(id);
+
+    await recordAuditLog(req, {
+      action: 'room_notification_resolved',
+      module: ROOMS_AUDIT_MODULE,
+      description: `Resolved room notification for ${formatRoomAuditLabel(room, id)}`,
+      changes_before: existingRows,
+      changes_after: resp.data ?? { entity_type: 'room', entity_id: id, resolved_count: existingRows.length },
+    });
+
     return res.json({ updated: resp.data });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
