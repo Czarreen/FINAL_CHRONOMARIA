@@ -1,6 +1,8 @@
 import { supabaseAdmin } from './supabase.js';
 
 const SENSITIVE_KEYS = new Set(['password', 'password_hash']);
+const MAX_AUDIT_LOGS = 1000;
+const AUDIT_PRUNE_BATCH_SIZE = 500;
 
 function toHeaderString(value) {
   if (Array.isArray(value)) return String(value[0] || '').trim();
@@ -61,6 +63,59 @@ export function sanitizeAuditChanges(value) {
   return cleanChanges(value);
 }
 
+export async function pruneAuditLogsToLimit(limit = MAX_AUDIT_LOGS) {
+  try {
+    const safeLimit = Math.max(1, Number(limit) || MAX_AUDIT_LOGS);
+    const { count, error: countError } = await supabaseAdmin
+      .from('audit_logs')
+      .select('id', { count: 'exact', head: true });
+
+    if (countError) {
+      console.error('[audit] prune count failed:', countError.message);
+      return 0;
+    }
+
+    let remainingOverflow = Number(count ?? 0) - safeLimit;
+    let deletedCount = 0;
+
+    while (remainingOverflow > 0) {
+      const batchSize = Math.min(remainingOverflow, AUDIT_PRUNE_BATCH_SIZE);
+      const { data: oldestRows, error: selectError } = await supabaseAdmin
+        .from('audit_logs')
+        .select('id')
+        .order('timestamp', { ascending: true })
+        .order('created_at', { ascending: true })
+        .range(0, batchSize - 1);
+
+      if (selectError) {
+        console.error('[audit] prune select failed:', selectError.message);
+        break;
+      }
+
+      const ids = (oldestRows ?? []).map((row) => row.id).filter(Boolean);
+      if (ids.length === 0) break;
+
+      const { error: deleteError } = await supabaseAdmin
+        .from('audit_logs')
+        .delete()
+        .in('id', ids);
+
+      if (deleteError) {
+        console.error('[audit] prune delete failed:', deleteError.message);
+        break;
+      }
+
+      deletedCount += ids.length;
+      remainingOverflow -= ids.length;
+    }
+
+    return deletedCount;
+  } catch (error) {
+    console.error('[audit] prune failed:', error);
+    return 0;
+  }
+}
+
 export async function recordAuditLog(req, entry = {}) {
   try {
     const actor = getAuditActor(req);
@@ -83,7 +138,10 @@ export async function recordAuditLog(req, entry = {}) {
     const { error } = await supabaseAdmin.from('audit_logs').insert(payload);
     if (error) {
       console.error('[audit] insert failed:', error.message);
+      return;
     }
+
+    await pruneAuditLogsToLimit();
   } catch (error) {
     console.error('[audit] insert failed:', error);
   }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
-import { recordAuditLog, requireSuperAdmin } from '../lib/auditLogger.js';
+import { pruneAuditLogsToLimit, recordAuditLog, requireSuperAdmin } from '../lib/auditLogger.js';
 
 const router = Router();
 const AUDIT_SORT_COLUMNS = new Set(['timestamp', 'username', 'action', 'module', 'description', 'status']);
@@ -107,6 +107,8 @@ router.delete('/older-than-30-days', requireSuperAdmin, async (req, res) => {
 
 router.get('/', requireSuperAdmin, async (req, res) => {
   try {
+    await pruneAuditLogsToLimit();
+
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 25)));
     const from = (page - 1) * limit;
