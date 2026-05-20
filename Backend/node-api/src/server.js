@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
 import departmentsRouter from './routes/departments.js';
 import facultyRouter from './routes/faculty.js';
+import facultySubjectPreferencesRouter from './routes/facultySubjectPreferences.js';
 import roomsRouter from './routes/rooms.js';
 import subjectsRouter from './routes/subjects.js';
 import notificationsRouter from './routes/notifications.js';
@@ -34,6 +35,7 @@ app.use('/api/course-offerings/import-csv', (req, res, next) => {
 });
 
 app.use('/api/faculty', facultyRouter);
+app.use('/api/faculty', facultySubjectPreferencesRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/course-offerings', courseOfferingsRouter);
