@@ -6,6 +6,7 @@ import sys
 # Force UTF-8 line-buffered stdout so print() appears immediately in run.py terminal
 sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 
+import functools
 import json
 import math
 import os
