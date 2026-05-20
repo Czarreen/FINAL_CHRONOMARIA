@@ -2169,6 +2169,26 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             flush=True,
         )
 
+    # Merge LOCKED general subjects (SCHEDULED only) into pre_occ so the GA
+    # treats their time slots and rooms as hard constraints.
+    scheduled_locked_assignments = [
+        a for a in locked_general_assignments
+        if a.get("mth_schedule") or a.get("tfs_schedule")
+    ]
+    if scheduled_locked_assignments:
+        locked_pre_occ = _build_pre_occupied(scheduled_locked_assignments, rooms)
+        if pre_occ is None:
+            pre_occ = locked_pre_occ
+        else:
+            pre_occ["room_entries"].extend(locked_pre_occ["room_entries"])
+            pre_occ["section_entries"].extend(locked_pre_occ["section_entries"])
+        print(
+            f"[GA-DIAG] locked_general_constraints={len(scheduled_locked_assignments)} "
+            f"added room_entries={len(locked_pre_occ['room_entries'])} "
+            f"section_entries={len(locked_pre_occ['section_entries'])}",
+            flush=True,
+        )
+
     # ── Section capacity triage ───────────────────────────────────────────────
     # Each section can hold at most 10 hrs (600 min) per pattern day × 2 patterns
     # = 1200 min total.  Subjects that exceed this budget for their section are

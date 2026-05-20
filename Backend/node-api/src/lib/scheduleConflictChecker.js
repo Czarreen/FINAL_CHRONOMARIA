@@ -1,199 +1,238 @@
+// Day aliases — Wednesday intentionally excluded (not a scheduling day).
 const DAY_ALIASES = new Map([
-  ['M', 'MON'],
-  ['MON', 'MON'],
-  ['MONDAY', 'MON'],
-  ['T', 'TUE'],
-  ['TU', 'TUE'],
-  ['TUE', 'TUE'],
-  ['TUES', 'TUE'],
-  ['TUESDAY', 'TUE'],
-  ['W', 'WED'],
-  ['WED', 'WED'],
-  ['WEDNESDAY', 'WED'],
-  ['TH', 'THU'],
-  ['THU', 'THU'],
-  ['THUR', 'THU'],
-  ['THURS', 'THU'],
+  ['M',        'MON'],
+  ['MON',      'MON'],
+  ['MONDAY',   'MON'],
+  ['T',        'TUE'],
+  ['TU',       'TUE'],
+  ['TUE',      'TUE'],
+  ['TUES',     'TUE'],
+  ['TUESDAY',  'TUE'],
+  ['TH',       'THU'],
+  ['THU',      'THU'],
+  ['THUR',     'THU'],
+  ['THURS',    'THU'],
   ['THURSDAY', 'THU'],
-  ['F', 'FRI'],
-  ['FRI', 'FRI'],
-  ['FRIDAY', 'FRI'],
-  ['SAT', 'SAT'],
+  ['F',        'FRI'],
+  ['FRI',      'FRI'],
+  ['FRIDAY',   'FRI'],
+  ['SAT',      'SAT'],
   ['SATURDAY', 'SAT'],
-  ['S', 'SAT'],
+  ['S',        'SAT'],
 ]);
+
+// Sorted canonical day order (used to keep outputs deterministic).
+const DAY_ORDER = ['MON', 'TUE', 'THU', 'FRI', 'SAT'];
 
 function normalizeUpper(value) {
   return String(value ?? '').trim().toUpperCase();
 }
 
-export function parseScheduleString(scheduleText, scheduleType = null) {
-  if (!scheduleText || scheduleText.trim() === '') {
-    return null;
-  }
+// Convert "4:30 PM" → "16:30", "12:30 AM" → "00:30". Leaves 24-hour strings unchanged.
+function normalizeAmPm(str) {
+  return String(str ?? '').replace(/(\d{1,2}):(\d{2})\s*(AM|PM)/gi, (_, h, m, meridiem) => {
+    let hours = Number(h);
+    if (/pm/i.test(meridiem) && hours !== 12) hours += 12;
+    if (/am/i.test(meridiem) && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${m}`;
+  });
+}
 
-  const text = normalizeUpper(scheduleText);
-  const compact = text.replace(/[^A-Z:0-9]/g, ' ').trim();
+// Convert "HH:MM" to minutes since midnight, applying the 1–5 PM heuristic
+// (hours 1–5 without an explicit meridiem must be PM — no class starts at 1–5 AM).
+export function timeToMinutes(timeStr) {
+  if (!timeStr || !timeStr.includes(':')) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  let hours = h;
+  if (hours >= 1 && hours <= 5) hours += 12;
+  return hours * 60 + m;
+}
+
+// Parse a single schedule block string (no commas) into { days, startMin, endMin }.
+// scheduleType ('mth'|'tfs') is used as fallback when no day token is found.
+function parseTimeBlock(blockStr, scheduleType) {
+  const withAmPm = normalizeAmPm(blockStr);
+  // Strip everything except letters, digits, colons, spaces
+  const compact = withAmPm.toUpperCase().replace(/[^A-Z:0-9]/g, ' ').trim();
   const parts = compact.split(/\s+/);
 
   const days = new Set();
-  let timeRange = null;
+  let startMin = null;
+  let endMin = null;
 
   for (const part of parts) {
-    if (part === 'MTH') {
-      days.add('MON');
-      days.add('THU');
-      continue;
-    }
-    if (part === 'TFS') {
-      days.add('TUE');
-      days.add('FRI');
-      days.add('SAT');
-      continue;
-    }
+    if (part === 'MTH') { days.add('MON'); days.add('THU'); continue; }
+    if (part === 'TFS') { days.add('TUE'); days.add('FRI'); days.add('SAT'); continue; }
+    if (DAY_ALIASES.has(part)) { days.add(DAY_ALIASES.get(part)); continue; }
 
-    if (DAY_ALIASES.has(part)) {
-      days.add(DAY_ALIASES.get(part));
-      continue;
-    }
-
-    if (part.match(/^\d{1,2}:\d{2}$/)) {
-      if (!timeRange) {
-        timeRange = { startTime: part };
-      } else if (!timeRange.endTime) {
-        timeRange.endTime = part;
-      }
+    if (/^\d{1,2}:\d{2}$/.test(part)) {
+      const mins = timeToMinutes(part);
+      if (startMin === null) { startMin = mins; }
+      else if (endMin === null) { endMin = mins; }
       continue;
     }
   }
 
   if (days.size === 0) {
-    if (timeRange?.startTime && scheduleType === 'mth') {
-      days.add('MON');
-      days.add('THU');
-    } else if (timeRange?.startTime && scheduleType === 'tfs') {
-      days.add('TUE');
-      days.add('FRI');
-      days.add('SAT');
-    } else {
-      return null;
+    if (scheduleType === 'mth') { days.add('MON'); days.add('THU'); }
+    else if (scheduleType === 'tfs') { days.add('TUE'); days.add('FRI'); days.add('SAT'); }
+  }
+
+  if (days.size === 0 || startMin === null || endMin === null) return null;
+  return {
+    days: [...days].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)),
+    startMin,
+    endMin,
+  };
+}
+
+// Split room text on "/" and return non-empty trimmed tokens.
+function parseRoomsFromText(roomText) {
+  if (!roomText) return [];
+  return String(roomText).split('/').map((r) => r.trim()).filter(Boolean);
+}
+
+// Detect Variant B: "HH:MM-HH:MM DAY Lec/HH:MM-HH:MM DAY Lab" aligned-pair format.
+// Both halves separated by "/" must independently look like schedule strings.
+// Returns [halfA, halfB] if detected, null otherwise.
+function detectVariantB(blockStr) {
+  const slashIdx = blockStr.indexOf('/');
+  if (slashIdx === -1) return null;
+  const halfA = blockStr.slice(0, slashIdx).trim();
+  const halfB = blockStr.slice(slashIdx + 1).trim();
+  // Both halves must contain a time range pattern (HH:MM-HH:MM or HH:MM–HH:MM)
+  const timePattern = /\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}/;
+  if (timePattern.test(halfA) && timePattern.test(halfB)) return [halfA, halfB];
+  return null;
+}
+
+// Expand a single schedule entry (text + room string) into atomic records.
+// Returns Array<{ day, startMin, endMin, room }>.
+// scheduleType ('mth'|'tfs') provides day-pair fallback when no day is in the text.
+function toAtomicRecords(scheduleText, roomText, scheduleType) {
+  if (!scheduleText) return [];
+
+  const rooms = parseRoomsFromText(roomText);
+  const records = [];
+
+  // Split on "," to handle multiple time blocks in a single column value.
+  const rawBlocks = String(scheduleText).split(',');
+
+  for (const rawBlock of rawBlocks) {
+    const block = rawBlock.trim();
+    if (!block) continue;
+
+    // Check for Variant B: two schedule halves zipped with two rooms.
+    const variantB = detectVariantB(block);
+    if (variantB) {
+      const [halfA, halfB] = variantB;
+      const parsedA = parseTimeBlock(halfA, scheduleType);
+      const parsedB = parseTimeBlock(halfB, scheduleType);
+      // Zip days and rooms by index (not cartesian product).
+      // halfA days → rooms[0], halfB days → rooms[1] (if rooms list is provided separately).
+      // When rooms are embedded in the schedule halves they will appear as single-element.
+      // Fall back to cartesian if room count doesn't match segment count.
+      const roomsA = rooms.length >= 1 ? [rooms[0]] : [];
+      const roomsB = rooms.length >= 2 ? [rooms[1]] : (rooms.length === 1 ? [rooms[0]] : []);
+      if (parsedA) {
+        const effectiveRoomsA = roomsA.length > 0 ? roomsA : [''];
+        for (const day of parsedA.days) {
+          for (const room of effectiveRoomsA) {
+            records.push({ day, startMin: parsedA.startMin, endMin: parsedA.endMin, room });
+          }
+        }
+      }
+      if (parsedB) {
+        const effectiveRoomsB = roomsB.length > 0 ? roomsB : [''];
+        for (const day of parsedB.days) {
+          for (const room of effectiveRoomsB) {
+            records.push({ day, startMin: parsedB.startMin, endMin: parsedB.endMin, room });
+          }
+        }
+      }
+      continue;
+    }
+
+    // Variant A (default): cartesian product of days × rooms.
+    const parsed = parseTimeBlock(block, scheduleType);
+    if (!parsed) continue;
+    const effectiveRooms = rooms.length > 0 ? rooms : [''];
+    for (const day of parsed.days) {
+      for (const room of effectiveRooms) {
+        records.push({ day, startMin: parsed.startMin, endMin: parsed.endMin, room });
+      }
     }
   }
 
-  return {
-    days: Array.from(days).sort(),
-    startTime: timeRange?.startTime || null,
-    endTime: timeRange?.endTime || null,
-  };
+  // Deduplicate identical records.
+  const seen = new Set();
+  return records.filter(({ day, startMin, endMin, room }) => {
+    const key = `${day}|${startMin}|${endMin}|${room}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-export function timeToMinutes(timeStr) {
-  if (!timeStr || !timeStr.includes(':')) {
-    return null;
-  }
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-    return null;
-  }
-  return hours * 60 + minutes;
+// Expand an entity's mth and tfs slots into a flat list of atomic records,
+// filtering out any records whose room is a gym room.
+function expandEntityToRecords(entity, gymRoomIds) {
+  const mthRecords = toAtomicRecords(
+    entity.mth_schedule,
+    entity.mth_room_id ?? entity.mth_room,
+    'mth'
+  );
+  const tfsRecords = toAtomicRecords(
+    entity.tfs_schedule,
+    entity.tfs_room_id ?? entity.tfs_room,
+    'tfs'
+  );
+  return [...mthRecords, ...tfsRecords].filter(
+    ({ room }) => room && !isGymRoomValue(room, gymRoomIds)
+  );
 }
 
-export function timeRangesOverlap(time1Start, time1End, time2Start, time2End) {
-  const t1Start = timeToMinutes(time1Start);
-  const t1End = timeToMinutes(time1End);
-  const t2Start = timeToMinutes(time2Start);
-  const t2End = timeToMinutes(time2End);
-
-  if (t1Start === null || t1End === null || t2Start === null || t2End === null) {
-    return false;
-  }
-
-  return t1Start < t2End && t2Start < t1End;
+export function isRoomGym(roomName) {
+  if (!roomName) return false;
+  return normalizeUpper(roomName).includes('GYM');
 }
 
-export function schedulesConflict(schedule1, schedule2) {
-  if (!schedule1 || !schedule2) {
-    return { conflicts: false, conflictingDays: [] };
-  }
-
-  if (!schedule1.startTime || !schedule1.endTime || !schedule2.startTime || !schedule2.endTime) {
-    return { conflicts: false, conflictingDays: [] };
-  }
-
-  if (!timeRangesOverlap(schedule1.startTime, schedule1.endTime, schedule2.startTime, schedule2.endTime)) {
-    return { conflicts: false, conflictingDays: [] };
-  }
-
-  const conflictingDays = schedule1.days.filter(day => schedule2.days.includes(day));
-
-  return {
-    conflicts: conflictingDays.length > 0,
-    conflictingDays: conflictingDays,
-  };
-}
-
-function parseRoomIds(roomValue) {
-  if (!roomValue) return [];
-  const str = String(roomValue).trim();
-  if (!str) return [];
-  return str.split('/').map(r => r.trim()).filter(r => r !== '');
-}
-
-function roomsShareId(rooms1, rooms2) {
-  const ids1 = new Set(parseRoomIds(rooms1));
-  const ids2 = new Set(parseRoomIds(rooms2));
-  for (const id of ids1) {
-    if (ids2.has(id)) return true;
-  }
-  return false;
-}
-
-// Checks if a room value (either a name string or a numeric ID) is a gym.
-// gymRoomIds is a Set<string> of IDs for course offerings; name-based fallback for subjects.
 function isGymRoomValue(roomValue, gymRoomIds) {
   if (gymRoomIds && gymRoomIds.size > 0) {
-    const ids = parseRoomIds(String(roomValue));
-    if (ids.some((id) => gymRoomIds.has(id))) return true;
+    const tokens = String(roomValue).split('/').map((r) => r.trim());
+    if (tokens.some((id) => gymRoomIds.has(id))) return true;
   }
   return isRoomGym(roomValue);
 }
 
-// Returns true when two offerings occupy exactly the same physical slot —
-// identical schedule strings AND at least one shared room ID.
-// Same room + same time = merged, regardless of course number, title, dept, or curriculum.
 function isMergedSubject(entity, other) {
   const norm = (s) => String(s || '').trim().toUpperCase();
-
   const mthA = norm(entity.mth_schedule);
   const mthB = norm(other.mth_schedule);
   const tfsA = norm(entity.tfs_schedule);
   const tfsB = norm(other.tfs_schedule);
-
-  // Must have at least one schedule on the entity side to compare
   if (!mthA && !tfsA) return false;
-
-  // Schedules must match exactly (same days and same time window)
   if (mthA !== mthB || tfsA !== tfsB) return false;
 
-  // Rooms must share at least one ID — use roomsShareId so slash-separated
-  // multi-room values like "42/43" are compared element-by-element.
-  const mthRoomEntity = entity.mth_room_id || entity.mth_room;
-  const mthRoomOther = other.mth_room_id || other.mth_room;
-  const tfsRoomEntity = entity.tfs_room_id || entity.tfs_room;
-  const tfsRoomOther = other.tfs_room_id || other.tfs_room;
+  const mthRoomEntity = entity.mth_room_id ?? entity.mth_room;
+  const mthRoomOther  = other.mth_room_id  ?? other.mth_room;
+  const tfsRoomEntity = entity.tfs_room_id ?? entity.tfs_room;
+  const tfsRoomOther  = other.tfs_room_id  ?? other.tfs_room;
 
-  // If entity has an MTH room, other must share at least one of those IDs
-  if (mthRoomEntity && !roomsShareId(mthRoomEntity, mthRoomOther)) return false;
-  // If entity has a TFS room, other must share at least one of those IDs
-  if (tfsRoomEntity && !roomsShareId(tfsRoomEntity, tfsRoomOther)) return false;
+  const sharesRoom = (r1, r2) => {
+    if (!r1 || !r2) return false;
+    const s1 = new Set(String(r1).split('/').map((r) => r.trim()));
+    const s2 = new Set(String(r2).split('/').map((r) => r.trim()));
+    for (const id of s1) { if (s2.has(id)) return true; }
+    return false;
+  };
 
+  if (mthRoomEntity && !sharesRoom(mthRoomEntity, mthRoomOther)) return false;
+  if (tfsRoomEntity && !sharesRoom(tfsRoomEntity, tfsRoomOther)) return false;
   return true;
 }
 
-// Returns true when two offerings are sections of the same course —
-// same curriculum, same department, and same course number.
-// Staggered lab sections intentionally share rooms at different times; this is not a conflict.
-// Supports both course offerings (course_no) and subjects (subject_course_no).
 function isSameCourseSection(entity, other) {
   if (!entity.curr_id || !entity.department_id) return false;
   const courseNo = entity.course_no || entity.subject_course_no;
@@ -207,103 +246,98 @@ function isSameCourseSection(entity, other) {
 }
 
 export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRoomIds = new Set()) {
-  if (isEntityGym) {
-    return [];
-  }
+  if (isEntityGym) return [];
+
+  const entityRecords = expandEntityToRecords(entity, gymRoomIds);
+  if (entityRecords.length === 0) return [];
 
   const conflictingEntities = [];
 
-  const mthSchedule = parseScheduleString(entity.mth_schedule, 'mth');
-  const tfsSchedule = parseScheduleString(entity.tfs_schedule, 'tfs');
-  const mthRoom = entity.mth_room_id || entity.mth_room;
-  const tfsRoom = entity.tfs_room_id || entity.tfs_room;
-
   for (const other of allEntities) {
-    // Skip self-comparison using the primary key that is actually defined for this entity type.
-    // Course offerings use `id`; subjects use `subject_id`. Using the wrong field causes
-    // `undefined === undefined → true`, which silently skips ALL comparisons.
     if (entity.id !== undefined) {
       if (other.id === entity.id) continue;
     } else if (entity.subject_id !== undefined) {
       if (other.subject_id === entity.subject_id) continue;
     }
 
-    // Skip merged subjects — same class offered under different curricula/departments.
-    // They intentionally share the same room and schedule, so they are not real conflicts.
-    // Also skip staggered lab sections — same course (same curr_id + dept + course_no)
-    // sharing a room at different (but overlapping) times; this is intentional scheduling.
     if (isMergedSubject(entity, other) || isSameCourseSection(entity, other)) continue;
 
-    // Skip gym rooms in the other entity (they can host multiple subjects simultaneously).
-    // isGymRoomValue handles both ID-based (course offerings) and name-based (subjects) detection.
-    const isOtherMthGym = isGymRoomValue(other.mth_room_id || other.mth_room, gymRoomIds);
-    const isOtherTfsGym = isGymRoomValue(other.tfs_room_id || other.tfs_room, gymRoomIds);
+    const otherRecords = expandEntityToRecords(other, gymRoomIds);
+    if (otherRecords.length === 0) continue;
 
-    // Same-type: entity's MTH room vs other's MTH room
-    if (mthRoom && !isOtherMthGym && roomsShareId(mthRoom, other.mth_room_id || other.mth_room)) {
-      const otherMthSchedule = parseScheduleString(other.mth_schedule, 'mth');
-      const conflict = schedulesConflict(mthSchedule, otherMthSchedule);
-      if (conflict.conflicts) {
-        conflictingEntities.push({
-          entityId: other.id || other.subject_id,
-          entityCode: other.code || other.subject_code,
-          schedule: 'MTH',
-          conflictingDays: conflict.conflictingDays,
-          room: mthRoom,
-        });
+    const conflictingDaysSet = new Set();
+    let conflictRoom = null;
+
+    for (const eRec of entityRecords) {
+      for (const oRec of otherRecords) {
+        if (
+          eRec.day === oRec.day &&
+          eRec.room === oRec.room &&
+          eRec.room !== '' &&
+          eRec.startMin < oRec.endMin &&
+          oRec.startMin < eRec.endMin
+        ) {
+          conflictingDaysSet.add(eRec.day);
+          conflictRoom = eRec.room;
+        }
       }
     }
 
-    // Same-type: entity's TFS room vs other's TFS room
-    if (tfsRoom && !isOtherTfsGym && roomsShareId(tfsRoom, other.tfs_room_id || other.tfs_room)) {
-      const otherTfsSchedule = parseScheduleString(other.tfs_schedule, 'tfs');
-      const conflict = schedulesConflict(tfsSchedule, otherTfsSchedule);
-      if (conflict.conflicts) {
-        conflictingEntities.push({
-          entityId: other.id || other.subject_id,
-          entityCode: other.code || other.subject_code,
-          schedule: 'TFS',
-          conflictingDays: conflict.conflictingDays,
-          room: tfsRoom,
-        });
-      }
-    }
+    if (conflictingDaysSet.size > 0) {
+      const conflictingDays = [...conflictingDaysSet].sort(
+        (a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)
+      );
+      // Determine which slot (MTH or TFS) the conflict falls in for the message.
+      const firstConflictDay = conflictingDays[0];
+      const schedule = ['MON', 'THU'].includes(firstConflictDay) ? 'MTH' : 'TFS';
 
-    // Cross-type: entity's MTH room vs other's TFS room (handles non-standard day combos)
-    if (mthRoom && !isOtherTfsGym && roomsShareId(mthRoom, other.tfs_room_id || other.tfs_room)) {
-      const otherTfsSchedule = parseScheduleString(other.tfs_schedule, 'tfs');
-      const conflict = schedulesConflict(mthSchedule, otherTfsSchedule);
-      if (conflict.conflicts) {
-        conflictingEntities.push({
-          entityId: other.id || other.subject_id,
-          entityCode: other.code || other.subject_code,
-          schedule: 'MTH',
-          conflictingDays: conflict.conflictingDays,
-          room: mthRoom,
-        });
-      }
-    }
-
-    // Cross-type: entity's TFS room vs other's MTH room (handles non-standard day combos)
-    if (tfsRoom && !isOtherMthGym && roomsShareId(tfsRoom, other.mth_room_id || other.mth_room)) {
-      const otherMthSchedule = parseScheduleString(other.mth_schedule, 'mth');
-      const conflict = schedulesConflict(tfsSchedule, otherMthSchedule);
-      if (conflict.conflicts) {
-        conflictingEntities.push({
-          entityId: other.id || other.subject_id,
-          entityCode: other.code || other.subject_code,
-          schedule: 'TFS',
-          conflictingDays: conflict.conflictingDays,
-          room: tfsRoom,
-        });
-      }
+      conflictingEntities.push({
+        entityId: other.id ?? other.subject_id,
+        entityCode: other.code ?? other.subject_code,
+        schedule,
+        conflictingDays,
+        room: conflictRoom,
+      });
     }
   }
 
   return conflictingEntities;
 }
 
-export function isRoomGym(roomName) {
-  if (!roomName) return false;
-  return normalizeUpper(roomName).includes('GYM');
+// --- Legacy-compatible exports (keep existing callers working) ---
+
+// Kept for any callers that use the old string-based parse.
+// Returns a simplified object; use toAtomicRecords for full atomic expansion.
+export function parseScheduleString(scheduleText, scheduleType = null) {
+  if (!scheduleText || String(scheduleText).trim() === '') return null;
+  const records = toAtomicRecords(scheduleText, '', scheduleType);
+  if (records.length === 0) return null;
+  const days = [...new Set(records.map((r) => r.day))].sort(
+    (a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)
+  );
+  const startMins = Math.min(...records.map((r) => r.startMin));
+  const endMins   = Math.max(...records.map((r) => r.endMin));
+  const pad = (n) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+  return { days, startTime: pad(startMins), endTime: pad(endMins) };
+}
+
+export function timeRangesOverlap(time1Start, time1End, time2Start, time2End) {
+  const t1s = timeToMinutes(time1Start);
+  const t1e = timeToMinutes(time1End);
+  const t2s = timeToMinutes(time2Start);
+  const t2e = timeToMinutes(time2End);
+  if (t1s === null || t1e === null || t2s === null || t2e === null) return false;
+  return t1s < t2e && t2s < t1e;
+}
+
+export function schedulesConflict(schedule1, schedule2) {
+  if (!schedule1 || !schedule2) return { conflicts: false, conflictingDays: [] };
+  if (!schedule1.startTime || !schedule1.endTime || !schedule2.startTime || !schedule2.endTime) {
+    return { conflicts: false, conflictingDays: [] };
+  }
+  if (!timeRangesOverlap(schedule1.startTime, schedule1.endTime, schedule2.startTime, schedule2.endTime)) {
+    return { conflicts: false, conflictingDays: [] };
+  }
+  const conflictingDays = (schedule1.days || []).filter((d) => (schedule2.days || []).includes(d));
+  return { conflicts: conflictingDays.length > 0, conflictingDays };
 }
