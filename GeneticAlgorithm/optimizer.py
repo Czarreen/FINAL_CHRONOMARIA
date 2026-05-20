@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import os
@@ -191,11 +192,17 @@ def normalize_role(role: Any) -> str:
     return txt or "UNKNOWN"
 
 
+@functools.lru_cache(maxsize=2048)
+def _sec_key_from_parts(dept_id: float, section: str) -> str:
+    return f"{int(dept_id or 0)}|{section.strip().upper()}"
+
+
 def _sec_key(subject: Dict[str, Any]) -> str:
     """Composite dept_id|section key so same section names across departments stay separate."""
-    dept = str(int(to_number(subject.get("department_id")) or 0))
-    sec  = normalize_upper(subject.get("section") or "")
-    return f"{dept}|{sec}"
+    return _sec_key_from_parts(
+        to_number(subject.get("department_id")) or 0,
+        subject.get("section") or "",
+    )
 
 
 def _build_pre_occupied(
@@ -831,22 +838,33 @@ def sched_format_time(minutes: int) -> str:
     return f"{h12}:{mm:02d}"
 
 
-def sched_duration(subject: Dict[str, Any]) -> int:
-    """Per-day duration in minutes — total hours split equally over 2 days (S-H8/S-H12)."""
-    lec   = to_number(subject.get("lec_hrs"))  or 0.0
-    lab   = to_number(subject.get("lab_hrs"))  or 0.0
-    total = lec + lab
+@functools.lru_cache(maxsize=256)
+def _sched_duration_from_hrs(lec_hrs: float, lab_hrs: float) -> int:
+    total = lec_hrs + lab_hrs
     raw   = round((total / 2.0) * 60)
     return max(30, raw)
 
 
-def sched_valid_starts(duration: int) -> List[int]:
+def sched_duration(subject: Dict[str, Any]) -> int:
+    """Per-day duration in minutes — total hours split equally over 2 days (S-H8/S-H12)."""
+    lec = to_number(subject.get("lec_hrs")) or 0.0
+    lab = to_number(subject.get("lab_hrs")) or 0.0
+    return _sched_duration_from_hrs(lec, lab)
+
+
+@functools.lru_cache(maxsize=None)
+def sched_valid_starts(duration: int) -> tuple:
     """All 30-min-boundary start times where start+duration ≤ SCHED_END_MIN."""
-    return list(range(SCHED_START_MIN, SCHED_END_MIN - duration + 1, SCHED_SLOT_STEP))
+    return tuple(range(SCHED_START_MIN, SCHED_END_MIN - duration + 1, SCHED_SLOT_STEP))
+
+
+@functools.lru_cache(maxsize=256)
+def _is_lab_room_type(room_type: str) -> bool:
+    return "LAB" in normalize_upper(room_type)
 
 
 def sched_is_lab_room(room: Dict[str, Any]) -> bool:
-    return "LAB" in normalize_upper(room.get("room_type") or "")
+    return _is_lab_room_type(room.get("room_type") or "")
 
 
 def sched_needs_lab(subject: Dict[str, Any]) -> bool:
@@ -872,15 +890,25 @@ _GYM_RE:     re.Pattern = re.compile(r"gym",        re.IGNORECASE)
 GYM_MAX_OVERLAP = 3
 
 
+@functools.lru_cache(maxsize=1024)
+def _is_pathfit_course_no(course_no: str) -> bool:
+    return bool(_PATHFIT_RE.search(normalize_text(course_no)))
+
+
 def is_pathfit_subject(subject: Dict[str, Any]) -> bool:
     """True when course_no contains 'PATH FIT' (case-insensitive, spaces/punctuation ignored)."""
-    course_no = normalize_text(subject.get("course_no") or subject.get("subject_course_no"))
-    return bool(_PATHFIT_RE.search(course_no))
+    course_no = subject.get("course_no") or subject.get("subject_course_no") or ""
+    return _is_pathfit_course_no(course_no)
+
+
+@functools.lru_cache(maxsize=256)
+def _is_gym_room_name(room_name: str) -> bool:
+    return bool(_GYM_RE.search(normalize_text(room_name)))
 
 
 def is_gym_room(room: Dict[str, Any]) -> bool:
     """True when room_name contains 'GYM' (case-insensitive)."""
-    return bool(_GYM_RE.search(normalize_text(room.get("room_name") or "")))
+    return _is_gym_room_name(room.get("room_name") or "")
 
 
 # Gene = (pattern_idx: int, start_min: int, day1_room_idx: int, day2_room_idx: int)
@@ -1528,6 +1556,7 @@ def sched_crossover(
     b: List[Tuple[int, int, int, int]],
     subjects: List[Dict[str, Any]],
     rng: random.Random,
+    section_indices: Optional[Dict[str, List[int]]] = None,
 ) -> List[Tuple[int, int, int, int]]:
     """Section-aware crossover: swap ALL genes for each section as a unit.
 
@@ -1535,12 +1564,14 @@ def sched_crossover(
     time slots from two parents within the same section.  Swapping whole sections
     preserves intra-section coherence (same pattern, balanced daily load) while
     still combining solutions across sections.
+
+    section_indices may be precomputed once in run_schedule_ga and passed in to
+    avoid rebuilding the grouping dict on every crossover call.
     """
-    # Group subject indices by section
-    section_indices: Dict[str, List[int]] = {}
-    for i, s in enumerate(subjects):
-        sec = _sec_key(s)
-        section_indices.setdefault(sec, []).append(i)
+    if section_indices is None:
+        section_indices = {}
+        for i, s in enumerate(subjects):
+            section_indices.setdefault(_sec_key(s), []).append(i)
 
     child = list(a)  # start as clone of parent A
     for indices in section_indices.values():
@@ -2274,6 +2305,12 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
           f"greedy_score={greedy_score:.1f}% (hard={greedy_hard:.1f}% soft={greedy_soft:.1f}%)",
           flush=True)
 
+    # Precompute section grouping once — subjects never change during the GA loop,
+    # so there is no need to rebuild this dict inside every sched_crossover call.
+    _sec_indices: Dict[str, List[int]] = {}
+    for _ci, _cs in enumerate(subjects):
+        _sec_indices.setdefault(_sec_key(_cs), []).append(_ci)
+
     while generation < max_gen and (time.perf_counter() - started) < max_secs:
         scored = [(sched_evaluate(c, subjects, rooms, pre_occ=pre_occ), c) for c in population]
         scored.sort(key=lambda x: -x[0][0])
@@ -2296,7 +2333,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             pa    = rng.choice(elites)
             if rng.random() < crossover_rate:     # crossover_rate controls blend vs. clone
                 pb    = rng.choice(elites)
-                child = sched_crossover(pa, pb, subjects, rng)
+                child = sched_crossover(pa, pb, subjects, rng, _sec_indices)
             else:
                 child = list(pa)                  # clone elite directly (no crossover)
             child = sched_mutate(child, subjects, rooms, rng, mut_rate)
