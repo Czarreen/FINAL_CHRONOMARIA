@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms } from '../services/roomsApi';
+import { syncSubjectsFromOfferings } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
 import { syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
@@ -68,6 +69,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     rescanBoth: handleRescanNotifications,
     resolveSubject: handleResolveNotification,
     refreshSubject: refreshNotifications,
+    rescanning,
   } = useNotifications();
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
@@ -406,6 +408,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   }
 
   async function loadSubjects() {
+    try {
+      await syncSubjectsFromOfferings();
+    } catch (_) {}
     try {
       setLoading(true);
       setError(null);
@@ -935,16 +940,17 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               notificationSearch={notifSearch}
               onNotificationSearchChange={(v) => setNotifSearch(v)}
               notificationStats={subjectNotificationStats}
+              isRescanning={rescanning}
             />
             <button
               onClick={handleRescanNotifications}
-              disabled={subjectNotificationsLoading}
+              disabled={rescanning}
               className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
               title="Re-detect all subject issues"
               type="button"
             >
-              <RotateCcw size={14} className={subjectNotificationsLoading ? 'animate-spin' : ''} />
-              <span>{subjectNotificationsLoading ? 'Scanning' : 'Rescan'}</span>
+              <RotateCcw size={14} className={rescanning ? 'animate-spin' : ''} />
+              <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
             </button>
           </div>
 

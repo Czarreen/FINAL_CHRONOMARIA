@@ -22,12 +22,12 @@ export default function Sidebar({ currentView, onViewChange, onLogout, currentUs
   const menuItems = [
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
     { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
-    { id: 'faculty', icon: Users, label: 'Faculty' },
-    { id: 'subjects', icon: BookOpen, label: 'Subjects' },
-    { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
     { id: 'schedule', icon: Calendar, label: 'Schedule' },
+    { id: 'subjects', icon: BookOpen, label: 'Subjects' },
     { id: 'faculty-loading', icon: Sparkles, label: 'Faculty Loading' },
     { id: 'faculty-loading-finalize', icon: Table2, label: 'Finalize Loading' },
+    { id: 'faculty', icon: Users, label: 'Faculty' },
+    { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
   ];
 
   return (
