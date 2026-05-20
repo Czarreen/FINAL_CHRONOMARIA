@@ -1992,6 +1992,7 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     // Mark non-merged candidates with a conflict-free schedule+room as unique-clean.
     for (const c of candidates) {
       if (c.merged) continue;
+      if (c.is_general) continue; // general schedules are absolute — never validate or reclassify them
       const hasRoom = c.existing_mth_room_ids || c.existing_mth_room_id || c.existing_tfs_room_ids || c.existing_tfs_room_id;
       const hasSched = c.existing_mth_schedule || c.existing_tfs_schedule;
       if (!hasRoom || !hasSched) continue;
@@ -2038,6 +2039,7 @@ function buildAutomaticSchedulerPreflight(snapshot) {
   const uniqueCleanSubjects   = candidates.filter((row) => row.unique_clean);
 
   const excluded = new Set([
+    ...generalSubjects.map((row) => row.subject_id),
     ...mergedSubjects.map((row) => row.subject_id),
     ...uniqueCleanSubjects.map((row) => row.subject_id),
   ]);
