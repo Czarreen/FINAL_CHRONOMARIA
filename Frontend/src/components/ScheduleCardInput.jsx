@@ -15,15 +15,24 @@ const MODES = {
   ],
 };
 
-// Earliest start: 7:30 AM  |  Latest end: 8:00 PM
-const EARLIEST_START = 7 * 60 + 30; // 450 min
-const LATEST_END = 20 * 60;         // 1200 min
+// Earliest start: 6:00 AM  |  Latest end: 8:00 PM
+const EARLIEST_START = 6 * 60; // 360 min
+const LATEST_END = 20 * 60;    // 1200 min
 
-// Start hours 07–19 (20 as start would need end > 20:00)
-const START_HOURS = Array.from({ length: 13 }, (_, i) => String(i + 7).padStart(2, '0'));
-// End hours 07–20
-const END_HOURS = Array.from({ length: 14 }, (_, i) => String(i + 7).padStart(2, '0'));
+// Start hours 06–19 (6 AM → 7 PM)
+const START_HOURS = Array.from({ length: 14 }, (_, i) => String(i + 6).padStart(2, '0'));
+// End hours 06–20 (6 AM → 8 PM)
+const END_HOURS = Array.from({ length: 15 }, (_, i) => String(i + 6).padStart(2, '0'));
 const MINUTES = ['00', '15', '30', '45'];
+
+// Convert a 24-hour hour string to a 12-hour display label (e.g. '13' → '1 PM')
+const h24ToLabel = (h24str) => {
+  const h = parseInt(h24str, 10);
+  if (h === 0)  return '12 AM';
+  if (h < 12)   return `${h} AM`;
+  if (h === 12) return '12 PM';
+  return `${h - 12} PM`;
+};
 
 const SLOT_LABELS = {
   mth: 'Monday / Thursday',
@@ -211,17 +220,12 @@ export default function ScheduleCardInput({
             <select
               value={value.startH || '07'}
               disabled={disabled}
-              onChange={(e) => {
-                const h = e.target.value;
-                // Auto-correct minute when moving to 07 and current minute < 30
-                const m = h === '07' && parseInt(value.startM || '00', 10) < 30 ? '30' : (value.startM || '00');
-                update({ startH: h, startM: m });
-              }}
+              onChange={(e) => update({ startH: e.target.value, startM: value.startM || '00' })}
               className={selectClass}
               aria-label="Start hour"
             >
               {START_HOURS.map((h) => (
-                <option key={h} value={h}>{h}</option>
+                <option key={h} value={h}>{h24ToLabel(h)}</option>
               ))}
             </select>
             <span className="text-lg font-bold text-on-surface-variant">:</span>
@@ -232,13 +236,9 @@ export default function ScheduleCardInput({
               className={selectClass}
               aria-label="Start minute"
             >
-              {MINUTES.map((m) => {
-                const h = parseInt(value.startH || '07', 10);
-                const disabled_opt = h === 7 && parseInt(m, 10) < 30;
-                return (
-                  <option key={m} value={m} disabled={disabled_opt}>{m}</option>
-                );
-              })}
+              {MINUTES.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -262,7 +262,7 @@ export default function ScheduleCardInput({
               aria-label="End hour"
             >
               {END_HOURS.map((h) => (
-                <option key={h} value={h}>{h}</option>
+                <option key={h} value={h}>{h24ToLabel(h)}</option>
               ))}
             </select>
             <span className="text-lg font-bold text-on-surface-variant">:</span>

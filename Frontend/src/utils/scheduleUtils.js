@@ -46,8 +46,17 @@ export function parseScheduleString(str, slot = null) {
   const trimmed = str.trim();
   if (!trimmed) return null;
 
+  // Normalize AM/PM markers to 24-hour so both regex paths can handle them
+  const normalized = trimmed.replace(/(\d{1,2}:\d{2})\s*(AM|PM)/gi, (_, time, meridiem) => {
+    const [h, m] = time.split(':').map(Number);
+    let hours = h;
+    if (/pm/i.test(meridiem) && hours !== 12) hours += 12;
+    if (/am/i.test(meridiem) && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  });
+
   // --- Primary format: HH:MM-HH:MM [optional suffix tokens] ---
-  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/);
+  const timeMatch = normalized.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/);
   if (timeMatch) {
     const [, sh, sm, eh, em, rawRest = ''] = timeMatch;
     // For complex entries like "T Lab, F Lec", only the first component is used
@@ -77,19 +86,24 @@ export function parseScheduleString(str, slot = null) {
     }
 
     if (!resolvedSlot) return null;
+    // Hours 1–5 without an explicit AM/PM marker must be PM (no class starts at 1–5 AM)
+    let startH24 = parseInt(sh, 10);
+    let endH24   = parseInt(eh, 10);
+    if (startH24 >= 1 && startH24 <= 5) startH24 += 12;
+    if (endH24   >= 1 && endH24   <= 5) endH24   += 12;
     return {
       slot: resolvedSlot,
       mode,
-      startH: String(sh).padStart(2, '0'),
+      startH: String(startH24).padStart(2, '0'),
       startM: String(sm).padStart(2, '0'),
-      endH: String(eh).padStart(2, '0'),
+      endH: String(endH24).padStart(2, '0'),
       endM: String(em).padStart(2, '0'),
       type,
     };
   }
 
   // --- Legacy format: DAYS HH:MM-HH:MM [Type] ---
-  const legacy = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(?:\s+(Lec|Lab))?/i);
+  const legacy = normalized.match(/^([A-Za-z]+)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(?:\s+(Lec|Lab))?/i);
   if (legacy) {
     const [, rawDays, sh, sm, eh, em, rawType] = legacy;
     const LEGACY_MAP = {
@@ -111,12 +125,16 @@ export function parseScheduleString(str, slot = null) {
     };
     const sm2 = LEGACY_MAP[rawDays] || LEGACY_MAP[rawDays.toUpperCase()];
     if (!sm2) return null;
+    let startH24 = parseInt(sh, 10);
+    let endH24   = parseInt(eh, 10);
+    if (startH24 >= 1 && startH24 <= 5) startH24 += 12;
+    if (endH24   >= 1 && endH24   <= 5) endH24   += 12;
     return {
       slot: sm2.slot,
       mode: sm2.mode,
-      startH: String(sh).padStart(2, '0'),
+      startH: String(startH24).padStart(2, '0'),
       startM: String(sm).padStart(2, '0'),
-      endH: String(eh).padStart(2, '0'),
+      endH: String(endH24).padStart(2, '0'),
       endM: String(em).padStart(2, '0'),
       type: rawType ? rawType.toLowerCase() : 'lec',
     };
@@ -171,8 +189,8 @@ export function getScheduleAmPm(scheduleStr) {
   const hour = Number(hourMatch[1]);
   // Hours >= 12 are always PM (24-hour or 12-hour noon+)
   if (hour >= 12) return 'PM';
-  // Hours 1–6 must be PM — AM classes cannot start before 7:30 AM
-  if (hour < 7) return 'PM';
+  // Hours 1–5 must be PM — AM classes cannot start at 1–5 AM; hour 6 is early-morning AM
+  if (hour >= 1 && hour <= 5) return 'PM';
   // Hours 7–11: AM
   return 'AM';
 }
