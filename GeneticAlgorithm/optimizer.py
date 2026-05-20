@@ -1628,10 +1628,13 @@ def sched_build_conflict_report(
     chromosome: List[Tuple[int, int, int, int]],
     subjects: List[Dict[str, Any]],
     rooms: List[Dict[str, Any]],
+    pre_occ: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Build a list of room and section conflicts from the best chromosome.
 
     Tracks per-day rooms correctly: day1_room_idx on day1, day2_room_idx on day2.
+    pre_occ entries are seeded with label "_reserved_" so conflicts between new
+    GA assignments and preserved subjects are detected consistently with sched_evaluate.
     """
     conflicts: List[Dict[str, Any]] = []
     # Non-GYM rooms: standard slot tracking
@@ -1639,6 +1642,14 @@ def sched_build_conflict_report(
     # GYM rooms: per-dept tracking with (start, end, label, dept_id)
     gym_room_day_dept: Dict[str, List[Tuple[int, int, str, int]]] = {}
     section_day: Dict[str, List[Tuple[int, int, str]]] = {}
+
+    # Pre-populate from reserved (preserved) subjects using the same pre_occ structure
+    # as sched_evaluate so the conflict report is consistent with the fitness function.
+    if pre_occ:
+        for room_idx, day, start, end in pre_occ.get("room_entries", []):
+            room_day.setdefault(f"{room_idx}|{day}", []).append((start, end, "_reserved_"))
+        for sec_key, day, start, end in pre_occ.get("section_entries", []):
+            section_day.setdefault(f"{sec_key}|{day}", []).append((start, end, "_reserved_"))
 
     for si, gene in enumerate(chromosome):
         pat_idx, start, day1_room_idx, day2_room_idx = gene
@@ -2223,7 +2234,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[GA-DIAG] repair skipped (time_remaining={time_remaining:.1f}s)", flush=True)
 
     assignments = sched_chromosome_to_assignments(best, subjects, rooms)
-    conflicts   = sched_build_conflict_report(best, subjects, rooms)
+    conflicts   = sched_build_conflict_report(best, subjects, rooms, pre_occ=pre_occ)
     # sched_evaluate already returns (overall, hard_score, soft_score) all in 0–100
     overall, hard_score, soft_score = best_score, best_hard, best_soft
 
