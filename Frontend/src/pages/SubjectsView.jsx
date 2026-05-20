@@ -13,6 +13,22 @@ import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
 import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils';
 
+const columns = [
+  { key: 'curr_id', label: 'Curriculum ID' },
+  { key: 'subject_code', label: 'Code' },
+  { key: 'subject_course_no', label: 'Course No' },
+  { key: 'subject_descriptive_title', label: 'Description' },
+  { key: 'department_info', label: 'Department' },
+  { key: 'merged', label: 'Merged' },
+  { key: 'mth_schedule', label: 'MTH' },
+  { key: 'tfs_schedule', label: 'TFS' },
+  { key: 'room', label: 'Room' },
+  { key: 'subject_units', label: 'Units' },
+  { key: 'subject_lec_lab', label: 'Lec/Lab' },
+  { key: 'is_general', label: 'General' },
+  { key: 'subject_status', label: 'Status' },
+];
+
 export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +71,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   });
   const [savingSubject, setSavingSubject] = useState(false);
   const [subjectError, setSubjectError] = useState(null);
+  const [fetching, setFetching] = useState(false);
 
   // Edit Subject modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -74,22 +91,6 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
   const [pendingScrollToSubject, setPendingScrollToSubject] = useState(null);
-
-  const columns = [
-    { key: 'curr_id', label: 'Curriculum ID' },
-    { key: 'subject_code', label: 'Code' },
-    { key: 'subject_course_no', label: 'Course No' },
-    { key: 'subject_descriptive_title', label: 'Description' },
-    { key: 'department_info', label: 'Department' },
-    { key: 'merged', label: 'Merged' },
-    { key: 'mth_schedule', label: 'MTH' },
-    { key: 'tfs_schedule', label: 'TFS' },
-    { key: 'room', label: 'Room' },
-    { key: 'subject_units', label: 'Units' },
-    { key: 'subject_lec_lab', label: 'Lec/Lab' },
-    { key: 'is_general', label: 'General' },
-    { key: 'subject_status', label: 'Status' },
-  ];
 
   const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
   const [colMenuOpen, setColMenuOpen] = useState(false);
@@ -331,30 +332,37 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       const CONCURRENCY = 5;
       for (let i = 0; i < toUpdate.length; i += CONCURRENCY) {
         const batch = toUpdate.slice(i, i + CONCURRENCY);
+        const batchUpdates = new Map();
         await Promise.all(
           batch.map(async (s) => {
             const { hasOpenIssues } = getSubjectIssueState(s.subject_id);
             const desired = hasOpenIssues ? 'inactive' : 'active';
             try {
-              setUpdatingStatus(s.subject_id);
               await updateSubjectStatus(s.subject_id, desired);
-              setSubjects((prev) =>
-                prev.map((sub) =>
-                  sub.subject_id === s.subject_id
-                    ? { ...sub, subject_status: desired }
-                    : sub
-                )
-              );
-              setActiveCount((c) => c + (desired === 'active' ? 1 : -1));
+              batchUpdates.set(s.subject_id, desired);
             } catch (_) {
               // ignore individual failures; effect will retry on next notification reload
             } finally {
               pendingStatusUpdatesRef.current.delete(s.subject_id);
-              setUpdatingStatus((prev) => (prev === s.subject_id ? null : prev));
             }
           })
         );
+        if (batchUpdates.size > 0) {
+          setSubjects((prev) =>
+            prev.map((sub) =>
+              batchUpdates.has(sub.subject_id)
+                ? { ...sub, subject_status: batchUpdates.get(sub.subject_id) }
+                : sub
+            )
+          );
+          const delta = [...batchUpdates.values()].reduce(
+            (acc, v) => acc + (v === 'active' ? 1 : -1),
+            0
+          );
+          setActiveCount((c) => c + delta);
+        }
       }
+      setUpdatingStatus(null);
     }
 
     runBatched();
@@ -407,10 +415,18 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
-  async function loadSubjects() {
+  async function handleFetch() {
     try {
+      setFetching(true);
       await syncSubjectsFromOfferings();
-    } catch (_) {}
+      await loadSubjects();
+    } catch (_) {
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  async function loadSubjects() {
     try {
       setLoading(true);
       setError(null);
@@ -960,6 +976,16 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 {selectedSubjects.size} selected
               </span>
             )}
+            <button
+              onClick={handleFetch}
+              disabled={fetching || loading}
+              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
+              title="Sync subjects from course offerings then reload"
+              type="button"
+            >
+              <RefreshCw size={14} className={fetching ? 'animate-spin' : ''} />
+              <span>{fetching ? 'Fetching' : 'Fetch'}</span>
+            </button>
             <span className="inline-flex items-center rounded-full border border-primary/20 bg-white px-3 py-1.5 text-sm font-semibold text-primary shadow-sm">
               {total} subjects
             </span>
