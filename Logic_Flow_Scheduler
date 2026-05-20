@@ -1,7 +1,7 @@
 PRE-FLIGHT
   ├─ Tag all subjects by type: GENERAL | MERGED | REGULAR
   ├─ Sub-tag by state: SCHEDULED | EMPTY
-  │     (EMPTY = schedule or room is null)
+  │     (EMPTY = schedule or room is null) = Locked
   │
   ├─ LOCKED ← all GENERAL subjects (SCHEDULED or EMPTY)
   │     ├─ Visual tag: "General"
@@ -50,7 +50,7 @@ STAGE 2+3 LOOP (run as a tight loop, not sequential phases)
     │    └─ MERGED_NEEDS_GENERATION → ready as-is, with
     │        constraint that members share time + room
     │
-    ├─ Run GA with RESOLVED as HARD CONSTRAINTS
+    ├─ Run GA with RESOLVED as HARD CONSTRAINTS - (New Fix! -(Add the Locked as hard Constraints as well))
     │   (no output can conflict with anything in RESOLVED;
     │    invalid solutions rejected, not just penalized)
     │
