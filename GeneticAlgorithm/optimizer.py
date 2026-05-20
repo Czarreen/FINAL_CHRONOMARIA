@@ -418,17 +418,28 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             fi_pref = fid_to_fi.get(fid_str)
             if fi_pref is None:
                 continue  # faculty not in GA pool
-            # Find all unassigned offerings matching this preference code
-            for oi, offering in enumerate(offerings):
-                if oi in chosen:
-                    continue  # already assigned
-                if normalize_upper(offering.get("code") or "") != pref_code:
-                    continue
+            # Find all unassigned offerings matching this preference code.
+            # Sort by total units descending (lec + lab) so the largest subjects fill
+            # the faculty's cap first — smallest is bumped last, not random DB order.
+            matching_offerings = sorted(
+                ((oi, o) for oi, o in enumerate(offerings)
+                 if oi not in chosen and normalize_upper(o.get("code") or "") == pref_code),
+                key=lambda x: -(
+                    to_number(x[1].get("units"))
+                    or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
+                    or 0.0
+                ),
+            )
+            for oi, offering in matching_offerings:
                 off_blocks = build_schedule_blocks(offering)
                 if is_sat_only_blocks(off_blocks):
                     chosen[oi] = -1
                     continue
-                units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
+                units = (
+                    to_number(offering.get("units"))
+                    or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+                    or 0.0
+                )
                 max_u = max(0.0, to_number(faculties[fi_pref].get("faculty_max_units")) or 0.0)
                 if max_u > 0 and loads[fi_pref] + units > max_u:
                     continue  # over capacity — fall through to regular GA
