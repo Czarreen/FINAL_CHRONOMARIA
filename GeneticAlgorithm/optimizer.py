@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import functools
+import sys
+# Force UTF-8 line-buffered stdout so print() appears immediately in run.py terminal
+sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+
 import json
 import math
 import os
@@ -242,18 +245,10 @@ def _build_pre_occupied(
             if not parsed:
                 continue
             start, end = parsed["start"], parsed["end"]
-            # Support slash-separated room IDs (e.g. "3/5" = lec room on day1, lab room on day2).
-            # A single ID occupies both days; two IDs map first→day1, second→day2.
-            sub_ids = [x.strip() for x in room_id_str.split("/") if x.strip()]
-            for i, sub_id in enumerate(sub_ids):
-                room_idx = room_id_to_idx.get(sub_id)
-                days_for_room = list(default_days) if len(sub_ids) == 1 else (
-                    [default_days[i]] if i < len(default_days) else []
-                )
-                for day in days_for_room:
-                    if room_idx is not None:
-                        room_entries.append((room_idx, day, start, end))
+            room_idx = room_id_to_idx.get(room_id_str)
             for day in default_days:
+                if room_idx is not None:
+                    room_entries.append((room_idx, day, start, end))
                 section_entries.append((sec_key, day, start, end))
 
     return {"room_entries": room_entries, "section_entries": section_entries}
@@ -285,7 +280,35 @@ def build_subject_index(subjects: Sequence[Dict[str, Any]]) -> Dict[str, Dict[st
     return idx
 
 
-def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any], matched_subject: Optional[Dict[str, Any]]) -> float:
+def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any], matched_subject: Optional[Dict[str, Any]], faculty_preferences: Optional[Dict[str, Any]] = None) -> float:
+    # Check explicit faculty subject preferences first
+    # Preferences are GLOBAL — any faculty from any department can get the bonus
+    if faculty_preferences is not None:
+        faculty_id = faculty.get("faculty_id")
+        # Use subject_code from matched_subject if available, else fall back to offering.code
+        # (offering.code IS the subject_code — they map 1:1 in mapSubjectsToGaOfferings)
+        subject_code = (
+            normalize_upper(matched_subject.get("subject_code"))
+            if matched_subject
+            else normalize_upper(offering.get("code") or "")
+        )
+
+        if faculty_id is not None and subject_code:
+            # Get preferences for this faculty: { [facultyId]: { [subjectTag]: priorityLevel } }
+            faculty_prefs = faculty_preferences.get(str(faculty_id), {})
+            if subject_code in faculty_prefs:
+                priority_level = faculty_prefs[subject_code]
+                # Priority 1 (High): +100 bonus
+                # Priority 2 (Capable): +50 bonus
+                # Priority 3 (Fallback): +15 bonus
+                if priority_level == 1:
+                    return 100.0
+                elif priority_level == 2:
+                    return 50.0
+                elif priority_level == 3:
+                    return 15.0
+    
+    # Fall back to keyword matching if no explicit preference
     spec_raw = normalize_upper(faculty.get("faculty_specialization"))
     if not spec_raw:
         return 0.0
@@ -371,24 +394,107 @@ def is_cross_department_no_spec_allowed(
     return off_dept == cs_dept and fac_dept == it_dept and cs_faculty_count == 0
 
 
-def build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts):
+def build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences=None):
     loads = {i: 0.0 for i in range(len(faculties))}
     blocks = {i: [] for i in range(len(faculties))}
     preps = {i: set() for i in range(len(faculties))}
     chosen: Dict[int, int] = {}
 
+    # Build faculty_id -> index lookup for preference pre-assignment
+    fid_to_fi: Dict[str, int] = {
+        str(int(to_number(f.get("faculty_id")) or 0)): i
+        for i, f in enumerate(faculties)
+    }
+
+    # ── Pre-assignment pass: honour explicit faculty subject preferences ──
+    # Only Priority 1 (High / Primary) faculty are hard pre-assigned here.
+    # Priority 2 (Capable) and 3 (Fallback) already receive score bonuses in
+    # match_specialization_score (+50 / +15), so the main GA loop will still
+    # strongly prefer them — but without locking them in prematurely.
+    #
+    # Offering-centric approach: for each offering, ALL P1-tagged faculty are
+    # considered and the one with the lowest current load wins — eliminating
+    # the "first faculty in dict order always wins" bias that caused some P1
+    # faculty to never receive their tagged subject.
+    if faculty_preferences:
+        # Build a map: subject_code → list of faculty indices with P1 tag
+        p1_by_code: Dict[str, List[int]] = {}
+        for fid_str, tag_map in faculty_preferences.items():
+            fi_pref = fid_to_fi.get(fid_str)
+            if fi_pref is None:
+                continue  # faculty not in GA pool
+            for code_tag, priority in tag_map.items():
+                if priority == 1:
+                    code = normalize_upper(code_tag)
+                    p1_by_code.setdefault(code, []).append(fi_pref)
+
+        # Process each subject code's offerings in units-descending order.
+        # For each offering, pick the eligible P1 faculty with the lowest load.
+        for pref_code, candidate_fis in p1_by_code.items():
+            code_offerings = sorted(
+                ((oi, o) for oi, o in enumerate(offerings)
+                 if oi not in chosen and normalize_upper(o.get("code") or "") == pref_code),
+                key=lambda x: -(
+                    to_number(x[1].get("units"))
+                    or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
+                    or 0.0
+                ),
+            )
+            for oi, offering in code_offerings:
+                off_blocks = build_schedule_blocks(offering)
+                if is_sat_only_blocks(off_blocks):
+                    chosen[oi] = -1
+                    continue
+                units = (
+                    to_number(offering.get("units"))
+                    or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+                    or 0.0
+                )
+                # Pick the eligible P1 faculty with the lowest current load
+                best_fi: Optional[int] = None
+                best_load = float("inf")
+                for fi_cand in candidate_fis:
+                    max_u = max(0.0, to_number(faculties[fi_cand].get("faculty_max_units")) or 0.0)
+                    if max_u > 0 and loads[fi_cand] + units > max_u:
+                        continue  # over capacity
+                    if faculty_has_conflict(blocks[fi_cand], off_blocks):
+                        continue  # time conflict
+                    if any(consecutive_minutes_for_day(blocks[fi_cand] + off_blocks, d) > 240.0
+                           for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
+                        continue
+                    if loads[fi_cand] < best_load:
+                        best_load = loads[fi_cand]
+                        best_fi = fi_cand
+                if best_fi is None:
+                    continue  # no eligible P1 faculty — fall through to main GA loop
+                chosen[oi] = best_fi
+                loads[best_fi] += units
+                blocks[best_fi].extend(off_blocks)
+                prep_key = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
+                preps[best_fi].add(prep_key)
+
     ordering = sorted(
         enumerate(offerings),
-        key=lambda x: -((to_number(x[1].get("units")) or to_number(x[1].get("lec_hrs")) or 0.0)),
+        key=lambda x: -(
+            to_number(x[1].get("units"))
+            or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
+            or 0.0
+        ),
     )
 
     for oi, offering in ordering:
+        if oi in chosen:
+            continue  # already handled by preference pre-assignment
         off_blocks = build_schedule_blocks(offering)
         # Skip SAT-only offerings — Saturday is user-defined, not automated
         if is_sat_only_blocks(off_blocks):
             chosen[oi] = -1
             continue
-        units = to_number(offering.get("units")) or to_number(offering.get("lec_hrs")) or 0.0
+        units = (
+            to_number(offering.get("units"))
+            or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+            or 0.0
+        )
         subject = subject_index.get(build_offering_key(offering))
 
         # ── Two-pass candidate selection ─────────────────────────────────
@@ -423,13 +529,35 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
 
         candidates: List[Tuple[float, int]] = []
 
+        offering_code = normalize_upper(offering.get("code") or "")
+
+        # Debug: log preference matching for tagged offerings
+        _dbg_pref_fids = set()
+        if faculty_preferences:
+            for _fid_str, _ftags in faculty_preferences.items():
+                if offering_code in _ftags:
+                    _dbg_pref_fids.add(_fid_str)
+        if _dbg_pref_fids:
+            print(f"[ga-debug] Offering code={offering_code} has preference match for faculty_ids={_dbg_pref_fids}")
+
         # Pass A — specialization match, any department
         for fi, faculty in enumerate(faculties):
+            fid_str_a = str(int(to_number(faculty.get("faculty_id")) or 0))
             if not _hard_eligible(fi):
+                if _dbg_pref_fids and fid_str_a in _dbg_pref_fids:
+                    fac_id = faculty.get("faculty_id")
+                    max_u = max(0.0, to_number(faculty.get("faculty_max_units")) or 0.0)
+                    print(f"[ga-debug]   faculty_id={fac_id} INELIGIBLE: load={loads[fi]:.1f}/{max_u} conflict={faculty_has_conflict(blocks[fi], off_blocks)}")
                 continue
-            spec = match_specialization_score(faculty, offering, subject)
+            spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
             if spec > 0.0:
-                candidates.append((_score(fi, spec, to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))), fi))
+                dept_match = to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))
+                # Explicit preference tags override the cross-dept penalty — admin intent should not be diluted
+                has_explicit_pref = faculty_preferences is not None and offering_code in faculty_preferences.get(fid_str_a, {})
+                effective_dept_match = dept_match or has_explicit_pref
+                candidates.append((_score(fi, spec, effective_dept_match), fi))
+            elif _dbg_pref_fids and fid_str_a in _dbg_pref_fids:
+                print(f"[ga-debug]   faculty_id={faculty.get('faculty_id')} eligible but spec=0 (tag not matched in score function)")
 
         # Pass B — same department, no specialization needed
         if not candidates:
@@ -438,7 +566,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     continue
                 if not _hard_eligible(fi):
                     continue
-                spec = match_specialization_score(faculty, offering, subject)
+                spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
                 candidates.append((_score(fi, spec, True), fi))
 
         # Pass C — cross-department no-spec fallback (IT->CS zero-faculty only)
@@ -454,10 +582,28 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     continue  # already covered in Pass B
                 if not _hard_eligible(fi):
                     continue
-                spec = match_specialization_score(faculty, offering, subject)
+                spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
                 candidates.append((_score(fi, spec, False), fi))
 
         fi = sorted(candidates, key=lambda x: (-x[0], x[1]))[0][1] if candidates else -1
+        if _dbg_pref_fids and candidates:
+            winner_fid = faculties[fi].get("faculty_id") if fi >= 0 else None
+            top = sorted(candidates, key=lambda x: (-x[0], x[1]))[:3]
+            top_info = [(faculties[c[1]].get("faculty_id"), round(c[0], 2)) for c in top]
+            print(f"[ga-debug] Offering code={offering_code} -> winner faculty_id={winner_fid}, top candidates={top_info}")
+        elif _dbg_pref_fids and not candidates:
+            # No candidates at all — log why faculty 7 specifically failed
+            for fi_dbg, fac_dbg in enumerate(faculties):
+                fid_dbg = str(int(to_number(fac_dbg.get("faculty_id")) or 0))
+                if fid_dbg in _dbg_pref_fids:
+                    max_u_dbg = max(0.0, to_number(fac_dbg.get("faculty_max_units")) or 0.0)
+                    overload = max_u_dbg > 0 and loads[fi_dbg] + units > max_u_dbg
+                    conflict = faculty_has_conflict(blocks[fi_dbg], off_blocks)
+                    consec = any(consecutive_minutes_for_day(blocks[fi_dbg] + off_blocks, d) > 240.0 for d in ("MON","TUE","WED","THU","FRI","SAT"))
+                    print(f"[ga-debug] NO candidates for code={offering_code}. faculty_id={fac_dbg.get('faculty_id')} status: overload={overload}({loads[fi_dbg]:.1f}/{max_u_dbg}), conflict={conflict}, consec={consec}")
+                    break
+            else:
+                print(f"[ga-debug] NO candidates for code={offering_code}. Tagged faculty_ids={_dbg_pref_fids} NOT in faculties list at all!")
         if fi < 0:
             chosen[oi] = -1
             continue
@@ -469,7 +615,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
     return [chosen.get(i, -1) for i in range(len(offerings))]
 
 
-def summarize_candidate(candidate, faculties, offerings, subject_index, department_faculty_counts, department_available_faculty_counts):
+def summarize_candidate(candidate, faculties, offerings, subject_index, department_faculty_counts, department_available_faculty_counts, faculty_preferences=None):
     assignments = []
     loads = {}
     faculty_assignments = {}
@@ -590,7 +736,7 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
 
         for it in assigned:
             off = it["offering"]
-            spec_score = match_specialization_score(faculty, off, it.get("matched_subject"))
+            spec_score = match_specialization_score(faculty, off, it.get("matched_subject"), faculty_preferences)
             is_spec_match = spec_score > 0.0
             dept_match = to_number(faculty.get("department_id")) == to_number(off.get("department_id"))
 
@@ -695,6 +841,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     subject_index = build_subject_index(active_subjects)
     department_faculty_counts = build_department_count_map(payload.get("department_faculty_counts"))
     department_available_faculty_counts = build_department_count_map(payload.get("department_available_faculty_counts"))
+    faculty_preferences: Optional[Dict[str, Any]] = payload.get("faculty_preferences") or None
 
     # Fallback for callers that do not provide counts.
     if not department_faculty_counts:
@@ -735,9 +882,9 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "run_id": payload.get("run_id") or "empty",
         }
 
-    population = [build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts)]
+    population = [build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences)]
     while len(population) < population_size:
-        base = build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts)
+        base = build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences)
         population.append(mutate(base, len(faculties), rng, min(0.35, mutation_rate * 1.6)))
 
     best = population[0]
@@ -748,6 +895,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         subject_index,
         department_faculty_counts,
         department_available_faculty_counts,
+        faculty_preferences,
     )
     best_score = best_summary["fitness_overall"]
     generation = 0
@@ -763,6 +911,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
                 subject_index,
                 department_faculty_counts,
                 department_available_faculty_counts,
+                faculty_preferences,
             )
             scored.append((summary["fitness_overall"], list(cand), summary))
         scored.sort(key=lambda x: (-x[0], x[1]))
@@ -797,6 +946,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         subject_index,
         department_faculty_counts,
         department_available_faculty_counts,
+        faculty_preferences,
     )
     result["generations"] = generation + 1
     result["runtime_ms"] = int((time.perf_counter() - started) * 1000)
@@ -1395,32 +1545,22 @@ def sched_evaluate(
             section_pattern_counts[section].get(pat_idx, 0) + 1
         )
 
-    # R-H1: room conflicts for non-GYM rooms — sweep-line to catch ALL overlaps,
-    # including non-adjacent pairs (e.g. a long slot A overlapping short B and later C).
+    # R-H1: room conflicts for non-GYM rooms — mark both subjects as violators.
     # GYM rooms are handled separately by R-GYM below.
+    # Using a set ensures hard_violations <= n regardless of how many pairs conflict.
     for rk, slots in room_day_slots.items():
         ri_str = rk.split("|")[0]
         ri_int = int(ri_str) if ri_str.isdigit() else -1
         if 0 <= ri_int < len(rooms) and is_gym_room(rooms[ri_int]):
             continue  # GYM room conflicts handled in R-GYM
-        events: List[Tuple[int, int, int]] = []
-        for s_, e_, si_ in slots:
-            events.append((s_,  1, si_))   # slot opens
-            events.append((e_, -1, si_))   # slot closes
-        # Sort: closes (-1) before opens (+1) at the same timestamp so touching
-        # intervals (end == next start) are not counted as overlapping.
-        events.sort(key=lambda x: (x[0], x[1]))
-        active: Set[int] = set()
-        for _t, delta, si_ in events:
-            if delta == 1:
-                active.add(si_)
-                if len(active) > 1:
-                    # All currently open slots overlap — mark GA-scheduled ones.
-                    for asi in active:
-                        if asi >= 0:
-                            hard_violation_subs.add(asi)
-            else:
-                active.discard(si_)
+        ss = sorted(slots, key=lambda x: x[0])
+        for i in range(1, len(ss)):
+            if ss[i][0] < ss[i - 1][1]:
+                # Only flag GA-scheduled subjects (si >= 0); si == -1 are reserved slots
+                if ss[i][2] >= 0:
+                    hard_violation_subs.add(ss[i][2])
+                if ss[i - 1][2] >= 0:
+                    hard_violation_subs.add(ss[i - 1][2])
 
     # R-GYM: GYM rooms allow up to GYM_MAX_OVERLAP PATH FIT classes per dept per slot.
     # Excess simultaneous subjects (per dept) are hard violations.
@@ -1750,27 +1890,18 @@ def sched_build_conflict_report(
         for day in days:
             section_day.setdefault(f"{section}|{day}", []).append((start, end, label))
 
-    # Standard room conflict for non-GYM rooms — sweep-line to catch all overlaps.
+    # Standard room conflict for non-GYM rooms
     for rk, slots in room_day.items():
-        ri, day = rk.split("|", 1)
-        rn = rooms[int(ri)].get("room_name", "?") if int(ri) < len(rooms) else "?"
-        evts_r: List[Tuple[int, int, str]] = []
-        for s_, e_, lbl_ in slots:
-            evts_r.append((s_,  1, lbl_))
-            evts_r.append((e_, -1, lbl_))
-        evts_r.sort(key=lambda x: (x[0], x[1]))
-        act_r_lbl: Set[str] = set()
-        for _t, delta, lbl_ in evts_r:
-            if delta == 1:
-                act_r_lbl.add(lbl_)
-                if len(act_r_lbl) > 1:
-                    conflicts.append({
-                        "type": "room_conflict", "day": day, "room": rn,
-                        "subjects": sorted(act_r_lbl),
-                        "problem": f"Room overlap in {rn} on {day}: {', '.join(sorted(act_r_lbl))}",
-                    })
-            else:
-                act_r_lbl.discard(lbl_)
+        ss = sorted(slots, key=lambda x: x[0])
+        for i in range(1, len(ss)):
+            if ss[i][0] < ss[i - 1][1]:
+                ri, day = rk.split("|", 1)
+                rn = rooms[int(ri)].get("room_name", "?") if int(ri) < len(rooms) else "?"
+                conflicts.append({
+                    "type": "room_conflict", "day": day, "room": rn,
+                    "subjects": [ss[i - 1][2], ss[i][2]],
+                    "problem": f"Room overlap on {day}: {ss[i-1][2]} and {ss[i][2]}",
+                })
 
     # GYM room conflict: per-dept sweep-line — report when > GYM_MAX_OVERLAP overlap
     for rk, slots in gym_room_day_dept.items():
@@ -1800,24 +1931,15 @@ def sched_build_conflict_report(
                     act_labels.remove(lbl_)
 
     for sk, slots in section_day.items():
-        sec, day = sk.rsplit("|", 1)
-        evts_s: List[Tuple[int, int, str]] = []
-        for s_, e_, lbl_ in slots:
-            evts_s.append((s_,  1, lbl_))
-            evts_s.append((e_, -1, lbl_))
-        evts_s.sort(key=lambda x: (x[0], x[1]))
-        act_s_lbl: Set[str] = set()
-        for _t, delta, lbl_ in evts_s:
-            if delta == 1:
-                act_s_lbl.add(lbl_)
-                if len(act_s_lbl) > 1:
-                    conflicts.append({
-                        "type": "section_conflict", "day": day, "section": sec,
-                        "subjects": sorted(act_s_lbl),
-                        "problem": f"Section overlap on {day}: {', '.join(sorted(act_s_lbl))}",
-                    })
-            else:
-                act_s_lbl.discard(lbl_)
+        ss = sorted(slots, key=lambda x: x[0])
+        for i in range(1, len(ss)):
+            if ss[i][0] < ss[i - 1][1]:
+                sec, day = sk.rsplit("|", 1)
+                conflicts.append({
+                    "type": "section_conflict", "day": day, "section": sec,
+                    "subjects": [ss[i - 1][2], ss[i][2]],
+                    "problem": f"Section overlap on {day}: {ss[i-1][2]} and {ss[i][2]}",
+                })
 
     # S-S6: section-day total exceeds 10-hour hard limit
     for sk, slots in section_day.items():
@@ -1907,21 +2029,13 @@ def sched_local_repair(
                 sec_day_slots.setdefault(f"{section}|{day}", []).append((start, end, si))
 
         for slots in room_day_slots.values():
-            evts: List[Tuple[int, int, int]] = []
-            for s_, e_, si_ in slots:
-                evts.append((s_,  1, si_))
-                evts.append((e_, -1, si_))
-            evts.sort(key=lambda x: (x[0], x[1]))
-            act_r: Set[int] = set()
-            for _t, delta, si_ in evts:
-                if delta == 1:
-                    act_r.add(si_)
-                    if len(act_r) > 1:
-                        for asi in act_r:
-                            if asi >= 0:
-                                viol_subs.add(asi)
-                else:
-                    act_r.discard(si_)
+            ss = sorted(slots, key=lambda x: x[0])
+            for i in range(1, len(ss)):
+                if ss[i][0] < ss[i - 1][1]:
+                    if ss[i][2] >= 0:
+                        viol_subs.add(ss[i][2])
+                    if ss[i - 1][2] >= 0:
+                        viol_subs.add(ss[i - 1][2])
 
         # GYM: sweep-line per (room, day, dept) — flag subjects over GYM_MAX_OVERLAP
         for gym_slots in gym_room_dept_day_slots.values():
@@ -2057,7 +2171,7 @@ def sched_local_repair(
                             total_day = sum(e_ - s_ for s_, e_ in sec_track.get(section, {}).get(day, []))
                             if total_day + duration > 600: ok = False; break
                         if not ok: continue
-                        # Valid same-room slot found
+                        # Valid slot found
                         room_track.setdefault(r, {}).setdefault(day1, []).append((start, end))
                         room_track.setdefault(r, {}).setdefault(day2, []).append((start, end))
                         if pathfit and r in gym_ridxs_set:
@@ -2069,46 +2183,6 @@ def sched_local_repair(
                         chrom[si] = (pat_idx, start, r, r)
                         placed = True
                         break
-
-            # For lec+lab subjects that couldn't be placed with a single room,
-            # try a lecture-room-on-day1 / lab-room-on-day2 split placement.
-            if not placed and not pathfit and sched_has_lec_and_lab(s):
-                lec_ridxs = [r for r in valid_ridxs if not sched_is_lab_room(rooms[r])]
-                lab_ridxs = [r for r in valid_ridxs if sched_is_lab_room(rooms[r])]
-                rng.shuffle(lec_ridxs)
-                rng.shuffle(lab_ridxs)
-                for pat_idx in rng.sample([0, 1], 2):
-                    if placed: break
-                    _, days = SCHED_PATTERNS[pat_idx]
-                    day1, day2 = days[0], days[1]
-                    for start in starts:
-                        if placed: break
-                        end = start + duration
-                        # Section + daily-load check is the same for all room pairs
-                        sec_ok = True
-                        for day in days:
-                            for ss, se in sec_track.get(section, {}).get(day, []):
-                                if start < se and end > ss: sec_ok = False; break
-                            if not sec_ok: break
-                            if sum(e_ - s_ for s_, e_ in sec_track.get(section, {}).get(day, [])) + duration > 600:
-                                sec_ok = False; break
-                        if not sec_ok: continue
-                        for r1 in lec_ridxs:
-                            if placed: break
-                            if any(start < re and end > rs for rs, re in room_track.get(r1, {}).get(day1, [])):
-                                continue
-                            for r2 in lab_ridxs:
-                                if r1 == r2: continue
-                                if any(start < re and end > rs for rs, re in room_track.get(r2, {}).get(day2, [])):
-                                    continue
-                                # Valid split-room slot found
-                                room_track.setdefault(r1, {}).setdefault(day1, []).append((start, end))
-                                room_track.setdefault(r2, {}).setdefault(day2, []).append((start, end))
-                                for day in days:
-                                    sec_track.setdefault(section, {}).setdefault(day, []).append((start, end))
-                                chrom[si] = (pat_idx, start, r1, r2)
-                                placed = True
-                                break
 
     return chrom
 
@@ -2359,7 +2433,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[GA-DIAG] after repair: score={rep_score:.1f}% "
               f"(hard={rep_hard:.1f}% soft={rep_soft:.1f}%) improved={rep_score > best_score}",
               flush=True)
-        if rep_hard > best_hard or (rep_hard == best_hard and rep_score > best_score):
+        if rep_score > best_score:
             best, best_score, best_hard, best_soft = repaired, rep_score, rep_hard, rep_soft
     else:
         print(f"[GA-DIAG] repair skipped (time_remaining={time_remaining:.1f}s)", flush=True)
@@ -2385,57 +2459,6 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
         for s in deferred_subjects
     ]
-
-    # Final validation: any subjects still in hard conflict are moved to unresolved
-    # so callers are never given a schedule that contains room or section violations.
-    if conflicts:
-        # Build label→subject lookup (label = code-course_no-section, same as conflict report)
-        label_to_subject: Dict[str, Dict[str, Any]] = {}
-        for s in subjects:
-            lbl = (
-                f"{normalize_upper(s.get('code') or '')}"
-                f"-{normalize_upper(s.get('course_no') or '')}"
-                f"-{normalize_upper(s.get('section') or '')}"
-            )
-            label_to_subject[lbl] = s
-
-        conflicted_labels: Set[str] = set()
-        for c in conflicts:
-            for lbl in c.get("subjects", []):
-                if isinstance(lbl, str):
-                    conflicted_labels.add(lbl)
-
-        if conflicted_labels:
-            # Build subject_id→assignment map for fast lookup
-            sid_to_assignment: Dict[Any, Dict[str, Any]] = {
-                to_number(a.get("subject_id")): a for a in assignments
-            }
-            conflict_sids: Set[Any] = set()
-            for lbl in conflicted_labels:
-                s = label_to_subject.get(lbl)
-                if s:
-                    conflict_sids.add(to_number(s.get("subject_id")))
-
-            conflict_unresolved = [
-                {
-                    "subject_id":        s.get("subject_id"),
-                    "code":              s.get("code"),
-                    "course_no":         s.get("course_no"),
-                    "section":           s.get("section"),
-                    "descriptive_title": s.get("descriptive_title"),
-                    "units":             s.get("units"),
-                    "reason":            "Unresolved room or section conflict — no valid slot found after repair",
-                }
-                for lbl in conflicted_labels
-                for s in [label_to_subject.get(lbl)]
-                if s is not None
-            ]
-            unresolved.extend(conflict_unresolved)
-            assignments = [a for a in assignments if to_number(a.get("subject_id")) not in conflict_sids]
-            print(
-                f"[GA-DIAG] final validation: {len(conflict_sids)} conflicted subject(s) moved to unresolved",
-                flush=True,
-            )
 
     return {
         "assignments":     locked_general_assignments + assignments,

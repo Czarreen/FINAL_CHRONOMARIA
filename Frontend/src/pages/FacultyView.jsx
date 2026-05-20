@@ -17,6 +17,7 @@ import {
   RotateCcw,
   RefreshCw,
   Settings,
+  Tag,
 } from 'lucide-react';
 import {
   fetchFaculty,
@@ -28,6 +29,8 @@ import {
 } from '../services/facultyApi.js';
 import { fetchDepartments } from '../services/departmentsApi.js';
 import NotificationButton from '../components/NotificationButton.jsx';
+import FacultySubjectPreferencesModal from '../components/FacultySubjectPreferencesModal.jsx';
+import { fetchAllFacultySubjectPreferences } from '../services/facultySubjectPreferencesApi.js';
 import { fetchFacultyNotifications, fetchPersistedFacultyNotifications, resolveFacultyNotification, syncFacultyNotifications } from '../services/notificationsApi.js';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
@@ -49,6 +52,9 @@ export default function FacultyView() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [preferencesModalFacultyId, setPreferencesModalFacultyId] = useState(null);
+  const [preferencesModalFacultyName, setPreferencesModalFacultyName] = useState(null);
   const [savingFaculty, setSavingFaculty] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [facultyError, setFacultyError] = useState(null);
@@ -60,6 +66,7 @@ export default function FacultyView() {
   const [facultyToDelete, setFacultyToDelete] = useState(null);
   const [deletingFaculty, setDeletingFaculty] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [allSubjectPreferences, setAllSubjectPreferences] = useState({});
   const [newFaculty, setNewFaculty] = useState({
     faculty_name: '',
     faculty_role: '',
@@ -82,6 +89,7 @@ export default function FacultyView() {
     { key: 'department', label: 'Department' },
     { key: 'faculty_role', label: 'Role' },
     { key: 'faculty_specialization', label: 'Specialization' },
+    { key: 'subject_tags', label: 'Subject Tags' },
     { key: 'faculty_max_units', label: 'Units' },
   ];
 
@@ -306,15 +314,14 @@ export default function FacultyView() {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchFaculty({
-        page,
-        limit,
-        search,
-        status: statusFilter,
-      });
+      const [data, prefsMap] = await Promise.all([
+        fetchFaculty({ page, limit, search, status: statusFilter }),
+        fetchAllFacultySubjectPreferences().catch(() => ({})),
+      ]);
       setFaculty(data.rows || []);
       setTotal(Number(data.total || 0));
       setActiveCount(Number(data.activeCount || 0));
+      setAllSubjectPreferences(prefsMap);
     } catch (err) {
       setError(err.message || 'Failed to load faculty members');
       setFaculty([]);
@@ -524,6 +531,12 @@ export default function FacultyView() {
     setEditSpecializationInput('');
     setEditError(null);
     setShowEditModal(true);
+  }
+
+  function handleOpenPreferencesModal(member) {
+    setPreferencesModalFacultyId(member.faculty_id);
+    setPreferencesModalFacultyName(member.faculty_name);
+    setShowPreferencesModal(true);
   }
 
   async function handleSaveEdit() {
@@ -950,6 +963,30 @@ export default function FacultyView() {
                           {col.key === 'faculty_max_units' && (
                             <span className="text-sm font-medium text-on-surface">{member.faculty_max_units ?? '—'}</span>
                           )}
+                          {col.key === 'subject_tags' && (() => {
+                            const tags = allSubjectPreferences[String(member.faculty_id)] || [];
+                            if (tags.length === 0) return <span className="text-xs text-on-surface-variant">—</span>;
+                            const priorityStyle = {
+                              1: 'bg-amber-100 text-amber-800',
+                              2: 'bg-blue-100 text-blue-700',
+                              3: 'bg-slate-100 text-slate-600',
+                            };
+                            const priorityLabel = { 1: 'High', 2: 'Capable', 3: 'Fallback' };
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {tags.map((t) => (
+                                  <span
+                                    key={t.subject_tag}
+                                    title={`Priority: ${priorityLabel[t.priority_level] ?? t.priority_level}`}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${priorityStyle[t.priority_level] ?? 'bg-slate-100 text-slate-600'}`}
+                                  >
+                                    {t.subject_tag}
+                                    <span className="opacity-60 font-normal">P{t.priority_level}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {col.key === 'faculty_status' && (
                             <div className="flex justify-center">
                               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${getStatusBadgeClass(member.faculty_status)}`}>
@@ -961,6 +998,15 @@ export default function FacultyView() {
                       ))}
                       <td className="sticky right-0 z-10 px-4 py-3 bg-white">
                         <div className="flex items-center justify-center gap-2 opacity-80 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleOpenPreferencesModal(member)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-blue-50 hover:text-blue-600"
+                            type="button"
+                            aria-label={`Subject preferences for ${member.faculty_name}`}
+                            title="Subject preferences"
+                          >
+                            <Tag size={16} />
+                          </button>
                           <button
                             onClick={() => handleEditFaculty(member)}
                             className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
@@ -1404,6 +1450,17 @@ export default function FacultyView() {
             </div>
           </div>
         </div>
+      )}
+
+      {showPreferencesModal && preferencesModalFacultyId !== null && (
+        <FacultySubjectPreferencesModal
+          facultyId={preferencesModalFacultyId}
+          facultyName={preferencesModalFacultyName}
+          onClose={() => {
+            setShowPreferencesModal(false);
+            fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
+          }}
+        />
       )}
     </div>
   );

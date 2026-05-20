@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
+import { fetchFacultyPreferenceMapForGA } from '../lib/facultySubjectPreferences.js';
 import { query, withPgClient } from '../lib/postgres.js';
 
 const REQUIRED_FACULTY_FIELDS = ['faculty_name', 'department_id', 'faculty_max_units', 'faculty_role', 'faculty_status'];
@@ -112,7 +113,7 @@ function parseScheduleText(scheduleText) {
   const match = text.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i);
   if (!match) return null;
 
-  const parseMinutes = (token) => {
+  const parseMinutes = (token, isEnd = false) => {
     const cleaned = normalizeUpper(token).replace(/\s+/g, '');
     const timeMatch = cleaned.match(/^(\d{1,2})(?::(\d{2}))?(AM|PM)?$/i);
     if (!timeMatch) return null;
@@ -125,24 +126,16 @@ function parseScheduleText(scheduleText) {
       if (hour === 12) hour = 0;
     } else if (meridiem === 'PM') {
       if (hour !== 12) hour += 12;
-    } else if (hour < 7) {
-      // School PM bias: hours 1-6 with no meridiem are treated as afternoon
-      // (school operates 7:30 AM – 8:00 PM; 1-6 AM slots don't exist in the schedule)
+    } else if (!isEnd && hour < 7) {
       hour += 12;
     }
 
     return hour * 60 + minute;
   };
 
-  const start = parseMinutes(match[1]);
-  let end = parseMinutes(match[2]);
-  if (start === null || end === null) return null;
-
-  // When end <= start (e.g. "1:00-2:30" where start→13:00, end→2:30=150),
-  // shift end forward by 12 hours to resolve the PM ambiguity.
-  if (end <= start) end += 12 * 60;
-
-  if (end <= start) return null;
+  const start = parseMinutes(match[1], false);
+  const end = parseMinutes(match[2], true);
+  if (start === null || end === null || end <= start) return null;
 
   return { start, end, duration: end - start };
 }
@@ -919,6 +912,9 @@ function buildPreflight(snapshot) {
     if (offeringIssues.length === 0) {
       assignableOfferingsList.push(offering);
     } else {
+      if (offering.code === '4733') {
+        console.log(`[preflight-debug] Offering code=4733 marked PROBLEMATIC. Reasons:`, offeringIssues);
+      }
       problematicOfferingsMap.set(offering.id, {
         offering,
         reasons: offeringIssues,
@@ -1228,9 +1224,13 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   // Filter to non-general offerings from assignable list
   const validOfferings = preflightAssignable.filter((o) => !Boolean(o.is_general));
 
-  // If no valid offerings, still throw error
-  if (validOfferings.length === 0 && preflightAssignable.length === 0) {
-    const error = new Error('No assignable offerings available for GA execution');
+  // If no valid offerings, throw — check validOfferings alone (preflightAssignable only contains non-general by construction)
+  if (validOfferings.length === 0) {
+    const error = new Error(
+      preFlight.assignable_count === 0 && preFlight.problematic_count > 0
+        ? `No assignable offerings available for GA execution. ${preFlight.problematic_count} offering(s) have issues (missing schedule, missing room, or room conflicts). Resolve them first.`
+        : 'No assignable offerings available for GA execution.'
+    );
     error.statusCode = 400;
     error.preFlight = preFlight;
     throw error;
@@ -1292,6 +1292,20 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     .filter((faculty) => (toNumber(faculty.faculty_max_units) || 0) > 0)
     .filter((faculty) => (toNumber(faculty.available_units) || 0) > 0);
 
+  if (gaFaculty.length === 0) {
+    const totalActive = (Array.isArray(snapshot.faculty) ? snapshot.faculty : []).filter(
+      (f) => normalizeUpper(f.faculty_status) === 'ACTIVE'
+    ).length;
+    const msg =
+      totalActive === 0
+        ? 'No active faculty found. Add faculty records with ACTIVE status before running GA.'
+        : 'No faculty have available units. All active faculty either have faculty_max_units = 0 or are already fully loaded.';
+    const error = new Error(msg);
+    error.statusCode = 400;
+    error.preFlight = preFlight;
+    throw error;
+  }
+
   const departmentFacultyCounts = {};
   const departmentAvailableFacultyCounts = {};
 
@@ -1322,6 +1336,24 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     constraints: normalizedConstraints,
     run_id: runId,
   };
+
+  // Fetch faculty preference map for GA (optional)
+  try {
+    const facultyPreferences = await fetchFacultyPreferenceMapForGA();
+    payload.faculty_preferences = facultyPreferences || {};
+    console.log('[ga] Included faculty_preferences with', Object.keys(payload.faculty_preferences).length, 'entries');
+    const offering4733 = assignableOfferings.find((o) => String(o.code) === '4733');
+    console.log('[ga-debug-js] offering code=4733 in GA payload?', offering4733 ? `YES (id=${offering4733.id})` : 'NO — it is in problematic_offerings or filtered out');
+    if (offering4733) {
+      console.log('[ga-debug-js] offering data:', JSON.stringify({ id: offering4733.id, code: offering4733.code, tfs_schedule: offering4733.tfs_schedule, tfs_room_id: offering4733.tfs_room_id, is_general: offering4733.is_general }));
+    }
+    const fac7 = gaFaculty.find((f) => String(f.faculty_id) === '7');
+    console.log('[ga-debug-js] faculty_id=7 in gaFaculty?', fac7 ? `YES (status=${fac7.faculty_status}, maxUnits=${fac7.faculty_max_units})` : 'NO — filtered out before GA!');
+  } catch (prefErr) {
+    console.warn('[ga] Warning: failed to fetch faculty preferences for GA:', prefErr && prefErr.message ? prefErr.message : prefErr);
+    // continue without preferences
+    payload.faculty_preferences = {};
+  }
 
   const optimizerResult = await callPythonOptimizer(payload);
   const mergedResult = {
@@ -1426,7 +1458,7 @@ export async function postRunFacultyLoading(req, res) {
     });
   } catch (error) {
     if (error.statusCode === 400 && error.preFlight) {
-      return res.status(400).json(error.preFlight);
+      return res.status(400).json({ error: error.message, ...error.preFlight });
     }
 
     if (String(error?.message || '').includes('timed out')) {
@@ -1439,36 +1471,36 @@ export async function postRunFacultyLoading(req, res) {
 }
 
 async function fetchAutomaticSchedulerRows() {
-  const [schedulerResp, roomsResp] = await Promise.all([
-    query(`
-      select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
-             a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
-             (a.merged = 'true') as merged, a.preflight_tag,
-             coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name
-      from public.automatic_scheduler a
-      left join public.departments d on d.department_id = a.department_id
-      order by a.id asc
-    `),
-    query(`select room_id, room_name from public.rooms`),
-  ]);
-
-  const roomById = new Map(roomsResp.rows.map((r) => [String(r.room_id), r.room_name]));
-
-  function resolveRoomName(roomIdStr) {
-    if (!roomIdStr || !roomIdStr.trim()) return null;
-    const names = roomIdStr
-      .split(/[^0-9]+/)
-      .filter(Boolean)
-      .map((id) => roomById.get(id) || id)
-      .join(' / ');
-    return names || null;
-  }
-
-  return schedulerResp.rows.map((row) => ({
-    ...row,
-    mth_room_name: resolveRoomName(row.mth_room_id),
-    tfs_room_name: resolveRoomName(row.tfs_room_id),
-  }));
+  const response = await query(`
+    select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
+           a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
+           (a.merged = 'true') as merged,
+           coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name,
+           case
+             when nullif(trim(a.mth_room_id), '') is null then null
+             else coalesce(mr.room_names, a.mth_room_id)
+           end as mth_room_name,
+           case
+             when nullif(trim(a.tfs_room_id), '') is null then null
+             else coalesce(tr.room_names, a.tfs_room_id)
+           end as tfs_room_name
+    from public.automatic_scheduler a
+    left join public.departments d on d.department_id = a.department_id
+    left join lateral (
+      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
+      from regexp_split_to_table(coalesce(a.mth_room_id, ''), '[^0-9]+') as token
+      join public.rooms r on r.room_id = token::integer
+      where token ~ '^[0-9]+$'
+    ) mr on true
+    left join lateral (
+      select string_agg(distinct r.room_name, ' / ' order by r.room_name) as room_names
+      from regexp_split_to_table(coalesce(a.tfs_room_id, ''), '[^0-9]+') as token
+      join public.rooms r on r.room_id = token::integer
+      where token ~ '^[0-9]+$'
+    ) tr on true
+    order by a.id asc
+  `);
+  return response.rows;
 }
 
 function parseRoomIdList(value) {
@@ -1993,17 +2025,13 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     function addCandidateRoomBlocks(c, ownerId) {
       for (const pat of ['mth', 'tfs']) {
         const sched = c[`existing_${pat}_schedule`];
-        // Use the slash-joined IDs string so each day gets its correct room
-        const roomIdStr = c[`existing_${pat}_room_ids`] || (c[`existing_${pat}_room_id`] != null ? String(c[`existing_${pat}_room_id`]) : null);
-        if (!sched || !roomIdStr) continue;
+        const roomId = c[`existing_${pat}_room_id`];
+        if (!sched || !roomId) continue;
         const parsed = parseScheduleText(sched);
         if (!parsed) continue;
         const days = parseDaysFromSchedule(sched, pat.toUpperCase());
-        const roomParts = String(roomIdStr).split('/').map((s) => s.trim()).filter(Boolean);
-        for (let i = 0; i < days.length; i++) {
-          // Zip: first room part → first day, second → second day; single part → all days
-          const dayRoom = roomParts.length === 1 ? roomParts[0] : (roomParts[i] ?? roomParts[0]);
-          roomDayBlocks.push({ roomId: dayRoom, day: days[i], start: parsed.start, end: parsed.end, ownerId: String(ownerId) });
+        for (const day of days) {
+          roomDayBlocks.push({ roomId: String(roomId), day, start: parsed.start, end: parsed.end, ownerId: String(ownerId) });
         }
       }
     }
@@ -2034,20 +2062,17 @@ function buildAutomaticSchedulerPreflight(snapshot) {
       for (const pat of ['mth', 'tfs']) {
         if (hasConflict) break;
         const sched = c[`existing_${pat}_schedule`];
-        const roomIdStr = c[`existing_${pat}_room_ids`] || (c[`existing_${pat}_room_id`] != null ? String(c[`existing_${pat}_room_id`]) : null);
-        if (!sched || !roomIdStr) continue;
+        const roomId = c[`existing_${pat}_room_id`];
+        if (!sched || !roomId) continue;
         const parsed = parseScheduleText(sched);
         if (!parsed) continue;
         const days = parseDaysFromSchedule(sched, pat.toUpperCase());
         const selfId = String(c.subject_id);
-        const roomParts = String(roomIdStr).split('/').map((s) => s.trim()).filter(Boolean);
 
-        for (let di = 0; di < days.length; di++) {
-          const day = days[di];
-          const dayRoom = roomParts.length === 1 ? roomParts[0] : (roomParts[di] ?? roomParts[0]);
+        for (const day of days) {
           for (const block of roomDayBlocks) {
             if (block.ownerId === selfId) continue;
-            if (block.roomId !== dayRoom || block.day !== day) continue;
+            if (block.roomId !== String(roomId) || block.day !== day) continue;
             if (overlaps(parsed, block)) {
               hasConflict = true;
               break;
@@ -2216,25 +2241,20 @@ function buildPreservedRows(preservedSubjects, activeRooms) {
     lec_hrs: c.lec_hrs,
     lab_hrs: c.lab_hrs,
     mth_schedule: c.existing_mth_schedule || null,
-    mth_room_id: c.existing_mth_room_ids || (c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null),
+    mth_room_id: c.existing_mth_room_id != null ? String(c.existing_mth_room_id) : null,
     mth_room_name:
       c.existing_mth_room_name ||
-      (c.existing_mth_room_ids
-        ? resolveRoomNamesFromIdText(c.existing_mth_room_ids, roomLookup)
-        : c.existing_mth_room_id != null
-          ? resolveRoomNamesFromIdText(String(c.existing_mth_room_id), roomLookup)
-          : null),
+      (c.existing_mth_room_id != null
+        ? resolveRoomNamesFromIdText(String(c.existing_mth_room_id), roomLookup)
+        : null),
     tfs_schedule: c.existing_tfs_schedule || null,
-    tfs_room_id: c.existing_tfs_room_ids || (c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null),
+    tfs_room_id: c.existing_tfs_room_id != null ? String(c.existing_tfs_room_id) : null,
     tfs_room_name:
       c.existing_tfs_room_name ||
-      (c.existing_tfs_room_ids
-        ? resolveRoomNamesFromIdText(c.existing_tfs_room_ids, roomLookup)
-        : c.existing_tfs_room_id != null
-          ? resolveRoomNamesFromIdText(String(c.existing_tfs_room_id), roomLookup)
-          : null),
+      (c.existing_tfs_room_id != null
+        ? resolveRoomNamesFromIdText(String(c.existing_tfs_room_id), roomLookup)
+        : null),
     merged: c.merged === true ? true : 'preserved',
-    preflight_tag: c.preflight_tag ?? null,
   }));
 }
 
@@ -2628,80 +2648,56 @@ async function persistAutomaticScheduler(assignments) {
     return { persisted: 0 };
   }
 
-  // Resolve curr_id for rows whose source subjects had no curriculum assigned.
-  // course_offerings carries curr_id across cycles, so this enriches subjects
-  // that were imported without curriculum data.
-  const offeringsCurrResp = await query(
-    `SELECT code, course_no, department_id, section, curr_id FROM public.course_offerings WHERE curr_id IS NOT NULL`
-  );
-  const currIdFromOfferings = new Map();
-  for (const r of offeringsCurrResp.rows) {
-    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
-    if (!currIdFromOfferings.has(k)) currIdFromOfferings.set(k, r.curr_id);
-  }
-  const resolvedAssignments = assignments.map((row) => {
-    if (row.curr_id != null) return row;
-    const resolved = currIdFromOfferings.get(makeSchedulerKey(row.code, row.course_no, row.department_id, row.section)) ?? null;
-    return resolved != null ? { ...row, curr_id: resolved } : row;
-  });
-
-  const columns = [
-    'curr_id',
-    'code',
-    'course_no',
-    'department_id',
-    'section',
-    'descriptive_title',
-    'units',
-    'lec_hrs',
-    'lab_hrs',
-    'mth_schedule',
-    'mth_room_id',
-    'tfs_schedule',
-    'tfs_room_id',
-    'merged',
-    'preflight_tag',
-  ];
-
-  const CHUNK_SIZE = 200;
-
   await withPgClient(async (client) => {
     try {
       await client.query('BEGIN');
       await client.query('DELETE FROM public.automatic_scheduler');
 
-      for (let offset = 0; offset < resolvedAssignments.length; offset += CHUNK_SIZE) {
-        const chunk = resolvedAssignments.slice(offset, offset + CHUNK_SIZE);
-        const values = [];
-        const placeholders = [];
+      const columns = [
+        'curr_id',
+        'code',
+        'course_no',
+        'department_id',
+        'section',
+        'descriptive_title',
+        'units',
+        'lec_hrs',
+        'lab_hrs',
+        'mth_schedule',
+        'mth_room_id',
+        'tfs_schedule',
+        'tfs_room_id',
+        'merged',
+      ];
 
-        chunk.forEach((row, idx) => {
-          const base = idx * columns.length;
-          placeholders.push(`(${columns.map((_, cIdx) => `$${base + cIdx + 1}`).join(', ')})`);
-          values.push(
-            row.curr_id,
-            row.code,
-            row.course_no,
-            row.department_id,
-            row.section,
-            row.descriptive_title,
-            row.units,
-            row.lec_hrs,
-            row.lab_hrs,
-            row.mth_schedule,
-            row.mth_room_id != null ? String(row.mth_room_id) : null,
-            row.tfs_schedule,
-            row.tfs_room_id != null ? String(row.tfs_room_id) : null,
-            row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : row.merged === 'unresolved' ? 'unresolved' : 'false',
-            row.preflight_tag ?? null,
-          );
-        });
+      const values = [];
+      const placeholders = [];
 
-        await client.query(
-          `INSERT INTO public.automatic_scheduler (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`,
-          values
+      assignments.forEach((row, idx) => {
+        const base = idx * columns.length;
+        placeholders.push(`(${columns.map((_, cIdx) => `$${base + cIdx + 1}`).join(', ')})`);
+        values.push(
+          row.curr_id,
+          row.code,
+          row.course_no,
+          row.department_id,
+          row.section,
+          row.descriptive_title,
+          row.units,
+          row.lec_hrs,
+          row.lab_hrs,
+          row.mth_schedule,
+          row.mth_room_id != null ? String(row.mth_room_id) : null,
+          row.tfs_schedule,
+          row.tfs_room_id != null ? String(row.tfs_room_id) : null,
+          row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
         );
-      }
+      });
+
+      await client.query(
+        `INSERT INTO public.automatic_scheduler (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`,
+        values
+      );
 
       await client.query('COMMIT');
     } catch (error) {
@@ -2786,18 +2782,7 @@ async function buildAutomaticSchedulerExportRows() {
     tfs_schedule: row.tfs_schedule,
     tfs_room: row.tfs_room_name,
     merged: row.merged ? (mergeLabel.get(row.id) || 'true') : '',
-    preflight_tag: row.preflight_tag ?? '',
   }));
-}
-
-function makeSchedulerKey(code, courseNo, deptId, section) {
-  return `${(code || '').trim().toUpperCase()}|${(courseNo || '').trim().toUpperCase()}|${deptId}|${(section || '').trim().toUpperCase()}`;
-}
-
-function resolveCurrId(row, fromOfferings, fromSubjects) {
-  if (row.curr_id != null) return row.curr_id;
-  const k = makeSchedulerKey(row.code, row.course_no, row.department_id, row.section);
-  return fromOfferings.get(k) ?? fromSubjects.get(k) ?? null;
 }
 
 async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false }) {
@@ -2806,35 +2791,14 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
     return { updated: 0, backup: null };
   }
 
-  const [roomResp, offeringsCurrResp, subjectsCurrResp] = await Promise.all([
-    query(`select room_id, room_name from public.rooms order by room_id asc`),
-    query(`SELECT code, course_no, department_id, section, curr_id FROM public.course_offerings WHERE curr_id IS NOT NULL`),
-    query(`SELECT subject_code AS code, subject_course_no AS course_no, department_id, subject_section AS section, curr_id FROM public.subjects WHERE curr_id IS NOT NULL`),
-  ]);
-
+  const roomResp = await query(`
+    select room_id, room_name
+    from public.rooms
+    order by room_id asc
+  `);
   const roomLookup = buildRoomLookup(roomResp.rows || []);
 
-  const currIdFromOfferings = new Map();
-  for (const r of offeringsCurrResp.rows) {
-    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
-    if (!currIdFromOfferings.has(k)) currIdFromOfferings.set(k, r.curr_id);
-  }
-
-  const currIdFromSubjects = new Map();
-  for (const r of subjectsCurrResp.rows) {
-    const k = makeSchedulerKey(r.code, r.course_no, r.department_id, r.section);
-    if (!currIdFromSubjects.has(k)) currIdFromSubjects.set(k, r.curr_id);
-  }
-
-  const nullCurrIdRows = rows.filter((r) => resolveCurrId(r, currIdFromOfferings, currIdFromSubjects) == null);
-  if (nullCurrIdRows.length > 0) {
-    const labels = nullCurrIdRows
-      .map((r) => `${r.code || r.course_no} (${r.section}, dept ${r.department_id})`)
-      .join('; ');
-    throw new Error(
-      `Cannot update Course Offering: ${nullCurrIdRows.length} scheduler row(s) are missing a curriculum assignment. Assign a curriculum to these subjects first: ${labels}`
-    );
-  }
+  await query('DELETE FROM public.subjects');
 
   let backup = null;
 
@@ -2852,7 +2816,6 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         backup = current.rows;
       }
 
-      await client.query('DELETE FROM public.subjects');
       await client.query('DELETE FROM public.course_offerings');
 
       const columns = [
@@ -2881,7 +2844,7 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         const normalizedMthRoomId = toCourseOfferingRoomIdText(row.mth_room_id, roomLookup);
         const normalizedTfsRoomId = toCourseOfferingRoomIdText(row.tfs_room_id, roomLookup);
         values.push(
-          resolveCurrId(row, currIdFromOfferings, currIdFromSubjects),
+          row.curr_id,
           row.code,
           row.course_no,
           row.department_id,
@@ -2902,6 +2865,24 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
         `INSERT INTO public.course_offerings (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`,
         values
       );
+
+      // Write generated schedules back to subjects so faculty loading can read them.
+      // Match by (code, course_no, department_id, section); join rooms to resolve room name.
+      await client.query(`
+        UPDATE public.subjects s
+        SET
+          mth_schedule = asch.mth_schedule,
+          tfs_schedule = asch.tfs_schedule,
+          mth_room     = COALESCE(rm.room_name, asch.mth_room_id),
+          tfs_room     = COALESCE(rf.room_name, asch.tfs_room_id)
+        FROM public.automatic_scheduler asch
+        LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
+        LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
+        WHERE lower(trim(s.subject_code))     = lower(trim(asch.code))
+          AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
+          AND s.department_id                  = asch.department_id
+          AND lower(trim(s.subject_section))   = lower(trim(asch.section))
+      `);
 
       await client.query('COMMIT');
     } catch (error) {
@@ -2937,8 +2918,7 @@ export async function postRunAutomaticScheduler(req, res) {
     const totalToProcess =
       preflight.assignable_count +
       (preflight.excluded_merged_subjects || []).length +
-      (preflight.excluded_unique_subjects || []).length +
-      (preflight.excluded_general_subjects || []).length;
+      (preflight.excluded_unique_subjects || []).length;
 
     if (totalToProcess === 0) {
       return res.status(400).json({
@@ -2948,9 +2928,18 @@ export async function postRunAutomaticScheduler(req, res) {
     }
 
     const activeRooms = (snapshot.rooms || []).filter((room) => isRoomActive(room));
-    const roomLookup = buildRoomLookup(activeRooms);
 
-    // --- GA constraint parameters ---
+    // --- Build preserved (merged + unique-clean) and GA-only subject lists ---
+    const preservedSubjects = [
+      ...(preflight.excluded_merged_subjects || []),
+      ...(preflight.excluded_unique_subjects || []),
+    ];
+    const reservedSlots = buildReservedSlots(
+      preflight.excluded_merged_subjects || [],
+      preflight.excluded_unique_subjects || []
+    );
+
+    // --- Build GA constraint parameters from request body ---
     const normalizedConstraints = {
       population_size:      Number(req.body?.population_size      ?? 120),
       max_generations:      Number(req.body?.max_generations      ?? 250),
@@ -3193,11 +3182,11 @@ export async function postRunAutomaticScheduler(req, res) {
       status: 'completed',
       dry_run: dryRun,
       used_genetic_algorithm: usedGA,
-      fitness_overall: lastGAResult.fitness_overall,
-      fitness_hard: lastGAResult.fitness_hard,
-      fitness_soft: lastGAResult.fitness_soft,
-      generations: lastGAResult.generations ?? null,
-      runtime_ms: lastGAResult.runtime_ms ?? null,
+      fitness_overall: result.fitness_overall,
+      fitness_hard: result.fitness_hard,
+      fitness_soft: result.fitness_soft,
+      generations: result.generations ?? null,
+      runtime_ms: result.runtime_ms ?? null,
       assignments: allAssignments,
       unresolved_issues: allUnresolved,
       human_review: humanReview,
