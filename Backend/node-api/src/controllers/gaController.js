@@ -1102,7 +1102,25 @@ async function callPythonScheduleGA(payload) {
       throw new Error(text || `Schedule GA service returned HTTP ${response.status}`);
     }
 
-    return JSON.parse(text);
+    const result = JSON.parse(text);
+
+    if (result.status === 'error') {
+      throw new Error(
+        `GA failed: ${result.error_type}: ${result.error_message}\n` +
+        `Traceback:\n${result.traceback}`
+      );
+    }
+
+    // Census validation: catches silent drops at the API boundary
+    if (result.census && result.census.input_count !== result.census.output_count) {
+      throw new Error(
+        `GA dropped subjects: ${result.census.input_count} sent, ` +
+        `${result.census.output_count} returned. ` +
+        `Run ID: ${result.stats && result.stats.ga_run_id}`
+      );
+    }
+
+    return result;
   } finally {
     clearTimeout(timeoutId);
   }

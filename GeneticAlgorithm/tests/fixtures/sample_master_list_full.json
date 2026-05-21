@@ -1,0 +1,4 @@
+{
+  "description": "Full 359-subject regression test fixture. Populate from TestImport.csv export before running test_census.py and test_end_to_end.py.",
+  "subjects": []
+}

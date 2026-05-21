@@ -1,0 +1,37 @@
+{
+  "description": "The original bug case: Eng Math 2 and GPIC assigned same section, overlapping time, overlapping room.",
+  "subject_a": {
+    "curr_id": 945,
+    "code": "4065",
+    "course_no": "Eng Math 2",
+    "department_id": "CE",
+    "section": "1A",
+    "descriptive_title": "Engineering Data Analysis",
+    "units": 3,
+    "lec_hrs": 3,
+    "lab_hrs": 0,
+    "mth_schedule": "1:00-2:30",
+    "mth_room": "1200/1195",
+    "tfs_schedule": null,
+    "tfs_room": null,
+    "merged_with": null
+  },
+  "subject_b": {
+    "curr_id": 946,
+    "code": "4070",
+    "course_no": "GPIC",
+    "department_id": "CE",
+    "section": "1A",
+    "descriptive_title": "General Psychology in Context",
+    "units": 3,
+    "lec_hrs": 3,
+    "lab_hrs": 0,
+    "mth_schedule": "1:30-3:00",
+    "mth_room": "1200",
+    "tfs_schedule": null,
+    "tfs_room": null,
+    "merged_with": null
+  },
+  "expected_conflict": true,
+  "expected_reasons": ["same_section", "room_overlap", "time_overlap"]
+}
