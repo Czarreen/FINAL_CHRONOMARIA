@@ -91,6 +91,17 @@ function qualityTone(quality) {
   }
 }
 
+function isSatOnlySchedule(mthSchedule, tfsSchedule) {
+  const hasSat = (s) => /\bsat(urday)?\b/i.test(s || '');
+  const hasWeekday = (s) => /\b(mon|tue|wed|thu|fri|mth|tfs)\b/i.test(s || '');
+  const mthEmpty = !mthSchedule;
+  const tfsEmpty = !tfsSchedule;
+  if (mthEmpty && tfsEmpty) return false;
+  const mthOk = mthEmpty || (hasSat(mthSchedule) && !hasWeekday(mthSchedule));
+  const tfsOk = tfsEmpty || (hasSat(tfsSchedule) && !hasWeekday(tfsSchedule));
+  return mthOk && tfsOk && (!mthEmpty || !tfsEmpty);
+}
+
 function formatDateTimeStandard(date) {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
@@ -857,6 +868,11 @@ export default function FacultyLoadingView() {
                                   {getScheduleAmPm(item.mth_schedule)}
                                 </span>
                               )}
+                              {isSatOnlySchedule(item.mth_schedule, item.tfs_schedule) && (
+                                <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700" title="Saturday-only — assign manually">
+                                  SAT
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-on-surface-variant">
@@ -870,7 +886,13 @@ export default function FacultyLoadingView() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-on-surface">{item.department_name || 'Unassigned department'}</td>
-                          <td className="px-4 py-3 text-on-surface">{item.faculty_name || '-'}</td>
+                          <td className="px-4 py-3 text-on-surface">
+                            {item.faculty_name || (
+                              isSatOnlySchedule(item.mth_schedule, item.tfs_schedule)
+                                ? <span className="text-xs text-purple-600 font-medium">Manual (SAT)</span>
+                                : '-'
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-on-surface-variant">{item.merged ? 'Merged' : ''}</td>
                           <td className="px-4 py-3 text-on-surface-variant capitalize">{item.load_status?.replace(/_/g, ' ') || '-'}</td>
                         </tr>
