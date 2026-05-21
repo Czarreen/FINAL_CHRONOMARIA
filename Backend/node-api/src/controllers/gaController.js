@@ -1011,9 +1011,16 @@ async function fetchSnapshot() {
       order by department_id asc
     `),
     query(`
-      select facloading_id, curr_id, faculty_id, code, course_no, department_id, section, descriptive_title, units, lec_hrs, lab_hrs, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id, merged
-      from public.faculty_loading
-      order by facloading_id asc
+      select fl.facloading_id, fl.curr_id, fl.faculty_id, fl.code, fl.course_no, fl.department_id, fl.section,
+             fl.descriptive_title, fl.units, fl.lec_hrs, fl.lab_hrs, fl.mth_schedule, fl.mth_room_id,
+             fl.tfs_schedule, fl.tfs_room_id, fl.merged,
+             f.faculty_name,
+             d.department_name,
+             CASE WHEN fl.faculty_id IS NOT NULL THEN 'assigned' ELSE 'unassigned' END AS load_status
+      from public.faculty_loading fl
+      left join public.faculty f on f.faculty_id = fl.faculty_id
+      left join public.departments d on d.department_id = fl.department_id
+      order by fl.facloading_id asc
     `),
   ]);
 
@@ -1430,7 +1437,8 @@ export async function getGaPreFlight(_req, res) {
     const snapshot = await fetchSnapshot();
     const subjectDrivenOfferings = mapSubjectsToGaOfferings(snapshot.subjects, snapshot.offerings);
     const subjectDrivenSnapshot = { ...snapshot, offerings: subjectDrivenOfferings };
-    return res.json(buildPreflight(subjectDrivenSnapshot));
+    const preflight = buildPreflight(subjectDrivenSnapshot);
+    return res.json({ ...preflight, faculty_loading: snapshot.faculty_loading || [] });
   } catch (error) {
     console.error('[ga] pre-flight failed:', error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
