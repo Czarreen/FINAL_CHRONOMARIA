@@ -93,12 +93,12 @@ def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
     if n == 0:
         return []
 
-    by_curr_id: Dict[int, int] = {}
+    by_subject_id: Dict[int, int] = {}
     by_code: Dict[str, int] = {}
     by_section_key: Dict[str, int] = {}
 
     for i, s in enumerate(subjects):
-        by_curr_id[s.curr_id] = i
+        by_subject_id[s.subject_id] = i
         if s.code:
             by_code[s.code.strip()] = i
         key = _make_section_key(s.department_id, s.section)
@@ -122,9 +122,9 @@ def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
         if not token:
             return None
         if token.isdigit():
-            cid = int(token)
-            if cid in by_curr_id:
-                return by_curr_id[cid]
+            sid = int(token)
+            if sid in by_subject_id:
+                return by_subject_id[sid]
             if token in by_code:
                 return by_code[token]
             return None
@@ -183,16 +183,16 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     merge_groups = detect_merge_groups(subjects)
 
     merged_ids: Set[int] = {
-        m['curr_id'] for mg in merge_groups for m in mg.members
+        m['subject_id'] for mg in merge_groups for m in mg.members
     }
-    subject_by_id: Dict[int, Subject] = {s.curr_id: s for s in subjects}
+    subject_by_id: Dict[int, Subject] = {s.subject_id: s for s in subjects}
 
     locked: List[Subject] = []
     manual_review: List[Subject] = []
     pending: List[Subject] = []
 
     for s in subjects:
-        if s.curr_id in merged_ids:
+        if s.subject_id in merged_ids:
             continue
         if s.subject_type == SubjectType.GENERAL:
             if s.subject_state == SubjectState.SCHEDULED:
@@ -209,13 +209,13 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     for mg in merge_groups:
         if mg.all_scheduled():
             for m in mg.members:
-                s = subject_by_id.get(m['curr_id'])
+                s = subject_by_id.get(m['subject_id'])
                 if s:
                     s.tag = SubjectTag.ORIGINAL
             final_merged_groups.append(mg)
         else:
             for m in mg.members:
-                s = subject_by_id.get(m['curr_id'])
+                s = subject_by_id.get(m['subject_id'])
                 if s:
                     pending.append(s)
 
@@ -226,7 +226,7 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
         pending=pending,
         unresolvable=[],
         manual_review=manual_review,
-        original_input_ids=[s.curr_id for s in subjects],
+        original_input_ids=[s.subject_id for s in subjects],
     )
 
     assert_invariant(subjects, state, "preflight")

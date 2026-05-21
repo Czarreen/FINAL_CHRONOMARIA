@@ -49,39 +49,39 @@ class PipelineState(BaseModel):
         )
 
     def all_subject_ids(self) -> Set[int]:
-        """Union of curr_id across all buckets."""
+        """Union of subject_id across all buckets."""
         ids: Set[int] = set()
         for s in self.locked:
-            ids.add(s.curr_id)
+            ids.add(s.subject_id)
         for g in self.merged_groups:
             for m in g.members:
-                ids.add(m['curr_id'])
+                ids.add(m['subject_id'])
         for s in self.resolved:
-            ids.add(s.curr_id)
+            ids.add(s.subject_id)
         for s in self.pending:
-            ids.add(s.curr_id)
+            ids.add(s.subject_id)
         for s in self.unresolvable:
-            ids.add(s.curr_id)
+            ids.add(s.subject_id)
         for s in self.manual_review:
-            ids.add(s.curr_id)
+            ids.add(s.subject_id)
         return ids
 
     def all_subject_ids_with_dupes(self) -> List[int]:
-        """Return all curr_ids including duplicates — used by census to detect dupes."""
+        """Return all subject_ids including duplicates — used by census to detect dupes."""
         ids: List[int] = []
         for s in self.locked:
-            ids.append(s.curr_id)
+            ids.append(s.subject_id)
         for g in self.merged_groups:
             for m in g.members:
-                ids.append(m['curr_id'])
+                ids.append(m['subject_id'])
         for s in self.resolved:
-            ids.append(s.curr_id)
+            ids.append(s.subject_id)
         for s in self.pending:
-            ids.append(s.curr_id)
+            ids.append(s.subject_id)
         for s in self.unresolvable:
-            ids.append(s.curr_id)
+            ids.append(s.subject_id)
         for s in self.manual_review:
-            ids.append(s.curr_id)
+            ids.append(s.subject_id)
         return ids
 
     def has_pending(self) -> bool:
@@ -104,10 +104,10 @@ class PipelineState(BaseModel):
         for bucket_name in ('locked', 'pending', 'unresolvable', 'manual_review'):
             bucket: List[Subject] = getattr(self, bucket_name)
             for i, s in enumerate(bucket):
-                if s.curr_id == subject.curr_id:
+                if s.subject_id == subject.subject_id:
                     if removed:
                         raise ValueError(
-                            f"Subject {subject.curr_id} found in multiple buckets"
+                            f"Subject {subject.subject_id} found in multiple buckets"
                         )
                     bucket.pop(i)
                     removed = True
@@ -115,7 +115,7 @@ class PipelineState(BaseModel):
 
         if not removed:
             raise ValueError(
-                f"Subject {subject.curr_id} not found in any mutable bucket"
+                f"Subject {subject.subject_id} not found in any mutable bucket"
             )
 
         self.resolved.append(subject)

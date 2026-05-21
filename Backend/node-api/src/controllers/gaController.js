@@ -2982,6 +2982,7 @@ function toOptimizerSubject(subject, roomLookup) {
   const mthRoom = resolveAllRoomIds(subject.mth_room, roomLookup).join('/') || null;
   const tfsRoom = resolveAllRoomIds(subject.tfs_room, roomLookup).join('/') || null;
   return {
+    subject_id: toNumber(subject.subject_id),
     curr_id: toNumber(subject.curr_id) ?? toNumber(subject.subject_id),
     code: normalizeText(subject.subject_code) || null,
     course_no: normalizeText(subject.subject_course_no) || null,
@@ -3004,7 +3005,7 @@ function subjectToOutputRow(s, roomLookup) {
   const mthRoomName = resolveRoomNamesFromIdText(s.mth_room || null, roomLookup);
   const tfsRoomName = resolveRoomNamesFromIdText(s.tfs_room || null, roomLookup);
   return {
-    source_subject_id: s.curr_id,
+    source_subject_id: s.subject_id ?? s.curr_id,
     curr_id: s.curr_id,
     code: s.code,
     course_no: s.course_no,

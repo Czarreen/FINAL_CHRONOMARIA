@@ -89,11 +89,11 @@ def run_stage3(
 
     clean, conflicted = validate_ga_output(ga_output, baseline)
 
-    # Map GA output back to original pending subjects by curr_id
-    pending_by_id = {s.curr_id: s for s in state.pending}
+    # Map GA output back to original pending subjects by subject_id
+    pending_by_id = {s.subject_id: s for s in state.pending}
 
     for s in clean:
-        original = pending_by_id.get(s.curr_id, s)
+        original = pending_by_id.get(s.subject_id, s)
         original.mth_schedule = s.mth_schedule
         original.mth_room     = s.mth_room
         original.tfs_schedule = s.tfs_schedule
@@ -102,9 +102,9 @@ def run_stage3(
         state.resolved.append(original)
 
     new_pending: List[Subject] = []
-    conflicted_ids = {s.curr_id for s in conflicted}
+    conflicted_ids = {s.subject_id for s in conflicted}
     for s in state.pending:
-        if s.curr_id in conflicted_ids:
+        if s.subject_id in conflicted_ids:
             new_pending.append(s)
 
     state.pending = new_pending

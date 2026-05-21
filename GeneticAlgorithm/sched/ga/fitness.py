@@ -49,7 +49,7 @@ def _slot_analysis(
         sec        = section_key(s)
         dept_id    = str(s.department_id or "")
         same_room  = (r1_idx == r2_idx)
-        curr_id    = str(s.curr_id)
+        curr_id    = str(s.subject_id)
 
         if start < SCHED_START_MIN or end > SCHED_END_MAX:
             hard_subs.add(si)

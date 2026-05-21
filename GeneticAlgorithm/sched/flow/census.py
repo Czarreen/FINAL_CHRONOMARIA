@@ -50,12 +50,12 @@ def assert_invariant(
 
     Checks:
       1. state.total_count() == len(original_input)
-      2. state.all_subject_ids() == {s.curr_id for s in original_input}
+      2. state.all_subject_ids() == {s.subject_id for s in original_input}
       3. No subject appears in two buckets simultaneously
 
     Raises CensusViolationError with full diagnostics on failure.
     """
-    expected_ids: Set[int] = {s.curr_id for s in original_input}
+    expected_ids: Set[int] = {s.subject_id for s in original_input}
 
     all_ids_with_dupes = state.all_subject_ids_with_dupes()
     id_counts = Counter(all_ids_with_dupes)

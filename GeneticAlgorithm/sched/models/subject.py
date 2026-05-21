@@ -52,7 +52,8 @@ class Subject(BaseModel):
     Units, Lec(hrs), Lab(hrs), MTh SCHEDULE, MTh Room,
     TFS SCHEDULE, TFS Room, MERGED
     """
-    curr_id: int
+    subject_id: int      # DB primary key — pipeline unique identifier
+    curr_id: int         # curriculum_id display column — NOT unique, NOT used as PK
     code: Optional[str] = None
     course_no: str
     department_id: str
