@@ -22,6 +22,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, Table as DocTable, TableCell, TableRow, TextRun, WidthType } from 'docx';
 import { formatScheduleTimeDisplay } from '../utils/scheduleUtils';
+import { fetchGaPreFlight } from '../services/gaApi';
 import { fetchRooms } from '../services/roomsApi';
 
 let ROOMS_MAP = {};
@@ -377,6 +378,26 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
       } catch (err) {
         // ignore fetch errors - rooms may not be available in some contexts
         // console.error('Failed to load rooms:', err);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, []);
+
+  // If localStorage had no rows, seed from DB via preflight
+  useEffect(() => {
+    if (rows.length > 0) return;
+    let mounted = true;
+
+    (async () => {
+      try {
+        const preflight = await fetchGaPreFlight();
+        const dbRows = Array.isArray(preflight?.faculty_loading) ? preflight.faculty_loading : [];
+        if (mounted && dbRows.length > 0) {
+          setRows(dbRows.map((row, index) => normalizeRow(row, index)));
+        }
+      } catch {
+        // preflight unavailable — leave rows empty
       }
     })();
 
