@@ -1,45 +1,233 @@
 """
 PRE-FLIGHT stage.
 
-Takes raw parsed subjects, tags them, assigns to buckets.
-
-Imports:
-    from typing import List
-    from sched.models.subject import Subject, SubjectType, SubjectState, SubjectTag
-    from sched.models.merge_group import MergeGroup
-    from sched.flow.state import PipelineState
+Pipeline contract:
+  - GENERAL + SCHEDULED  -> locked        (tag: General)
+  - GENERAL + EMPTY      -> manual_review (tag: Manual Review)
+  - MERGED all-scheduled -> merged_groups (tag: Original)
+  - MERGED any-empty     -> pending
+  - REGULAR + *          -> pending
 """
 
-from typing import List
+import re
+import uuid
+from typing import List, Dict, Set, Optional
+
 from sched.models.subject import Subject, SubjectType, SubjectState, SubjectTag
 from sched.models.merge_group import MergeGroup
 from sched.flow.state import PipelineState
+from sched.flow.census import assert_invariant
 
 
-# TODO: function `classify_subject_type(subject: Subject) -> SubjectType`
-#       GENERAL if course_no matches general patterns (G*, CFE*, PATH FIT,
-#       NSTP, AdvOral Com, For Lang, etc.) -- confirm exact rule with team.
-#       MERGED if subject.merged_with is non-empty.
-#       REGULAR otherwise.
+_GENERAL_RE = re.compile(
+    r'^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG)',
+    re.IGNORECASE,
+)
 
-# TODO: function `classify_subject_state(subject: Subject) -> SubjectState`
-#       EMPTY if both mth and tfs slots are null.
-#       SCHEDULED if at least one slot has a schedule + room.
 
-# TODO: function `detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]`
-#       Parses the messy merged_with column and groups related subjects.
-#       NOTE: existing merge detector logic works -- port it here, do not redesign.
+def classify_subject_type(subject: Subject) -> SubjectType:
+    """
+    Classify subject as GENERAL, MERGED, or REGULAR.
+    is_general flag (from DB/Node) takes priority over regex.
+    """
+    if subject.is_general is True:
+        return SubjectType.GENERAL
+    if subject.is_general is False:
+        if subject.merged_with:
+            return SubjectType.MERGED
+        return SubjectType.REGULAR
+    # is_general is None — apply regex heuristic
+    if _GENERAL_RE.match(subject.course_no or ''):
+        return SubjectType.GENERAL
+    if subject.merged_with:
+        return SubjectType.MERGED
+    return SubjectType.REGULAR
 
-# TODO: function `run_preflight(subjects: List[Subject]) -> PipelineState`
-#       1. Tag each subject with type and state
-#       2. Detect merge groups
-#       3. Place into buckets:
-#          - GENERAL + SCHEDULED -> locked (tag: General)
-#          - GENERAL + EMPTY -> manual_review (flag for humans)
-#          - MERGED + all SCHEDULED -> merged_groups (tag: Original)
-#          - MERGED + any EMPTY -> pending (will be scheduled together)
-#          - REGULAR + SCHEDULED -> pending (NEEDS_RESCHEDULE -- check conflicts later)
-#          - REGULAR + EMPTY -> pending (NEEDS_GENERATION)
-#       4. Construct PipelineState
-#       5. Assert census invariant
-#       6. Return state
+
+def classify_subject_state(subject: Subject) -> SubjectState:
+    """EMPTY if both slots absent; SCHEDULED otherwise."""
+    if subject.mth_schedule is None and subject.tfs_schedule is None:
+        return SubjectState.EMPTY
+    return SubjectState.SCHEDULED
+
+
+def _make_section_key(dept: str, section: str) -> str:
+    return f"{dept.strip().upper()}|{section.strip().upper()}"
+
+
+def _tokenize_merged_with(raw: str) -> List[str]:
+    """
+    Split a messy merged_with string into individual reference tokens.
+    Handles comma/semicolon/slash separators and space-separated dept+section pairs.
+    """
+    parts: List[str] = []
+    for segment in re.split(r'[,;/]', raw):
+        segment = segment.strip()
+        if not segment:
+            continue
+        # findall extracts dept+section combos (e.g. "CS 1B"), pure alpha, or pure digits
+        sub_tokens = re.findall(
+            r'[A-Za-z]+\s*\d+[A-Za-z]*|[A-Za-z]+|[0-9]+', segment
+        )
+        i = 0
+        while i < len(sub_tokens):
+            tok = sub_tokens[i]
+            # Join bare dept token with following alnum section token: "IT" + "2B" -> "IT 2B"
+            if (i + 1 < len(sub_tokens)
+                    and re.match(r'^[A-Za-z]+$', tok)
+                    and re.match(r'^\d+[A-Za-z]*$', sub_tokens[i + 1])):
+                parts.append(f"{tok} {sub_tokens[i + 1]}")
+                i += 2
+            else:
+                parts.append(tok)
+                i += 1
+    return parts
+
+
+def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
+    """
+    Group subjects that reference each other via the merged_with column.
+    Uses Union-Find to cluster related subjects into MergeGroup objects.
+    """
+    n = len(subjects)
+    if n == 0:
+        return []
+
+    by_curr_id: Dict[int, int] = {}
+    by_code: Dict[str, int] = {}
+    by_section_key: Dict[str, int] = {}
+
+    for i, s in enumerate(subjects):
+        by_curr_id[s.curr_id] = i
+        if s.code:
+            by_code[s.code.strip()] = i
+        key = _make_section_key(s.department_id, s.section)
+        by_section_key[key] = i
+
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: int, y: int) -> None:
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    def _resolve_token(token: str) -> Optional[int]:
+        token = token.strip()
+        if not token:
+            return None
+        if token.isdigit():
+            cid = int(token)
+            if cid in by_curr_id:
+                return by_curr_id[cid]
+            if token in by_code:
+                return by_code[token]
+            return None
+        if token in by_code:
+            return by_code[token]
+        m = re.match(r'^([A-Za-z]+)\s*([0-9]+[A-Za-z]*|[A-Za-z]+[0-9]*)$', token)
+        if m:
+            key = f"{m.group(1).upper()}|{m.group(2).upper()}"
+            if key in by_section_key:
+                return by_section_key[key]
+        return None
+
+    for i, s in enumerate(subjects):
+        if not s.merged_with:
+            continue
+        for tok in _tokenize_merged_with(s.merged_with):
+            j = _resolve_token(tok)
+            if j is not None and j != i:
+                union(i, j)
+
+    groups: Dict[int, List[int]] = {}
+    for i in range(n):
+        root = find(i)
+        if root not in groups:
+            groups[root] = []
+        groups[root].append(i)
+
+    merge_groups: List[MergeGroup] = []
+    for members_idx in groups.values():
+        if not any(subjects[i].merged_with for i in members_idx):
+            continue
+        if len(members_idx) < 2:
+            continue
+        mg = MergeGroup(
+            group_id=str(uuid.uuid4()),
+            members=[subjects[i].model_dump() for i in members_idx],
+            is_pre_existing=True,
+        )
+        merge_groups.append(mg)
+
+    return merge_groups
+
+
+def run_preflight(subjects: List[Subject]) -> PipelineState:
+    """
+    Tag all subjects, detect merge groups, assign to pipeline buckets.
+    Verifies census invariant before returning.
+    """
+    if not subjects:
+        return PipelineState(original_input_ids=[])
+
+    for s in subjects:
+        s.subject_type = classify_subject_type(s)
+        s.subject_state = classify_subject_state(s)
+
+    merge_groups = detect_merge_groups(subjects)
+
+    merged_ids: Set[int] = {
+        m['curr_id'] for mg in merge_groups for m in mg.members
+    }
+    subject_by_id: Dict[int, Subject] = {s.curr_id: s for s in subjects}
+
+    locked: List[Subject] = []
+    manual_review: List[Subject] = []
+    pending: List[Subject] = []
+
+    for s in subjects:
+        if s.curr_id in merged_ids:
+            continue
+        if s.subject_type == SubjectType.GENERAL:
+            if s.subject_state == SubjectState.SCHEDULED:
+                s.tag = SubjectTag.GENERAL
+                locked.append(s)
+            else:
+                s.tag = SubjectTag.MANUAL_REVIEW
+                manual_review.append(s)
+        else:
+            pending.append(s)
+
+    final_merged_groups: List[MergeGroup] = []
+
+    for mg in merge_groups:
+        if mg.all_scheduled():
+            for m in mg.members:
+                s = subject_by_id.get(m['curr_id'])
+                if s:
+                    s.tag = SubjectTag.ORIGINAL
+            final_merged_groups.append(mg)
+        else:
+            for m in mg.members:
+                s = subject_by_id.get(m['curr_id'])
+                if s:
+                    pending.append(s)
+
+    state = PipelineState(
+        locked=locked,
+        merged_groups=final_merged_groups,
+        resolved=[],
+        pending=pending,
+        unresolvable=[],
+        manual_review=manual_review,
+        original_input_ids=[s.curr_id for s in subjects],
+    )
+
+    assert_invariant(subjects, state, "preflight")
+    return state

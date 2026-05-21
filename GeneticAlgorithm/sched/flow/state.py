@@ -4,12 +4,6 @@ through PRE-FLIGHT -> STAGE 1 -> STAGE 2/3 loop -> OUTPUT.
 
 Invariant: at all times, every input subject is in exactly one bucket.
 No subject may exist in two buckets. No subject may vanish.
-
-Imports:
-    from pydantic import BaseModel
-    from typing import List, Dict
-    from sched.models.subject import Subject
-    from sched.models.merge_group import MergeGroup
 """
 
 from pydantic import BaseModel
@@ -23,12 +17,12 @@ class PipelineState(BaseModel):
     Holds all buckets. Mutates as subjects move between stages.
 
     BUCKETS:
-      locked          : LOCKED -- general subjects, never modified
-      merged_groups   : grouped subjects awaiting Stage 1 or already fixed
-      resolved        : conflict-free, finalized -- growing baseline
-      pending         : awaiting GA work (NEEDS_RESCHEDULE or NEEDS_GENERATION)
+      locked          : general subjects — never modified
+      merged_groups   : grouped subjects awaiting Stage 1
+      resolved        : conflict-free, finalized — growing baseline
+      pending         : awaiting GA work
       unresolvable    : GA could not schedule within max iterations
-      manual_review   : GENERAL+EMPTY edge cases -- flagged for humans
+      manual_review   : GENERAL+EMPTY edge cases — flagged for humans
     """
     locked: List[Subject] = []
     merged_groups: List[MergeGroup] = []
@@ -37,19 +31,91 @@ class PipelineState(BaseModel):
     unresolvable: List[Subject] = []
     manual_review: List[Subject] = []
 
-    # Metadata
-    original_input_ids: List[int] = []   # set at construction, never mutated
+    original_input_ids: List[int] = []
     iteration_count: int = 0
     max_iterations: int = 50
 
-    # TODO: method `total_count() -> int`
-    #       sum of len of all buckets, including merged_groups flattened
-    # TODO: method `all_subject_ids() -> Set[int]`
-    #       union of IDs across all buckets
-    # TODO: method `has_pending() -> bool`
-    # TODO: method `converged() -> bool`
-    #       True if pending is empty and no movement happened last iteration
-    # TODO: method `max_iterations_reached() -> bool`
-    # TODO: method `move_to_resolved(subject: Subject) -> None`
-    #       Helper that removes from current bucket and adds to resolved.
-    #       Asserts the subject was in exactly one bucket before move.
+    model_config = {"arbitrary_types_allowed": True}
+
+    def total_count(self) -> int:
+        """Sum of all bucket sizes (merged_groups flattened to member count)."""
+        return (
+            len(self.locked)
+            + sum(len(g.members) for g in self.merged_groups)
+            + len(self.resolved)
+            + len(self.pending)
+            + len(self.unresolvable)
+            + len(self.manual_review)
+        )
+
+    def all_subject_ids(self) -> Set[int]:
+        """Union of curr_id across all buckets."""
+        ids: Set[int] = set()
+        for s in self.locked:
+            ids.add(s.curr_id)
+        for g in self.merged_groups:
+            for m in g.members:
+                ids.add(m['curr_id'])
+        for s in self.resolved:
+            ids.add(s.curr_id)
+        for s in self.pending:
+            ids.add(s.curr_id)
+        for s in self.unresolvable:
+            ids.add(s.curr_id)
+        for s in self.manual_review:
+            ids.add(s.curr_id)
+        return ids
+
+    def all_subject_ids_with_dupes(self) -> List[int]:
+        """Return all curr_ids including duplicates — used by census to detect dupes."""
+        ids: List[int] = []
+        for s in self.locked:
+            ids.append(s.curr_id)
+        for g in self.merged_groups:
+            for m in g.members:
+                ids.append(m['curr_id'])
+        for s in self.resolved:
+            ids.append(s.curr_id)
+        for s in self.pending:
+            ids.append(s.curr_id)
+        for s in self.unresolvable:
+            ids.append(s.curr_id)
+        for s in self.manual_review:
+            ids.append(s.curr_id)
+        return ids
+
+    def has_pending(self) -> bool:
+        return bool(self.pending)
+
+    def converged(self) -> bool:
+        """True if there are no more pending subjects to schedule."""
+        return not self.pending
+
+    def max_iterations_reached(self) -> bool:
+        return self.iteration_count >= self.max_iterations
+
+    def move_to_resolved(self, subject: Subject) -> None:
+        """
+        Remove subject from its current bucket and append to resolved.
+        Raises ValueError if the subject is not found in exactly one bucket.
+        """
+        removed = False
+
+        for bucket_name in ('locked', 'pending', 'unresolvable', 'manual_review'):
+            bucket: List[Subject] = getattr(self, bucket_name)
+            for i, s in enumerate(bucket):
+                if s.curr_id == subject.curr_id:
+                    if removed:
+                        raise ValueError(
+                            f"Subject {subject.curr_id} found in multiple buckets"
+                        )
+                    bucket.pop(i)
+                    removed = True
+                    break
+
+        if not removed:
+            raise ValueError(
+                f"Subject {subject.curr_id} not found in any mutable bucket"
+            )
+
+        self.resolved.append(subject)

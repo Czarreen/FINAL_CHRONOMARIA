@@ -48,7 +48,7 @@ def main():
             state = triage(state)
             assert_invariant(subjects, state, f"post-triage-iter{state.iteration_count}")
 
-            state = run_stage3(state, subjects)
+            state = run_stage3(state, subjects, rooms=rooms, constraints=constraints)
             assert_invariant(subjects, state, f"post-ga-iter{state.iteration_count}")
 
             # Stop if no progress

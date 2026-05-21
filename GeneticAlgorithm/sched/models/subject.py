@@ -7,29 +7,24 @@ to one course-section pairing (e.g., "Eng Math 2 / CE / 1A").
 Each subject can have an MTh schedule, a TFS schedule, or both. Schedule
 strings may include day-pattern overrides (e.g., "1:00-3:00 M" means
 Monday only, not the default MTh).
-
-Imports:
-    from pydantic import BaseModel, Field, field_validator
-    from typing import Optional
-    from enum import Enum
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional
 from enum import Enum
 
 
 class SubjectType(str, Enum):
     """How the subject is categorized for scheduling purposes."""
-    GENERAL = "general"   # External faculty -- LOCKED, never modified
-    MERGED = "merged"     # Part of a merge group -- moved as a unit
-    REGULAR = "regular"   # Standard subject -- GA may freely schedule
+    GENERAL = "general"
+    MERGED = "merged"
+    REGULAR = "regular"
 
 
 class SubjectState(str, Enum):
     """Whether the subject has scheduling data filled in."""
-    SCHEDULED = "scheduled"  # Has at least one (schedule, room) pair
-    EMPTY = "empty"          # Both MTh and TFS slots are null
+    SCHEDULED = "scheduled"
+    EMPTY = "empty"
 
 
 class SubjectTag(str, Enum):
@@ -42,6 +37,12 @@ class SubjectTag(str, Enum):
     MANUAL_REVIEW = "Manual Review"
 
 
+def _empty_to_none(v: Optional[str]) -> Optional[str]:
+    if isinstance(v, str) and v.strip() == '':
+        return None
+    return v
+
+
 class Subject(BaseModel):
     """
     One row from the course offering master list.
@@ -51,40 +52,49 @@ class Subject(BaseModel):
     Units, Lec(hrs), Lab(hrs), MTh SCHEDULE, MTh Room,
     TFS SCHEDULE, TFS Room, MERGED
     """
-    # Core identity
     curr_id: int
-    code: Optional[str] = None        # may be null (e.g., NSTP placeholders)
+    code: Optional[str] = None
     course_no: str
-    department_id: str                 # e.g., "AR", "CE", "IT", "CS", "LIS"
-    section: str                       # e.g., "1A", "2B"
+    department_id: str
+    section: str
     descriptive_title: str
 
-    # Hours
     units: float
     lec_hrs: float
     lab_hrs: float
 
-    # MTh slot
-    mth_schedule: Optional[str] = None   # raw string from CSV, may have overrides
-    mth_room: Optional[str] = None       # may be compound: "E301/E401"
+    mth_schedule: Optional[str] = None
+    mth_room: Optional[str] = None
 
-    # TFS slot
     tfs_schedule: Optional[str] = None
     tfs_room: Optional[str] = None
 
-    # Merge info
-    merged_with: Optional[str] = None   # raw value from MERGED column, freeform
+    merged_with: Optional[str] = None
 
-    # Computed at PRE-FLIGHT (not in CSV)
+    # Flag passed from DB/Node side; takes priority over course_no pattern matching
+    is_general: Optional[bool] = None
+
+    # Computed at PRE-FLIGHT
     subject_type: Optional[SubjectType] = None
     subject_state: Optional[SubjectState] = None
     tag: Optional[SubjectTag] = None
 
-    # TODO: validator to normalize empty strings to None
-    # TODO: validator to detect general subjects (G*, CFE*, PATH FIT, NSTP, etc.)
-    #       or to read from a passed-in is_general flag -- confirm with team
-    # TODO: validator to detect SCHEDULED vs EMPTY state
-    # TODO: helper method `is_general() -> bool`
-    # TODO: helper method `is_empty() -> bool`
-    # TODO: helper method `has_mth_slot() -> bool`
-    # TODO: helper method `has_tfs_slot() -> bool`
+    @field_validator('code', 'mth_schedule', 'mth_room', 'tfs_schedule', 'tfs_room',
+                     'merged_with', mode='before')
+    @classmethod
+    def normalize_empty_str(cls, v: Optional[str]) -> Optional[str]:
+        return _empty_to_none(v)
+
+    def is_general_subject(self) -> bool:
+        """True if this subject is classified as GENERAL (locked external faculty)."""
+        return self.subject_type == SubjectType.GENERAL
+
+    def is_empty(self) -> bool:
+        """True if both MTH and TFS schedule slots are absent."""
+        return self.mth_schedule is None and self.tfs_schedule is None
+
+    def has_mth_slot(self) -> bool:
+        return self.mth_schedule is not None
+
+    def has_tfs_slot(self) -> bool:
+        return self.tfs_schedule is not None

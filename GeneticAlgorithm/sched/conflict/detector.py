@@ -18,44 +18,125 @@ Must produce IDENTICAL results to:
 
 Both implementations are tested against:
   Backend/shared/conflict_test_cases.json
-
-Imports:
-    from typing import List, Optional, Tuple
-    from enum import Enum
-    from sched.models.subject import Subject
-    from sched.conflict.intervals import overlaps
-    from sched.conflict.room_sets import rooms_conflict
 """
 
+from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import Enum
+
 from sched.models.subject import Subject
-from sched.conflict.intervals import overlaps
+from sched.conflict.intervals import overlaps, parse_time_range
 from sched.conflict.room_sets import rooms_conflict
 
 
 class ConflictReason(str, Enum):
     """Why two subjects conflict. May have multiple reasons simultaneously."""
-    TIME_OVERLAP = "time_overlap"        # always required for a conflict
+    TIME_OVERLAP = "time_overlap"
     SAME_SECTION = "same_section"
     ROOM_OVERLAP = "room_overlap"
-    SAME_FACULTY = "same_faculty"        # if faculty info available
+    SAME_FACULTY = "same_faculty"
 
 
+@dataclass
 class ConflictReport:
     """Records a single detected conflict between two subjects."""
-    # TODO: fields: subject_a_id, subject_b_id, reasons: List[ConflictReason],
-    #               slot ("MTh" | "TFS"), details: dict
+    subject_a_id: int
+    subject_b_id: int
+    reasons: List[ConflictReason]
+    slot: str              # "MTH" | "TFS"
+    details: dict = field(default_factory=dict)
 
 
-# TODO: function `conflicts(a: Subject, b: Subject) -> Optional[ConflictReport]`
-#       The canonical predicate. Returns None if no conflict, else a ConflictReport
-#       listing all reasons.
-#       Check BOTH the mth slot pair AND the tfs slot pair.
-#       Check all three axes (section, room, faculty) when times overlap.
+def _same_section(a: Subject, b: Subject) -> bool:
+    return (
+        a.department_id == b.department_id
+        and a.section == b.section
+    )
 
-# TODO: function `find_all_conflicts(subjects: List[Subject]) -> List[ConflictReport]`
-#       O(n^2) naive version for correctness. Use intervaltree later for speed.
 
-# TODO: function `has_any_conflicts(subjects: List[Subject]) -> bool`
-#       Short-circuit version for quick checks.
+def _check_slot(
+    a: Subject,
+    b: Subject,
+    a_sched: Optional[str],
+    a_room: Optional[str],
+    b_sched: Optional[str],
+    b_room: Optional[str],
+    slot_label: str,
+) -> Optional[ConflictReport]:
+    if not a_sched or not b_sched:
+        return None
+
+    try:
+        a_start, a_end = parse_time_range(a_sched)
+        b_start, b_end = parse_time_range(b_sched)
+    except ValueError:
+        return None
+
+    if not overlaps(a_start, a_end, b_start, b_end):
+        return None
+
+    reasons: List[ConflictReason] = [ConflictReason.TIME_OVERLAP]
+
+    if _same_section(a, b):
+        reasons.append(ConflictReason.SAME_SECTION)
+
+    if rooms_conflict(a_room, b_room):
+        reasons.append(ConflictReason.ROOM_OVERLAP)
+
+    a_faculty = getattr(a, 'faculty_id', None)
+    b_faculty = getattr(b, 'faculty_id', None)
+    if a_faculty and b_faculty and a_faculty == b_faculty:
+        reasons.append(ConflictReason.SAME_FACULTY)
+
+    # Time overlap alone is not a conflict — section/room/faculty must also match.
+    if len(reasons) == 1:
+        return None
+
+    return ConflictReport(
+        subject_a_id=a.curr_id,
+        subject_b_id=b.curr_id,
+        reasons=reasons,
+        slot=slot_label,
+        details={
+            "a_schedule": a_sched,
+            "b_schedule": b_sched,
+            "a_room": a_room,
+            "b_room": b_room,
+            "a_start": a_start,
+            "a_end": a_end,
+            "b_start": b_start,
+            "b_end": b_end,
+        },
+    )
+
+
+def conflicts(a: Subject, b: Subject) -> Optional[ConflictReport]:
+    """
+    The canonical predicate. Returns None if no conflict, else a ConflictReport.
+
+    Checks MTH slot pair first, then TFS slot pair.
+    """
+    mth = _check_slot(a, b, a.mth_schedule, a.mth_room, b.mth_schedule, b.mth_room, "MTH")
+    if mth:
+        return mth
+    return _check_slot(a, b, a.tfs_schedule, a.tfs_room, b.tfs_schedule, b.tfs_room, "TFS")
+
+
+def find_all_conflicts(subjects: List[Subject]) -> List[ConflictReport]:
+    """O(n²) pairwise check. Returns all ConflictReports found."""
+    reports: List[ConflictReport] = []
+    for i in range(len(subjects)):
+        for j in range(i + 1, len(subjects)):
+            r = conflicts(subjects[i], subjects[j])
+            if r:
+                reports.append(r)
+    return reports
+
+
+def has_any_conflicts(subjects: List[Subject]) -> bool:
+    """Short-circuit — returns True as soon as any conflict is found."""
+    for i in range(len(subjects)):
+        for j in range(i + 1, len(subjects)):
+            if conflicts(subjects[i], subjects[j]):
+                return True
+    return False

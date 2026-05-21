@@ -1,7 +1,14 @@
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { env } from '../config/env.js';
 import { fetchFacultyPreferenceMapForGA } from '../lib/facultySubjectPreferences.js';
 import { query, withPgClient } from '../lib/postgres.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const OPTIMIZER_SCHED_PATH = process.env.OPTIMIZER_SCHED_PATH ||
+  path.resolve(__dirname, '../../../../GeneticAlgorithm/optimizer_sched.py');
 
 const REQUIRED_FACULTY_FIELDS = ['faculty_name', 'department_id', 'faculty_max_units', 'faculty_role', 'faculty_status'];
 const REQUIRED_OFFERING_FIELDS = ['curr_id', 'code', 'course_no', 'department_id', 'section', 'descriptive_title', 'units'];
@@ -2929,6 +2936,95 @@ export async function getAutomaticSchedulerPreFlight(_req, res) {
   }
 }
 
+// ── optimizer_sched.py subprocess helpers ────────────────────────────────────
+
+function spawnOptimizerSched(payload, timeoutMs = 120000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('python', [OPTIMIZER_SCHED_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+      reject(new Error(`optimizer_sched.py timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      if (timedOut) return;
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error(`optimizer_sched.py stdout not valid JSON. stderr: ${stderr.slice(0, 500)}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Failed to spawn optimizer_sched.py: ${err.message}`));
+    });
+
+    child.stdin.write(JSON.stringify(payload));
+    child.stdin.end();
+  });
+}
+
+function toOptimizerSubject(subject, roomLookup) {
+  const lec = toNumber(subject.subject_lec_hrs) || 0;
+  const lab = toNumber(subject.subject_lab_hrs) || 0;
+  const explicitUnits = toNumber(subject.subject_units);
+  const units = explicitUnits !== null ? explicitUnits : (lec + lab);
+  const mthRoom = resolveAllRoomIds(subject.mth_room, roomLookup).join('/') || null;
+  const tfsRoom = resolveAllRoomIds(subject.tfs_room, roomLookup).join('/') || null;
+  return {
+    curr_id: toNumber(subject.curr_id) ?? toNumber(subject.subject_id),
+    code: normalizeText(subject.subject_code) || null,
+    course_no: normalizeText(subject.subject_course_no) || null,
+    department_id: normalizeText(subject.department_id) || '0',
+    section: normalizeText(subject.subject_section) || null,
+    descriptive_title: normalizeText(subject.subject_descriptive_title) || null,
+    units,
+    lec_hrs: lec,
+    lab_hrs: lab,
+    mth_schedule: normalizeText(subject.mth_schedule) || null,
+    mth_room: mthRoom,
+    tfs_schedule: normalizeText(subject.tfs_schedule) || null,
+    tfs_room: tfsRoom,
+    is_general: Boolean(subject.is_general),
+    merged_with: normalizeText(subject.merged_with) || null,
+  };
+}
+
+function subjectToOutputRow(s, roomLookup) {
+  const mthRoomName = resolveRoomNamesFromIdText(s.mth_room || null, roomLookup);
+  const tfsRoomName = resolveRoomNamesFromIdText(s.tfs_room || null, roomLookup);
+  return {
+    source_subject_id: s.curr_id,
+    curr_id: s.curr_id,
+    code: s.code,
+    course_no: s.course_no,
+    department_id: toNumber(s.department_id),
+    section: s.section,
+    descriptive_title: s.descriptive_title,
+    units: s.units,
+    lec_hrs: s.lec_hrs,
+    lab_hrs: s.lab_hrs,
+    mth_schedule: s.mth_schedule || null,
+    mth_room_id: s.mth_room || null,
+    mth_room_name: mthRoomName || null,
+    tfs_schedule: s.tfs_schedule || null,
+    tfs_room_id: s.tfs_room || null,
+    tfs_room_name: tfsRoomName || null,
+    merged: s.merged_with ? 'preserved' : 'false',
+    preflight_tag: s.tag === 'General' ? 'general' : (s.tag === 'Original' ? 'original' : null),
+  };
+}
+
 export async function postRunAutomaticScheduler(req, res) {
   try {
     const dryRun = String(req.query.dry_run || req.body?.dry_run || 'false').toLowerCase() === 'true';
@@ -2970,226 +3066,64 @@ export async function postRunAutomaticScheduler(req, res) {
       random_seed:          Number(req.body?.random_seed          ?? 42),
     };
 
-    // ── PRE-FLIGHT DISCARDED PILE ─────────────────────────────────────────────
-    // The discarded pile accumulates subjects that are FIXED (not to be changed
-    // by subsequent GA passes) and will form the reserved_slots baseline.
+    // ── OPTIMIZER_SCHED.PY PIPELINE ───────────────────────────────────────────
+    const timeoutMs = Math.max(env.gaRequestTimeoutMs || 180000, 120000);
 
-    // Step 1: General subjects — absolute, never re-scheduled.
-    // GENERAL+EMPTY subjects (no existing schedule) are included in the output
-    // as-is with schedule_missing=true so the admin is warned without losing the row.
-    const generalSubjects = preflight.excluded_general_subjects || [];
-    const discardedPile = generalSubjects.map((c) => {
-      const row = candidateToOutputRow(c, roomLookup, 'false', 'general');
-      if (!c.existing_mth_schedule && !c.existing_tfs_schedule) {
-        row.schedule_missing = true;
-      }
-      return row;
-    });
-    console.log(`[run][automatic] general subjects discarded: ${generalSubjects.length} (empty=${generalSubjects.filter((c) => !c.existing_mth_schedule && !c.existing_tfs_schedule).length})`);
+    const optimizerSubjects = (snapshot.subjects || []).map((s) => toOptimizerSubject(s, roomLookup));
+    const optimizerRooms = activeRooms.map((r) => ({
+      room_id: String(r.room_id),
+      room_name: r.room_name || '',
+      room_type: r.room_type || 'LEC',
+    }));
 
-    // Step 2 & 3: Merged subjects — fix inter-group conflicts via GA if needed,
-    // then add all merge members to the discarded pile (tagged 'original').
-    const mergedSubjects = preflight.excluded_merged_subjects || [];
-    const fixedMergedRows = await fixMergeGroupConflicts(mergedSubjects, discardedPile, activeRooms, normalizedConstraints);
-    discardedPile.push(...fixedMergedRows);
-    console.log(`[run][automatic] merged subjects discarded: ${fixedMergedRows.length}`);
+    const rawResult = await spawnOptimizerSched({
+      subjects: optimizerSubjects,
+      rooms: optimizerRooms,
+      constraints: normalizedConstraints,
+    }, timeoutMs);
 
-    // Step 4 & 5: Unique-clean subjects — check internally for conflicts, then
-    // check against the discarded pile (max 3 passes, using GA to resolve conflicts).
-    const uniqueCleanSubjects = preflight.excluded_unique_subjects || [];
-    let cleanCandidates = [...uniqueCleanSubjects];
-    let extraConflicted = []; // unique-clean subjects that conflict with pile — sent to GA queue
-
-    // 4a: Internal conflict check among unique-clean subjects
-    const cleanRows = cleanCandidates.map((c) => candidateToOutputRow(c, roomLookup, 'preserved', 'original'));
-    const internalConflictIndices = new Set();
-    for (let i = 0; i < cleanRows.length; i++) {
-      for (let j = i + 1; j < cleanRows.length; j++) {
-        if (rowsHaveConflict(cleanRows[i], cleanRows[j])) {
-          internalConflictIndices.add(i);
-          internalConflictIndices.add(j);
-        }
-      }
-    }
-    const internallyClean = cleanCandidates.filter((_, i) => !internalConflictIndices.has(i));
-    extraConflicted.push(...cleanCandidates.filter((_, i) => internalConflictIndices.has(i)));
-    console.log(`[run][automatic] unique-clean: internal conflicts=${internalConflictIndices.size}, clean=${internallyClean.length}`);
-
-    // 4b: Check internallyClean against discarded pile (max 3 passes)
-    let toCheckAgainstPile = internallyClean;
-    for (let pass = 0; pass < 3; pass++) {
-      const conflictsWithPile = [];
-      const safeForPile = [];
-      for (const c of toCheckAgainstPile) {
-        const row = candidateToOutputRow(c, roomLookup, 'preserved', 'original');
-        if (discardedPile.some((p) => rowsHaveConflict(row, p))) {
-          conflictsWithPile.push(c);
-        } else {
-          safeForPile.push(c);
-        }
-      }
-
-      // Add safe subjects to discarded pile
-      discardedPile.push(...safeForPile.map((c) => candidateToOutputRow(c, roomLookup, 'preserved', 'original')));
-
-      if (conflictsWithPile.length === 0) break;
-
-      console.log(`[run][automatic] pass ${pass + 1}: ${conflictsWithPile.length} unique-clean subject(s) conflict with pile — resolving via GA`);
-
-      // Try GA to re-assign conflicting subjects (with discarded pile as reserved)
-      let resolvedByGA = [];
-      try {
-        const gaResolveResult = await callPythonScheduleGA({
-          subjects: conflictsWithPile.map(clearSubjectSchedule),
-          rooms: activeRooms,
-          reserved_slots: buildDiscardedPileSlots(discardedPile),
-          constraints: normalizedConstraints,
-        });
-        const { conflictFreeNew, stillConflicted: stillBad } = validateGAResults(
-          gaResolveResult.assignments || [], discardedPile, activeRooms
-        );
-        discardedPile.push(...conflictFreeNew.map((r) => ({ ...r, preflight_tag: 'original', merged: 'preserved' })));
-        resolvedByGA = conflictFreeNew.map((r) => r.source_subject_id ?? r.subject_id);
-        extraConflicted.push(...stillBad);
-      } catch (err) {
-        console.warn(`[run][automatic] GA resolve pass ${pass + 1} failed:`, err.message);
-        extraConflicted.push(...conflictsWithPile);
-        break;
-      }
-
-      toCheckAgainstPile = conflictsWithPile.filter(
-        (c) => !resolvedByGA.includes(c.subject_id)
+    if (rawResult.status === 'error') {
+      throw new Error(
+        `Optimizer failed: ${rawResult.error_type}: ${rawResult.error_message}\n` +
+        `Traceback:\n${rawResult.traceback}`
       );
-      if (toCheckAgainstPile.length === 0) break;
     }
-    // Remaining toCheckAgainstPile that couldn't be resolved go to main GA queue
-    extraConflicted.push(...toCheckAgainstPile);
-    console.log(`[run][automatic] discarded pile size after pre-flight: ${discardedPile.length}`);
+    if (rawResult.census && rawResult.census.input_count !== rawResult.census.output_count) {
+      throw new Error(
+        `Optimizer dropped subjects: ${rawResult.census.input_count} sent, ` +
+        `${rawResult.census.output_count} returned. Run ID: ${rawResult.ga_run_id}`
+      );
+    }
 
-    // ── MAIN GA LOOP (Stage 2+3 tight loop) ──────────────────────────────────
-    // PENDING = assignable subjects (tagged NEEDS_GENERATION or NEEDS_RESCHEDULE)
-    //         + unique-clean subjects that conflicted with the pile (cleared).
-    // RESOLVED = discardedPile (general + merged + unique-clean already placed).
-    //
-    // Each iteration:
-    //   Stage 2 — triage: SCHEDULED subjects with no conflict → promote to RESOLVED.
-    //   Stage 3 — GA on remaining PENDING (NEEDS_RESCHEDULE cleared before sending).
-    // Loop exits when PENDING is empty, nothing moved, or max iterations reached.
-    let pending = [
-      ...preflight.assignable_subjects,       // retain pending_state tags; NEEDS_RESCHEDULE keeps existing schedule for Stage 2 triage
-      ...extraConflicted.map(clearSubjectSchedule),
+    const allOutputSubjects = [
+      ...(rawResult.locked || []),
+      ...(rawResult.resolved || []),
+      ...(rawResult.unresolvable || []),
+      ...(rawResult.manual_review || []),
     ];
+    const allAssignments = allOutputSubjects.map((s) => subjectToOutputRow(s, roomLookup));
 
-    const MAX_GA_ITERATIONS = 5;
-    let lastGAResult = { fitness_overall: 0, fitness_hard: 0, fitness_soft: 0, generations: 0, runtime_ms: 0, report: {} };
-    let usedGA = false;
-    let allUnresolved = [];
-
-    for (let iter = 0; iter < MAX_GA_ITERATIONS; iter++) {
-      if (pending.length === 0) break;
-
-      // ── STAGE 2: Triage — promote conflict-free SCHEDULED subjects to RESOLVED ──
-      // EMPTY subjects (NEEDS_GENERATION) stay in pending — nothing to check.
-      // SCHEDULED subjects (NEEDS_RESCHEDULE) that don't conflict move to RESOLVED now.
-      let movedToResolved = 0;
-      const afterTriage = [];
-      for (const c of pending) {
-        const hasExisting = Boolean(c.existing_mth_schedule || c.existing_tfs_schedule);
-        if (!hasExisting) {
-          afterTriage.push(c);
-          continue;
-        }
-        const row = candidateToOutputRow(c, roomLookup, c.merged ? 'preserved' : 'false', 'original');
-        if (discardedPile.some((p) => rowsHaveConflict(row, p))) {
-          afterTriage.push(clearSubjectSchedule(c));  // conflicts — clear schedule for GA
-        } else {
-          discardedPile.push(row);                    // no conflict — promote to RESOLVED
-          movedToResolved++;
-        }
-      }
-      pending = afterTriage;
-
-      if (pending.length === 0) {
-        console.log(`[run][automatic] iter ${iter + 1} stage2: +${movedToResolved} promoted, PENDING empty`);
-        break;
-      }
-      console.log(`[run][automatic] iter ${iter + 1} stage2: +${movedToResolved} promoted, ${pending.length} for GA`);
-
-      // ── STAGE 3: GA on remaining PENDING ──────────────────────────────────────
-      const pendingById = new Map(pending.map((c) => [toNumber(c.subject_id), c]));
-
-      let gaResult;
-      try {
-        gaResult = await callPythonScheduleGA({
-          subjects: pending,
-          rooms: activeRooms,
-          reserved_slots: buildDiscardedPileSlots(discardedPile),
-          constraints: normalizedConstraints,
-        });
-        usedGA = true;
-        console.log(`[run][automatic] iter ${iter + 1} GA done: fitness=${gaResult.fitness_overall}, conflicts=${gaResult.report?.conflict_count ?? 0}`);
-      } catch (gaErr) {
-        if (iter === 0) {
-          // First iteration — fall back to greedy
-          console.warn('[run][automatic] Python schedule GA unavailable, falling back to greedy:', gaErr.message);
-          const reservedSlots = buildDiscardedPileSlots(discardedPile);
-          const greedyResult = buildAutomaticAssignments(pending, activeRooms, reservedSlots);
-          const enriched = enrichAutomaticAssignments(greedyResult.assignments || [], pending, activeRooms)
-            .map((r) => ({ ...r, preflight_tag: null }));
-          discardedPile.push(...enriched);
-          allUnresolved.push(...(greedyResult.unresolved || []));
-          discardedPile.push(
-            ...(greedyResult.unresolved || []).map((u) => {
-              const candidate = pendingById.get(toNumber(u.subject_id)) ?? u;
-              return candidateToOutputRow(candidate, roomLookup, 'unresolved', null);
-            })
-          );
-          pending = [];
-          break;
-        }
-        console.warn(`[run][automatic] GA iteration ${iter + 1} failed:`, gaErr.message);
-        break;
-      }
-
-      lastGAResult = gaResult;
-      allUnresolved.push(...(gaResult.unresolved || []));
-      discardedPile.push(
-        ...(gaResult.unresolved || []).map((u) => {
-          const candidate = pendingById.get(toNumber(u.subject_id)) ?? u;
-          return candidateToOutputRow(candidate, roomLookup, 'unresolved', null);
-        })
-      );
-
-      const { conflictFreeNew, stillConflicted } = validateGAResults(
-        gaResult.assignments || [], discardedPile, activeRooms
-      );
-      discardedPile.push(...conflictFreeNew.map((r) => ({ ...r, preflight_tag: null })));
-      movedToResolved += conflictFreeNew.length;
-      console.log(`[run][automatic] iter ${iter + 1}: +${conflictFreeNew.length} clean, ${stillConflicted.length} still pending`);
-
-      // Loop control: if nothing moved this iteration, further passes won't help
-      if (movedToResolved === 0) {
-        console.warn(`[run][automatic] no progress in iter ${iter + 1} — escalating ${stillConflicted.length} to UNRESOLVABLE`);
-        pending = stillConflicted;
-        break;
-      }
-
-      pending = stillConflicted;
-    }
-
-    // Any subjects still pending after all iterations → human_review (UNRESOLVABLE)
-    if (pending.length > 0) {
-      console.warn(`[run][automatic] ${pending.length} subject(s) remain pending — stored as unresolvable`);
-      discardedPile.push(...pending.map((c) => candidateToOutputRow(c, roomLookup, 'unresolved', null)));
-      allUnresolved.push(...pending.map((c) => ({
-        ...c,
+    const allUnresolved = [
+      ...(rawResult.unresolvable || []).map((s) => ({
+        ...s,
         reason: 'Could not be scheduled after all GA iterations — manual assignment required.',
         reason_type: 'unresolvable_conflict',
-      })));
-    }
+      })),
+      ...(rawResult.manual_review || []).map((s) => ({
+        ...s,
+        reason: 'Requires manual review — general subject without schedule.',
+        reason_type: 'manual_review',
+      })),
+    ];
 
-    const allAssignments = discardedPile;
-    console.log(`[run][automatic] total=${allAssignments.length}, general=${generalSubjects.length}, merged=${fixedMergedRows.length}, original_preserved=${discardedPile.filter((r) => r.preflight_tag === 'original').length}, ga_generated=${discardedPile.filter((r) => !r.preflight_tag).length}, dry_run=${dryRun}, used_ga=${usedGA}`);
+    console.log(
+      `[run][automatic] total=${allAssignments.length}, ` +
+      `locked=${(rawResult.locked || []).length}, ` +
+      `resolved=${(rawResult.resolved || []).length}, ` +
+      `unresolvable=${(rawResult.unresolvable || []).length}, ` +
+      `manual_review=${(rawResult.manual_review || []).length}, ` +
+      `dry_run=${dryRun}`
+    );
 
     let persistence = { persisted: 0, dry_run: true };
     if (!dryRun) {
@@ -3202,12 +3136,12 @@ export async function postRunAutomaticScheduler(req, res) {
     return res.json({
       status: 'completed',
       dry_run: dryRun,
-      used_genetic_algorithm: usedGA,
-      fitness_overall: lastGAResult.fitness_overall,
-      fitness_hard: lastGAResult.fitness_hard,
-      fitness_soft: lastGAResult.fitness_soft,
-      generations: lastGAResult.generations ?? null,
-      runtime_ms: lastGAResult.runtime_ms ?? null,
+      used_genetic_algorithm: true,
+      fitness_overall: 0,
+      fitness_hard: 0,
+      fitness_soft: 0,
+      generations: rawResult.stats?.generations_run ?? 0,
+      runtime_ms: null,
       assignments: allAssignments,
       unresolved_issues: allUnresolved,
       human_review: humanReview,
@@ -3217,7 +3151,11 @@ export async function postRunAutomaticScheduler(req, res) {
         generated_rows: allAssignments,
         unresolved_issues: allUnresolved,
         human_review: humanReview,
-        ga_report: lastGAResult.report ?? null,
+        ga_report: {
+          run_id: rawResult.ga_run_id,
+          census: rawResult.census,
+          stats: rawResult.stats,
+        },
       },
     });
   } catch (error) {
