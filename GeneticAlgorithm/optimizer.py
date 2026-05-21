@@ -2434,7 +2434,7 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[GA-DIAG] after repair: score={rep_score:.1f}% "
               f"(hard={rep_hard:.1f}% soft={rep_soft:.1f}%) improved={rep_score > best_score}",
               flush=True)
-        if rep_score > best_score:
+        if rep_hard > best_hard or (rep_hard == best_hard and rep_score > best_score):
             best, best_score, best_hard, best_soft = repaired, rep_score, rep_hard, rep_soft
     else:
         print(f"[GA-DIAG] repair skipped (time_remaining={time_remaining:.1f}s)", flush=True)
@@ -2460,6 +2460,56 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
         for s in deferred_subjects
     ]
+
+    # Final validation: subjects still in hard conflict after repair are moved to
+    # unresolved so callers are never given a schedule that contains violations.
+    if conflicts:
+        label_to_subject: Dict[str, Dict[str, Any]] = {}
+        for s in subjects:
+            lbl = (
+                f"{normalize_upper(s.get('code') or '')}"
+                f"-{normalize_upper(s.get('course_no') or '')}"
+                f"-{normalize_upper(s.get('section') or '')}"
+            )
+            label_to_subject[lbl] = s
+
+        conflicted_labels: Set[str] = set()
+        for c in conflicts:
+            for lbl in c.get("subjects", []):
+                if isinstance(lbl, str):
+                    conflicted_labels.add(lbl)
+
+        if conflicted_labels:
+            sid_to_assignment: Dict[Any, Dict[str, Any]] = {
+                to_number(a.get("subject_id")): a for a in assignments
+            }
+            conflict_sids: Set[Any] = set()
+            for lbl in conflicted_labels:
+                s = label_to_subject.get(lbl)
+                if s:
+                    conflict_sids.add(to_number(s.get("subject_id")))
+
+            conflict_unresolved = [
+                {
+                    "subject_id":        s.get("subject_id"),
+                    "code":              s.get("code"),
+                    "course_no":         s.get("course_no"),
+                    "section":           s.get("section"),
+                    "descriptive_title": s.get("descriptive_title"),
+                    "units":             s.get("units"),
+                    "reason":            "Unresolved room or section conflict — no valid slot found after repair",
+                    "reason_type":       "unresolvable_conflict",
+                }
+                for lbl in conflicted_labels
+                for s in [label_to_subject.get(lbl)]
+                if s is not None
+            ]
+            unresolved.extend(conflict_unresolved)
+            assignments = [a for a in assignments if to_number(a.get("subject_id")) not in conflict_sids]
+            print(
+                f"[GA-DIAG] final validation: {len(conflict_sids)} conflicted subject(s) moved to unresolved",
+                flush=True,
+            )
 
     return {
         "assignments":     locked_general_assignments + assignments,
