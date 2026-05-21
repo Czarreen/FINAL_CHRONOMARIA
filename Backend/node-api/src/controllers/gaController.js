@@ -1474,7 +1474,7 @@ async function fetchAutomaticSchedulerRows() {
   const response = await query(`
     select a.id, a.curr_id, a.code, a.course_no, a.department_id, a.section, a.descriptive_title,
            a.units, a.lec_hrs, a.lab_hrs, a.mth_schedule, a.mth_room_id, a.tfs_schedule, a.tfs_room_id,
-           (a.merged = 'true') as merged,
+           (a.merged = 'true') as merged, a.preflight_tag,
            coalesce(nullif(trim(d.department_name), ''), 'Department ' || a.department_id::text) as department_name,
            case
              when nullif(trim(a.mth_room_id), '') is null then null
@@ -2668,6 +2668,7 @@ async function persistAutomaticScheduler(assignments) {
         'tfs_schedule',
         'tfs_room_id',
         'merged',
+        'preflight_tag',
       ];
 
       const values = [];
@@ -2691,6 +2692,7 @@ async function persistAutomaticScheduler(assignments) {
           row.tfs_schedule,
           row.tfs_room_id != null ? String(row.tfs_room_id) : null,
           row.merged === true || row.merged === 'true' ? 'true' : row.merged === 'preserved' ? 'preserved' : 'false',
+          row.preflight_tag ?? null,
         );
       });
 
@@ -2928,6 +2930,7 @@ export async function postRunAutomaticScheduler(req, res) {
     }
 
     const activeRooms = (snapshot.rooms || []).filter((room) => isRoomActive(room));
+    const roomLookup = buildRoomLookup(activeRooms);
 
     // --- Build preserved (merged + unique-clean) and GA-only subject lists ---
     const preservedSubjects = [
@@ -3182,11 +3185,11 @@ export async function postRunAutomaticScheduler(req, res) {
       status: 'completed',
       dry_run: dryRun,
       used_genetic_algorithm: usedGA,
-      fitness_overall: result.fitness_overall,
-      fitness_hard: result.fitness_hard,
-      fitness_soft: result.fitness_soft,
-      generations: result.generations ?? null,
-      runtime_ms: result.runtime_ms ?? null,
+      fitness_overall: lastGAResult.fitness_overall,
+      fitness_hard: lastGAResult.fitness_hard,
+      fitness_soft: lastGAResult.fitness_soft,
+      generations: lastGAResult.generations ?? null,
+      runtime_ms: lastGAResult.runtime_ms ?? null,
       assignments: allAssignments,
       unresolved_issues: allUnresolved,
       human_review: humanReview,

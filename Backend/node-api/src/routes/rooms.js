@@ -291,8 +291,8 @@ router.get('/bookings', async (_req, res) => {
         .or('mth_room_id.not.is.null,tfs_room_id.not.is.null'),
       supabaseAdmin
         .from('subjects')
-        .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room, mth_room_id, tfs_room_id')
-        .or('mth_room.not.is.null,tfs_room.not.is.null,mth_room_id.not.is.null,tfs_room_id.not.is.null'),
+        .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room')
+        .or('mth_room.not.is.null,tfs_room.not.is.null'),
     ]);
 
     if (coError) console.error('Bookings CO query error:', coError);
