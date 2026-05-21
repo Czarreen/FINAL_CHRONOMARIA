@@ -30,6 +30,7 @@ class PipelineState(BaseModel):
     pending: List[Subject] = []
     unresolvable: List[Subject] = []
     manual_review: List[Subject] = []
+    saturday_pile: List[Subject] = []
 
     original_input_ids: List[int] = []
     iteration_count: int = 0
@@ -46,6 +47,7 @@ class PipelineState(BaseModel):
             + len(self.pending)
             + len(self.unresolvable)
             + len(self.manual_review)
+            + len(self.saturday_pile)
         )
 
     def all_subject_ids(self) -> Set[int]:
@@ -64,6 +66,8 @@ class PipelineState(BaseModel):
             ids.add(s.subject_id)
         for s in self.manual_review:
             ids.add(s.subject_id)
+        for s in self.saturday_pile:
+            ids.add(s.subject_id)
         return ids
 
     def all_subject_ids_with_dupes(self) -> List[int]:
@@ -81,6 +85,8 @@ class PipelineState(BaseModel):
         for s in self.unresolvable:
             ids.append(s.subject_id)
         for s in self.manual_review:
+            ids.append(s.subject_id)
+        for s in self.saturday_pile:
             ids.append(s.subject_id)
         return ids
 

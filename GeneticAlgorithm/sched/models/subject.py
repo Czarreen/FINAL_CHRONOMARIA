@@ -35,6 +35,7 @@ class SubjectTag(str, Enum):
     RESCHEDULED = "Rescheduled"
     UNRESOLVABLE = "Unresolvable"
     MANUAL_REVIEW = "Manual Review"
+    SATURDAY = "Saturday"
 
 
 def _empty_to_none(v: Optional[str]) -> Optional[str]:

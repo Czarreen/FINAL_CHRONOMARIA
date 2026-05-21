@@ -90,7 +90,8 @@ def census_summary(state: PipelineState) -> dict:
 
     total = state.total_count()
     by_tag: dict = {}
-    for s in state.locked + state.resolved + state.pending + state.unresolvable + state.manual_review:
+    for s in (state.locked + state.resolved + state.pending
+              + state.unresolvable + state.manual_review + state.saturday_pile):
         if s.tag:
             by_tag[s.tag.value] = by_tag.get(s.tag.value, 0) + 1
 
@@ -104,6 +105,7 @@ def census_summary(state: PipelineState) -> dict:
             "pending": len(state.pending),
             "unresolvable": len(state.unresolvable),
             "manual_review": len(state.manual_review),
+            "saturday_pile": len(state.saturday_pile),
         },
         "by_tag": by_tag,
     }

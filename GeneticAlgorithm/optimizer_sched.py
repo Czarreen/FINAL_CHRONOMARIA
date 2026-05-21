@@ -22,6 +22,7 @@ def main():
         from sched.io.parser import parse_input
         from sched.io.formatter import format_output
         from sched.flow.preflight import run_preflight
+        from sched.flow.stage_sat import resolve_saturday_pile
         from sched.flow.stage1_merged import run_stage1
         from sched.flow.stage2_triage import triage
         from sched.flow.stage3_ga import run_stage3
@@ -35,6 +36,10 @@ def main():
         # PRE-FLIGHT
         state = run_preflight(subjects)
         assert_invariant(subjects, state, "post-preflight")
+
+        # STAGE SAT: resolve Saturday-only subjects in isolation before GA
+        state = resolve_saturday_pile(state, rooms)
+        assert_invariant(subjects, state, "post-sat")
 
         # STAGE 1
         state = run_stage1(state, subjects)

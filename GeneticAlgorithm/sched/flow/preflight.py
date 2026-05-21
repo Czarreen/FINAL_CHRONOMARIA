@@ -25,6 +25,25 @@ _GENERAL_RE = re.compile(
 )
 
 
+def is_saturday_schedule(sched_str: Optional[str]) -> bool:
+    """
+    Returns True if the schedule string is a Saturday-only day override.
+    Handles: "1:00-3:00 Sat", "1:00-3:00 S", "1:00-3:00 Saturday" (any case/whitespace).
+    """
+    if not sched_str:
+        return False
+    try:
+        from sched.models.schedule import ParsedSchedule, DayPattern, Day
+        parsed = ParsedSchedule.parse(sched_str.strip(), DayPattern.TFS)
+        return (
+            parsed.has_override
+            and bool(parsed.blocks)
+            and all(blk.day == Day.SAT for blk in parsed.blocks)
+        )
+    except Exception:
+        return False
+
+
 def classify_subject_type(subject: Subject) -> SubjectType:
     """
     Classify subject as GENERAL, MERGED, or REGULAR.
@@ -187,9 +206,10 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     }
     subject_by_id: Dict[int, Subject] = {s.subject_id: s for s in subjects}
 
-    locked: List[Subject] = []
+    resolved: List[Subject] = []
     manual_review: List[Subject] = []
     pending: List[Subject] = []
+    saturday_pile: List[Subject] = []
 
     for s in subjects:
         if s.subject_id in merged_ids:
@@ -197,10 +217,12 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
         if s.subject_type == SubjectType.GENERAL:
             if s.subject_state == SubjectState.SCHEDULED:
                 s.tag = SubjectTag.GENERAL
-                locked.append(s)
+                resolved.append(s)
             else:
                 s.tag = SubjectTag.MANUAL_REVIEW
                 manual_review.append(s)
+        elif is_saturday_schedule(s.tfs_schedule):
+            saturday_pile.append(s)
         else:
             pending.append(s)
 
@@ -220,12 +242,13 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
                     pending.append(s)
 
     state = PipelineState(
-        locked=locked,
+        locked=[],
         merged_groups=final_merged_groups,
-        resolved=[],
+        resolved=resolved,
         pending=pending,
         unresolvable=[],
         manual_review=manual_review,
+        saturday_pile=saturday_pile,
         original_input_ids=[s.subject_id for s in subjects],
     )
 

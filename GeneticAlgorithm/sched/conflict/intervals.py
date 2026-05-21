@@ -104,7 +104,7 @@ def overlaps(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
     return a_start < b_end and b_start < a_end
 
 
-_DAY_TOKENS = r'(?:Mon|Tue|Wed|Thu?|Fri|Sat|Sun|M|T|W|F|S)'
+_DAY_TOKENS = r'(?:Saturday|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Mon|Tue|Wed|Thu?|Fri|Sat|Sun|M|T|W|F|S)'
 _TYPE_TOKENS = r'(?:Lab|Lec)'
 
 # Matches "HH:MM-HH:MM" optionally followed by " DAY" and " TYPE"
