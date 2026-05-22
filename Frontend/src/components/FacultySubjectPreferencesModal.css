@@ -204,6 +204,57 @@
   letter-spacing: 0.5px;
 }
 
+.tag-limit-warning {
+  color: #d32f2f;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.prep-slot-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.prep-slot-divider {
+  color: #bbb;
+}
+
+.prep-slot-item {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.prep-slot-p1 {
+  background: #fdecea;
+  color: #c62828;
+}
+
+.prep-slot-p2 {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.prep-slot-p3 {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.prep-slot-free {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.prep-slot-free-empty {
+  background: #fdecea;
+  color: #c62828;
+}
+
 .no-tags-message {
   padding: 16px;
   text-align: center;

@@ -70,10 +70,17 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
     loadData();
   }, [facultyId]);
 
+  const MAX_SUBJECT_TAGS = 4;
+
   // Handle adding a new preference
   const handleAddPreference = async () => {
     if (!selectedSubjectCode) {
       setError('Please select a subject');
+      return;
+    }
+
+    if (preferences.length >= MAX_SUBJECT_TAGS) {
+      setError(`Maximum of ${MAX_SUBJECT_TAGS} subject tags allowed. The GA preparation limit is ${MAX_SUBJECT_TAGS} subjects per faculty.`);
       return;
     }
 
@@ -245,10 +252,12 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
                 value={selectedSubjectCode}
                 onChange={(e) => setSelectedSubjectCode(e.target.value)}
                 className="subject-select"
-                disabled={untaggedSubjects.length === 0 || isAdding}
+                disabled={untaggedSubjects.length === 0 || isAdding || preferences.length >= MAX_SUBJECT_TAGS}
               >
                 <option value="">
-                  {untaggedSubjects.length === 0
+                  {preferences.length >= MAX_SUBJECT_TAGS
+                    ? 'Tag limit reached (4 max)'
+                    : untaggedSubjects.length === 0
                     ? 'All subjects tagged'
                     : 'Select a subject...'}
                 </option>
@@ -275,7 +284,7 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
               <button
                 onClick={handleAddPreference}
                 className="btn btn-primary"
-                disabled={!selectedSubjectCode || isAdding}
+                disabled={!selectedSubjectCode || isAdding || preferences.length >= MAX_SUBJECT_TAGS}
               >
                 {isAdding ? 'Adding...' : 'Add'}
               </button>
@@ -299,8 +308,39 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
           {/* Current Tags Section */}
           <div className="current-tags-section">
             <h3>
-              Current Tags ({preferences.length})
+              Current Tags ({preferences.length} / {MAX_SUBJECT_TAGS})
+              {preferences.length >= MAX_SUBJECT_TAGS && (
+                <span className="tag-limit-warning"> — Limit reached</span>
+              )}
             </h3>
+
+            {/* Prep slot breakdown */}
+            {preferences.length > 0 && (() => {
+              const p1Count = preferences.filter(p => p.priority_level === 1).length;
+              const p2Count = preferences.filter(p => p.priority_level === 2).length;
+              const p3Count = preferences.filter(p => p.priority_level === 3).length;
+              const remaining = MAX_SUBJECT_TAGS - preferences.length;
+              return (
+                <div className="prep-slot-breakdown">
+                  <span className="prep-slot-item prep-slot-p1" title="Hard pre-assigned before GA runs">
+                    P1 (High): {p1Count}
+                  </span>
+                  <span className="prep-slot-divider">·</span>
+                  <span className="prep-slot-item prep-slot-p2" title="Prep slot reserved for GA">
+                    P2 (Capable): {p2Count}
+                  </span>
+                  <span className="prep-slot-divider">·</span>
+                  <span className="prep-slot-item prep-slot-p3" title="Prep slot reserved for GA">
+                    P3 (Fallback): {p3Count}
+                  </span>
+                  <span className="prep-slot-divider">·</span>
+                  <span className={`prep-slot-item prep-slot-free${remaining === 0 ? ' prep-slot-free-empty' : ''}`}
+                    title="Remaining slots the GA can fill from department matching">
+                    Free for GA: {remaining}
+                  </span>
+                </div>
+              );
+            })()}
 
             {preferences.length === 0 ? (
               <p className="no-tags-message">No subject preferences added yet</p>

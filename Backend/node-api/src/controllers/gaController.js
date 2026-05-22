@@ -1247,7 +1247,7 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     population_size: Number(constraints.population_size || 72),
     max_generations: Number(constraints.max_generations || 120),
     mutation_rate: Number(constraints.mutation_rate || 0.12),
-    max_runtime_seconds: Number(constraints.max_runtime_seconds || 20),
+    max_runtime_seconds: Number(constraints.max_runtime_seconds || 60),
     random_seed: Number.isFinite(Number(constraints.random_seed)) ? Number(constraints.random_seed) : 123,
     dry_run: Boolean(dryRun || constraints.dry_run),
   };
