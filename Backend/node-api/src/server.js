@@ -46,6 +46,22 @@ app.use('/api/users', usersRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/audit-logs', auditLogsRouter);
 
-app.listen(env.port, () => {
+const server = app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);
+});
+
+server.on('error', (err) => {
+  console.error('[node-api] server error:', err);
+});
+
+// Client disconnections during long-running requests (e.g. GA scheduler) emit
+// a socket write error that Node throws as an uncaught exception if unhandled.
+// Swallow known network-disconnect codes; crash on anything else.
+process.on('uncaughtException', (err) => {
+  if (['EOF', 'ECONNRESET', 'EPIPE', 'ENOTCONN'].includes(err.code)) {
+    console.warn(`[node-api] client disconnected prematurely (${err.code})`);
+    return;
+  }
+  console.error('[node-api] uncaught exception:', err);
+  process.exit(1);
 });

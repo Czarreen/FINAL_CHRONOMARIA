@@ -12,6 +12,7 @@ Usage (from Node):
 """
 import sys
 import json
+import time
 import traceback
 import uuid
 
@@ -31,6 +32,12 @@ def main():
         raw = json.load(sys.stdin)
         subjects, rooms, constraints = parse_input(raw)
 
+        # Global wall-clock budget.  Must finish before Node.js spawn timeout
+        # kills the process (default 180 s).  We leave a 30 s buffer so the
+        # process always has time to serialise output and exit cleanly.
+        global_budget_s = float(constraints.get('global_budget_seconds', 150.0))
+        global_start = time.perf_counter()
+
         run_id = str(uuid.uuid4())
 
         # PRE-FLIGHT
@@ -48,12 +55,29 @@ def main():
         # STAGE 2/3 LOOP
         generations_total = 0
         while state.has_pending() and not state.max_iterations_reached():
+            elapsed = time.perf_counter() - global_start
+            remaining = global_budget_s - elapsed
+
+            if remaining < 2.0:
+                # Out of time — move all remaining pending subjects to unresolvable
+                state.unresolvable.extend(state.pending)
+                state.pending = []
+                break
+
+            # Clamp per-GA-call budget to remaining global time (keep 2 s for I/O)
+            per_call_max = min(
+                float(constraints.get('max_runtime_seconds', 45.0)),
+                remaining - 2.0,
+            )
+            iter_constraints = dict(constraints)
+            iter_constraints['max_runtime_seconds'] = per_call_max
+
             prev_resolved_count = len(state.resolved)
 
             state = triage(state)
             assert_invariant(subjects, state, f"post-triage-iter{state.iteration_count}")
 
-            state = run_stage3(state, subjects, rooms=rooms, constraints=constraints)
+            state = run_stage3(state, subjects, rooms=rooms, constraints=iter_constraints)
             assert_invariant(subjects, state, f"post-ga-iter{state.iteration_count}")
 
             # Stop if no progress

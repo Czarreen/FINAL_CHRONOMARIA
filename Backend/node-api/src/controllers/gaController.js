@@ -9,6 +9,7 @@ import { query, withPgClient } from '../lib/postgres.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OPTIMIZER_SCHED_PATH = process.env.OPTIMIZER_SCHED_PATH ||
   path.resolve(__dirname, '../../../../GeneticAlgorithm/optimizer_sched.py');
+const OPTIMIZER_PYTHON = process.env.OPTIMIZER_PYTHON || 'python';
 
 const REQUIRED_FACULTY_FIELDS = ['faculty_name', 'department_id', 'faculty_max_units', 'faculty_role', 'faculty_status'];
 const REQUIRED_OFFERING_FIELDS = ['curr_id', 'code', 'course_no', 'department_id', 'section', 'descriptive_title', 'units'];
@@ -2948,7 +2949,7 @@ export async function getAutomaticSchedulerPreFlight(_req, res) {
 
 function spawnOptimizerSched(payload, timeoutMs = 120000) {
   return new Promise((resolve, reject) => {
-    const child = spawn('python', [OPTIMIZER_SCHED_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(OPTIMIZER_PYTHON, [OPTIMIZER_SCHED_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -3066,13 +3067,16 @@ export async function postRunAutomaticScheduler(req, res) {
     );
 
     // --- Build GA constraint parameters from request body ---
+    const nodeTimeoutMs = Math.max(env.gaRequestTimeoutMs || 180000, 120000);
+    const globalBudgetS = Math.max(Math.floor(nodeTimeoutMs / 1000) - 30, 60);
     const normalizedConstraints = {
-      population_size:      Number(req.body?.population_size      ?? 120),
-      max_generations:      Number(req.body?.max_generations      ?? 250),
-      mutation_rate:        Number(req.body?.mutation_rate        ?? 0.07),
-      crossover_rate:       Number(req.body?.crossover_rate       ?? 0.85),
-      max_runtime_seconds:  Number(req.body?.max_runtime_seconds  ?? 45),
-      random_seed:          Number(req.body?.random_seed          ?? 42),
+      population_size:        Number(req.body?.population_size        ?? 120),
+      max_generations:        Number(req.body?.max_generations        ?? 250),
+      mutation_rate:          Number(req.body?.mutation_rate          ?? 0.07),
+      crossover_rate:         Number(req.body?.crossover_rate         ?? 0.85),
+      max_runtime_seconds:    Number(req.body?.max_runtime_seconds    ?? 45),
+      random_seed:            Number(req.body?.random_seed            ?? 42),
+      global_budget_seconds:  Number(req.body?.global_budget_seconds  ?? globalBudgetS),
     };
 
     // ── OPTIMIZER_SCHED.PY PIPELINE ───────────────────────────────────────────
