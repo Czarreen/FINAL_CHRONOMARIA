@@ -192,9 +192,9 @@ export default function DashboardView({ onNavigate }) {
               onClick={() => onNavigate('faculty')}
               onMouseEnter={() => setShowFacultyInfo(true)}
               onMouseLeave={() => setShowFacultyInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-blue-50/20 p-5 text-left transition-all hover:border-blue-400/60 hover:bg-blue-50/50 hover:shadow-md active:scale-98"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-primary/5 p-5 text-left transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 transition-all group-hover:bg-blue-200 group-hover:scale-110">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-all group-hover:bg-primary/20 group-hover:scale-110">
                 <UserPlus size={24} />
               </div>
               <div>
@@ -223,9 +223,9 @@ export default function DashboardView({ onNavigate }) {
               onClick={() => onNavigate('subjects')}
               onMouseEnter={() => setShowSubjectsInfo(true)}
               onMouseLeave={() => setShowSubjectsInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-orange-50/20 p-5 text-left transition-all hover:border-orange-400/60 hover:bg-orange-50/50 hover:shadow-md active:scale-98"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-primary/5 p-5 text-left transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 transition-all group-hover:bg-orange-200 group-hover:scale-110">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-all group-hover:bg-primary/20 group-hover:scale-110">
                 <BookOpen size={24} />
               </div>
               <div>
@@ -254,9 +254,9 @@ export default function DashboardView({ onNavigate }) {
               onClick={() => onNavigate('rooms')}
               onMouseEnter={() => setShowRoomsInfo(true)}
               onMouseLeave={() => setShowRoomsInfo(false)}
-              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-purple-50/20 p-5 text-left transition-all hover:border-purple-400/60 hover:bg-purple-50/50 hover:shadow-md active:scale-98"
+              className="glass-panel group flex w-full items-center gap-4 rounded-xl border-2 border-transparent bg-primary/5 p-5 text-left transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md active:scale-98"
             >
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600 transition-all group-hover:bg-purple-200 group-hover:scale-110">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-all group-hover:bg-primary/20 group-hover:scale-110">
                 <DoorOpen size={24} />
               </div>
               <div>
@@ -282,13 +282,13 @@ export default function DashboardView({ onNavigate }) {
 
           <div className="glass-panel col-span-1 rounded-xl p-6 sm:col-span-3">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Upload size={20} />
               </div>
               <h4 className="text-sm font-bold text-on-surface">Import Course Offerings</h4>
             </div>
             <div className="space-y-4">
-              <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-surface-variant bg-surface-variant/20 px-6 py-8 text-center transition-all hover:border-blue-400 hover:bg-blue-50/30 active:bg-blue-50">
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-surface-variant bg-surface-variant/20 px-6 py-8 text-center transition-all hover:border-primary/40 hover:bg-primary/10 active:bg-primary/10">
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -301,7 +301,7 @@ export default function DashboardView({ onNavigate }) {
                   }}
                 />
                 <div className="flex flex-col items-center gap-2">
-                  <FileUp size={24} className="text-blue-600" />
+                  <FileUp size={24} className="text-primary" />
                   {selectedCsvFile ? (
                     <div className="flex flex-col items-center">
                       <p className="text-sm font-semibold text-on-surface">{selectedCsvFile.name}</p>
@@ -319,7 +319,7 @@ export default function DashboardView({ onNavigate }) {
                 type="button"
                 onClick={handleCsvImport}
                 disabled={!selectedCsvFile || importingCsv}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-blue-700 disabled:bg-surface-variant disabled:text-on-surface-variant disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-white transition-all hover:bg-primary/90 disabled:bg-surface-variant disabled:text-on-surface-variant disabled:cursor-not-allowed"
               >
                 <Upload size={16} />
                 {importingCsv ? 'Importing...' : 'Import CSV'}
@@ -327,7 +327,7 @@ export default function DashboardView({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => onNavigate('course-offering')}
-                className="w-full rounded-lg border-2 border-outline bg-white px-4 py-2 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                className="w-full rounded-lg border-2 border-outline bg-white px-4 py-2 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
                 View Course Offerings
               </button>

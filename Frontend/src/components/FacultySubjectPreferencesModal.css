@@ -394,17 +394,17 @@
   letter-spacing: 0.5px;
 }
 
-.btn-primary {
+.modal-content .btn-primary {
   background-color: #1976d2;
   color: white;
 }
 
-.btn-primary:hover:not(:disabled) {
+.modal-content .btn-primary:hover:not(:disabled) {
   background-color: #1565c0;
   box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
 }
 
-.btn-primary:disabled {
+.modal-content .btn-primary:disabled {
   background-color: #ccc;
   color: #999;
   cursor: not-allowed;
