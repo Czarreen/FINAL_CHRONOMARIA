@@ -12,7 +12,7 @@ import { useNotifications } from '../hooks/useNotifications';
 import { highlightRowElement } from '../utils/highlightRow.js';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
-import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils';
+import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleDisplay, isSimpleSchedule, getScheduleAmPm } from '../utils/scheduleUtils';
 
 const columns = [
   { key: 'curr_id', label: 'Curriculum ID' },
@@ -53,6 +53,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   // Structured schedule card state shared between Add and Edit modals
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
   const [tfsCard, setTfsCard] = useState(emptyCardState('tfs'));
+  const [mthCardModified, setMthCardModified] = useState(false);
+  const [tfsCardModified, setTfsCardModified] = useState(false);
 
   // Add Subject modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -66,8 +68,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     is_general: false,
     mth_schedule: '',
     tfs_schedule: '',
-    mth_room: '',
-    tfs_room: '',
+    mth_room: [],
+    tfs_room: [],
     subject_status: 'active',
     curr_id: '',
   });
@@ -552,8 +554,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       is_general: Boolean(subject.is_general),
       mth_schedule: subject.mth_schedule || '',
       tfs_schedule: subject.tfs_schedule || '',
-      mth_room: subject.mth_room || subject.mth_room_id || '',
-      tfs_room: subject.tfs_room || subject.tfs_room_id || '',
+      mth_room: (subject.mth_room || subject.mth_room_id || '').toString().split('/').map(s => s.trim()).filter(Boolean),
+      tfs_room: (subject.tfs_room || subject.tfs_room_id || '').toString().split('/').map(s => s.trim()).filter(Boolean),
       subject_section: subject.subject_section || '',
       department_id: subject.department_id ?? '',
       subject_status: subject.subject_status || 'active',
@@ -561,13 +563,11 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     });
     // Pre-populate structured card state from existing schedule strings
     const mthParsed = parseScheduleString(subject.mth_schedule || '', 'mth');
-    setMthCard(mthParsed
-      ? { enabled: true, mode: mthParsed.mode, startH: mthParsed.startH, startM: mthParsed.startM, endH: mthParsed.endH, endM: mthParsed.endM, type: mthParsed.type }
-      : emptyCardState('mth'));
+    setMthCard(mthParsed ? { enabled: true, ...mthParsed } : emptyCardState('mth'));
     const tfsParsed = parseScheduleString(subject.tfs_schedule || '', 'tfs');
-    setTfsCard(tfsParsed
-      ? { enabled: true, mode: tfsParsed.mode, startH: tfsParsed.startH, startM: tfsParsed.startM, endH: tfsParsed.endH, endM: tfsParsed.endM, type: tfsParsed.type }
-      : emptyCardState('tfs'));
+    setTfsCard(tfsParsed ? { enabled: true, ...tfsParsed } : emptyCardState('tfs'));
+    setMthCardModified(false);
+    setTfsCardModified(false);
     setShowEditModal(true);
     setEditError(null);
   }
@@ -581,14 +581,19 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       setSavingEdit(true);
       setEditError(null);
       const previousStatus = editingSubject.subject_status || 'active';
-      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
-      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+      // Preserve original complex schedule strings when the card was not touched by the user
+      const mthStr = mthCardModified
+        ? (mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null)
+        : (editingData.mth_schedule || null);
+      const tfsStr = tfsCardModified
+        ? (tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null)
+        : (editingData.tfs_schedule || null);
       const payload = {
         ...editingData,
         mth_schedule: mthStr || null,
         tfs_schedule: tfsStr || null,
-        mth_room: mthCard.enabled ? (editingData.mth_room || '') : '',
-        tfs_room: tfsCard.enabled ? (editingData.tfs_room || '') : '',
+        mth_room: mthCard.enabled ? buildCombinedRoomId(editingData.mth_room) : '',
+        tfs_room: tfsCard.enabled ? buildCombinedRoomId(editingData.tfs_room) : '',
       };
       const updated = await updateSubject(editingSubject.subject_id, payload);
       // Update local state
@@ -726,14 +731,14 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     try {
       setSavingSubject(true);
       setSubjectError(null);
-      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
-      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null;
+      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null;
       const payload = {
         ...newSubject,
         mth_schedule: mthStr || null,
         tfs_schedule: tfsStr || null,
-        mth_room: mthCard.enabled ? (newSubject.mth_room || '') : '',
-        tfs_room: tfsCard.enabled ? (newSubject.tfs_room || '') : '',
+        mth_room: mthCard.enabled ? buildCombinedRoomId(newSubject.mth_room) : '',
+        tfs_room: tfsCard.enabled ? buildCombinedRoomId(newSubject.tfs_room) : '',
       };
       const createdSubject = await createSubject(payload);
       // Reset form and close modal
@@ -750,8 +755,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         is_general: false,
         mth_schedule: '',
         tfs_schedule: '',
-        mth_room: '',
-        tfs_room: '',
+        mth_room: [],
+        tfs_room: [],
         subject_status: 'active',
         curr_id: '',
       });
@@ -855,6 +860,13 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       .map((token) => token.replace(/^(?:room|rm)\s*/i, '').trim())
       .filter(Boolean);
   }
+
+  const buildCombinedRoomId = (roomArr) => {
+    const ids = (Array.isArray(roomArr) ? roomArr : (roomArr ? [roomArr] : [])).filter(Boolean);
+    if (!ids.length) return '';
+    if (ids.length === 1 || ids[0] === ids[1]) return ids[0];
+    return `${ids[0]}/${ids[1]}`;
+  };
 
   function resolveRoomDisplayValue(value) {
     const tokens = parseRoomTokens(value);
@@ -1239,9 +1251,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                             </div>
                           )}
                           {col.key === 'mth_schedule' && (
-                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant">
-                              {formatScheduleTimeDisplay(subject.mth_schedule) || extractTimeRange(subject.mth_schedule)}
-                              {getScheduleAmPm(subject.mth_schedule) && (
+                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant flex-wrap">
+                              {formatScheduleDisplay(subject.mth_schedule) || extractTimeRange(subject.mth_schedule)}
+                              {isSimpleSchedule(subject.mth_schedule) && getScheduleAmPm(subject.mth_schedule) && (
                                 <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                                   {getScheduleAmPm(subject.mth_schedule)}
                                 </span>
@@ -1249,9 +1261,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                             </span>
                           )}
                           {col.key === 'tfs_schedule' && (
-                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant">
-                              {formatScheduleTimeDisplay(subject.tfs_schedule) || extractTimeRange(subject.tfs_schedule)}
-                              {getScheduleAmPm(subject.tfs_schedule) && (
+                            <span className="inline-flex items-center gap-1 text-sm text-on-surface-variant flex-wrap">
+                              {formatScheduleDisplay(subject.tfs_schedule) || extractTimeRange(subject.tfs_schedule)}
+                              {isSimpleSchedule(subject.tfs_schedule) && getScheduleAmPm(subject.tfs_schedule) && (
                                 <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(subject.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                                   {getScheduleAmPm(subject.tfs_schedule)}
                                 </span>
@@ -1392,7 +1404,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       {/* Add Subject Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <h3 className="text-lg font-bold text-white">Add New Subject</h3>
               <button
@@ -1529,8 +1541,19 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                     onChange={setMthCard}
                     onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
                     canDisable={tfsCard.enabled}
-                    roomId={newSubject.mth_room || null}
-                    onRoomChange={(id) => setNewSubject((s) => ({ ...s, mth_room: id || '' }))}
+                    roomId={Array.isArray(newSubject.mth_room) ? (newSubject.mth_room[0] || null) : (newSubject.mth_room || null)}
+                    onRoomChange={(id) => setNewSubject((s) => {
+                      const arr = [...(Array.isArray(s.mth_room) ? s.mth_room : [''])];
+                      arr[0] = id || '';
+                      return { ...s, mth_room: arr };
+                    })}
+                    roomId2={Array.isArray(newSubject.mth_room) ? (newSubject.mth_room[1] || null) : null}
+                    onRoomChange2={(id) => setNewSubject((s) => {
+                      const arr = [...(Array.isArray(s.mth_room) ? s.mth_room : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id || '';
+                      return { ...s, mth_room: arr };
+                    })}
                     rooms={roomsArray}
                     getConflictingOfferings={getConflictingOfferings}
                     editingId={null}
@@ -1541,8 +1564,19 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                     onChange={setTfsCard}
                     onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
                     canDisable={mthCard.enabled}
-                    roomId={newSubject.tfs_room || null}
-                    onRoomChange={(id) => setNewSubject((s) => ({ ...s, tfs_room: id || '' }))}
+                    roomId={Array.isArray(newSubject.tfs_room) ? (newSubject.tfs_room[0] || null) : (newSubject.tfs_room || null)}
+                    onRoomChange={(id) => setNewSubject((s) => {
+                      const arr = [...(Array.isArray(s.tfs_room) ? s.tfs_room : [''])];
+                      arr[0] = id || '';
+                      return { ...s, tfs_room: arr };
+                    })}
+                    roomId2={Array.isArray(newSubject.tfs_room) ? (newSubject.tfs_room[1] || null) : null}
+                    onRoomChange2={(id) => setNewSubject((s) => {
+                      const arr = [...(Array.isArray(s.tfs_room) ? s.tfs_room : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id || '';
+                      return { ...s, tfs_room: arr };
+                    })}
                     rooms={roomsArray}
                     getConflictingOfferings={getConflictingOfferings}
                     editingId={null}
@@ -1609,7 +1643,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       {/* Edit Subject Modal */}
       {showEditModal && editingSubject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
                 <h3 className="text-lg font-bold text-white">
@@ -1695,11 +1729,22 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <ScheduleCardInput
                   slot="mth"
                   value={mthCard}
-                  onChange={setMthCard}
-                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
+                  onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
                   canDisable={tfsCard.enabled}
-                  roomId={editingData.mth_room || null}
-                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room: id || '' }))}
+                  roomId={Array.isArray(editingData.mth_room) ? (editingData.mth_room[0] || null) : (editingData.mth_room || null)}
+                  onRoomChange={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.mth_room) ? d.mth_room : [''])];
+                    arr[0] = id || '';
+                    return { ...d, mth_room: arr };
+                  })}
+                  roomId2={Array.isArray(editingData.mth_room) ? (editingData.mth_room[1] || null) : null}
+                  onRoomChange2={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.mth_room) ? d.mth_room : [''])];
+                    if (arr.length < 2) arr.push('');
+                    arr[1] = id || '';
+                    return { ...d, mth_room: arr };
+                  })}
                   rooms={roomsArray}
                   getConflictingOfferings={getConflictingOfferings}
                   editingId={editingSubject?.subject_id ?? null}
@@ -1716,11 +1761,22 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <ScheduleCardInput
                   slot="tfs"
                   value={tfsCard}
-                  onChange={setTfsCard}
-                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                  onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
+                  onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
                   canDisable={mthCard.enabled}
-                  roomId={editingData.tfs_room || null}
-                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room: id || '' }))}
+                  roomId={Array.isArray(editingData.tfs_room) ? (editingData.tfs_room[0] || null) : (editingData.tfs_room || null)}
+                  onRoomChange={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.tfs_room) ? d.tfs_room : [''])];
+                    arr[0] = id || '';
+                    return { ...d, tfs_room: arr };
+                  })}
+                  roomId2={Array.isArray(editingData.tfs_room) ? (editingData.tfs_room[1] || null) : null}
+                  onRoomChange2={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.tfs_room) ? d.tfs_room : [''])];
+                    if (arr.length < 2) arr.push('');
+                    arr[1] = id || '';
+                    return { ...d, tfs_room: arr };
+                  })}
                   rooms={roomsArray}
                   getConflictingOfferings={getConflictingOfferings}
                   editingId={editingSubject?.subject_id ?? null}

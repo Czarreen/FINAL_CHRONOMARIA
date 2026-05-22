@@ -44,7 +44,7 @@ import { useNotifications } from '../hooks/useNotifications';
 import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidation';
 import { NOTIFICATION_FIELD_TO_KEY } from '../utils/notificationTransform';
 import ScheduleCardInput from '../components/ScheduleCardInput';
-import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleTimeDisplay } from '../utils/scheduleUtils';
+import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils';
 
 const PAGE_SIZE = 50;
 
@@ -110,6 +110,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   // Structured schedule card state — drives mth_schedule / tfs_schedule strings
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
   const [tfsCard, setTfsCard] = useState(emptyCardState('tfs'));
+  const [mthCardModified, setMthCardModified] = useState(false);
+  const [tfsCardModified, setTfsCardModified] = useState(false);
 
   const { setHighlight, clearHighlight } = useRowHighlight();
   const skipNextFilterResetRef = useRef(false);
@@ -361,8 +363,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
   async function handleAddOffering() {
     // Derive schedule strings from structured card state (null for disabled cards)
-    const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
-    const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+    const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null;
+    const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null;
     const dataForValidation = { ...editingData, mth_schedule: mthStr || null, tfs_schedule: tfsStr || null };
 
     if (!isFormValid(dataForValidation)) {
@@ -375,11 +377,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setOfferingError(null);
 
       const mthRoomId = mthCard.enabled
-        ? (Array.isArray(editingData.mth_room_id) ? editingData.mth_room_id.filter(Boolean)[0] || null : (editingData.mth_room_id || null))
+        ? buildCombinedRoomId(editingData.mth_room_id)
         : null;
 
       const tfsRoomId = tfsCard.enabled
-        ? (Array.isArray(editingData.tfs_room_id) ? editingData.tfs_room_id.filter(Boolean)[0] || null : (editingData.tfs_room_id || null))
+        ? buildCombinedRoomId(editingData.tfs_room_id)
         : null;
 
       const payload = {
@@ -426,13 +428,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     });
     // Pre-populate structured card state from existing schedule strings
     const mthParsed = parseScheduleString(offering.mth_schedule || '', 'mth');
-    setMthCard(mthParsed
-      ? { enabled: true, mode: mthParsed.mode, startH: mthParsed.startH, startM: mthParsed.startM, endH: mthParsed.endH, endM: mthParsed.endM, type: mthParsed.type }
-      : emptyCardState('mth'));
+    setMthCard(mthParsed ? { enabled: true, ...mthParsed } : emptyCardState('mth'));
     const tfsParsed = parseScheduleString(offering.tfs_schedule || '', 'tfs');
-    setTfsCard(tfsParsed
-      ? { enabled: true, mode: tfsParsed.mode, startH: tfsParsed.startH, startM: tfsParsed.startM, endH: tfsParsed.endH, endM: tfsParsed.endM, type: tfsParsed.type }
-      : emptyCardState('tfs'));
+    setTfsCard(tfsParsed ? { enabled: true, ...tfsParsed } : emptyCardState('tfs'));
+    setMthCardModified(false);
+    setTfsCardModified(false);
     setEditingFromNotification(!!notifItem);
     setNotificationMissingFields(
       notifItem
@@ -447,16 +447,20 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setSavingOffering(true);
       setOfferingError(null);
 
-      // Derive schedule strings from structured card state (null for disabled cards)
-      const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
-      const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+      // Preserve original complex schedule strings when the card was not touched by the user
+      const mthStr = mthCardModified
+        ? (mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null)
+        : (editingData.mth_schedule || null);
+      const tfsStr = tfsCardModified
+        ? (tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null)
+        : (editingData.tfs_schedule || null);
 
       const mthRoomId = mthCard.enabled
-        ? (Array.isArray(editingData.mth_room_id) ? editingData.mth_room_id.filter(Boolean)[0] || null : (editingData.mth_room_id || null))
+        ? buildCombinedRoomId(editingData.mth_room_id)
         : null;
 
       const tfsRoomId = tfsCard.enabled
-        ? (Array.isArray(editingData.tfs_room_id) ? editingData.tfs_room_id.filter(Boolean)[0] || null : (editingData.tfs_room_id || null))
+        ? buildCombinedRoomId(editingData.tfs_room_id)
         : null;
 
       const payload = {
@@ -781,6 +785,13 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const renderCellValue = (value) => {
     if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
     return String(value);
+  };
+
+  const buildCombinedRoomId = (roomArr) => {
+    const ids = (Array.isArray(roomArr) ? roomArr : []).filter(Boolean);
+    if (!ids.length) return null;
+    if (ids.length === 1 || ids[0] === ids[1]) return ids[0];
+    return `${ids[0]}/${ids[1]}`;
   };
 
   // Resolve room ids for an offering and a logical field key (mth or tfs)
@@ -1612,9 +1623,9 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                               : String(offering.merged ?? '—')}
                           </span>
                         ) : col.key === 'mth_schedule' || col.key === 'tfs_schedule' ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
-                            {formatScheduleTimeDisplay(offering[col.key]) ?? renderCellValue(offering[col.key])}
-                            {getScheduleAmPm(offering[col.key]) && (
+                          <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant flex-wrap">
+                            {formatScheduleDisplay(offering[col.key]) ?? renderCellValue(offering[col.key])}
+                            {isSimpleSchedule(offering[col.key]) && getScheduleAmPm(offering[col.key]) && (
                               <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(offering[col.key]) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                                 {getScheduleAmPm(offering[col.key])}
                               </span>
@@ -1954,7 +1965,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Edit Modal */}
       {editingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <div>
                 <h3 className="text-lg font-bold text-white">
@@ -2013,11 +2024,22 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                                 <ScheduleCardInput
                                   slot="mth"
                                   value={mthCard}
-                                  onChange={setMthCard}
-                                  onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                  onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
+                                  onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
                                   canDisable={tfsCard.enabled}
                                   roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
+                                  onRoomChange={(id) => setEditingData((d) => {
+                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                                    arr[0] = id ? String(id) : '';
+                                    return { ...d, mth_room_id: arr };
+                                  })}
+                                  roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
+                                  onRoomChange2={(id) => setEditingData((d) => {
+                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                                    if (arr.length < 2) arr.push('');
+                                    arr[1] = id ? String(id) : '';
+                                    return { ...d, mth_room_id: arr };
+                                  })}
                                   rooms={rooms}
                                   getConflictingOfferings={getConflictingOfferings}
                                   editingId={editingId}
@@ -2027,11 +2049,22 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                                 <ScheduleCardInput
                                   slot="tfs"
                                   value={tfsCard}
-                                  onChange={setTfsCard}
-                                  onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
+                                  onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
+                                  onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
                                   canDisable={mthCard.enabled}
                                   roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
+                                  onRoomChange={(id) => setEditingData((d) => {
+                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                                    arr[0] = id ? String(id) : '';
+                                    return { ...d, tfs_room_id: arr };
+                                  })}
+                                  roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
+                                  onRoomChange2={(id) => setEditingData((d) => {
+                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                                    if (arr.length < 2) arr.push('');
+                                    arr[1] = id ? String(id) : '';
+                                    return { ...d, tfs_room_id: arr };
+                                  })}
                                   rooms={rooms}
                                   getConflictingOfferings={getConflictingOfferings}
                                   editingId={editingId}
@@ -2097,7 +2130,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/20 bg-primary px-6 py-4">
               <h3 className="text-lg font-bold text-white">Add New Course Offering</h3>
               <button
@@ -2300,7 +2333,18 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   onToggle={() => setMthCard((c) => ({ ...c, enabled: !c.enabled }))}
                   canDisable={tfsCard.enabled}
                   roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
-                  onRoomChange={(id) => setEditingData((d) => ({ ...d, mth_room_id: id ? [String(id)] : [] }))}
+                  onRoomChange={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                    arr[0] = id ? String(id) : '';
+                    return { ...d, mth_room_id: arr };
+                  })}
+                  roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
+                  onRoomChange2={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                    if (arr.length < 2) arr.push('');
+                    arr[1] = id ? String(id) : '';
+                    return { ...d, mth_room_id: arr };
+                  })}
                   rooms={rooms}
                   getConflictingOfferings={getConflictingOfferings}
                   editingId={editingId}
@@ -2314,7 +2358,18 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   onToggle={() => setTfsCard((c) => ({ ...c, enabled: !c.enabled }))}
                   canDisable={mthCard.enabled}
                   roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
-                  onRoomChange={(id) => setEditingData((d) => ({ ...d, tfs_room_id: id ? [String(id)] : [] }))}
+                  onRoomChange={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                    arr[0] = id ? String(id) : '';
+                    return { ...d, tfs_room_id: arr };
+                  })}
+                  roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
+                  onRoomChange2={(id) => setEditingData((d) => {
+                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                    if (arr.length < 2) arr.push('');
+                    arr[1] = id ? String(id) : '';
+                    return { ...d, tfs_room_id: arr };
+                  })}
                   rooms={rooms}
                   getConflictingOfferings={getConflictingOfferings}
                   editingId={editingId}
@@ -2337,8 +2392,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   Cancel
                 </button>
                 {(() => {
-                  const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type) : null;
-                  const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type) : null;
+                  const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null;
+                  const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null;
                   const previewData = { ...editingData, mth_schedule: mthStr || null, tfs_schedule: tfsStr || null };
                   const valid = isFormValid(previewData);
                   const disabledReason = !valid ? getDisabledReason(previewData) : '';
