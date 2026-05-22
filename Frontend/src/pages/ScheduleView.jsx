@@ -28,7 +28,7 @@ import {
   exportAutomaticSchedulerRows,
   updateCourseOfferingFromScheduler,
 } from '../services/gaApi.js';
-import { getScheduleAmPm, formatScheduleTimeDisplay } from '../utils/scheduleUtils.js';
+import { getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils.js';
 
 const LAST_SCHEDULER_RUN_KEY = 'automaticSchedulerLastRun';
 const COURSE_OFFERING_UPDATE_MODES = {
@@ -507,9 +507,9 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
         return <span className="text-xs font-medium text-on-surface-variant">{row.lab_hrs != null ? `${row.lab_hrs}h` : '—'}</span>;
       case 'mth_schedule':
         return row.mth_schedule ? (
-          <span className="inline-flex items-center gap-1">
-            <span className="text-xs">{formatScheduleTimeDisplay(row.mth_schedule)}</span>
-            {getScheduleAmPm(row.mth_schedule) && (
+          <span className="inline-flex items-center gap-1 flex-wrap">
+            <span className="text-xs">{formatScheduleDisplay(row.mth_schedule)}</span>
+            {isSimpleSchedule(row.mth_schedule) && getScheduleAmPm(row.mth_schedule) && (
               <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(row.mth_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                 {getScheduleAmPm(row.mth_schedule)}
               </span>
@@ -528,9 +528,9 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
       }
       case 'tfs_schedule':
         return row.tfs_schedule ? (
-          <span className="inline-flex items-center gap-1">
-            <span className="text-xs">{formatScheduleTimeDisplay(row.tfs_schedule)}</span>
-            {getScheduleAmPm(row.tfs_schedule) && (
+          <span className="inline-flex items-center gap-1 flex-wrap">
+            <span className="text-xs">{formatScheduleDisplay(row.tfs_schedule)}</span>
+            {isSimpleSchedule(row.tfs_schedule) && getScheduleAmPm(row.tfs_schedule) && (
               <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${getScheduleAmPm(row.tfs_schedule) === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                 {getScheduleAmPm(row.tfs_schedule)}
               </span>

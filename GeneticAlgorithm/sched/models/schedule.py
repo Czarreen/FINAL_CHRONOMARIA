@@ -126,20 +126,44 @@ class ParsedSchedule(BaseModel):
         time_segments = [t.strip() for t in time_portion.split(',') if t.strip()]
 
         if day_overrides:
-            # Each override maps to the single shared time range
-            for override in day_overrides:
-                if ':' in override:
-                    day_token, _ = override.split(':', 1)
-                else:
-                    day_token = override
-                day = _resolve_day(day_token)
-                if day is None:
-                    continue
-                # Use first time range for all overrides
+            def _day_from_override(ov):
+                tok = ov.split(':', 1)[0] if ':' in ov else ov
+                return _resolve_day(tok)
+
+            n_ov, n_t = len(day_overrides), len(time_segments)
+
+            if n_ov == 1:
+                # Single override: all time ranges belong to this one day
+                day = _day_from_override(day_overrides[0])
+                if day is not None:
+                    for time_seg in time_segments:
+                        try:
+                            start, end = parse_time_range(time_seg)
+                            blocks.append(TimeBlock(day=day, start_minutes=start, end_minutes=end))
+                        except ValueError:
+                            pass
+            elif n_t >= n_ov:
+                # Each override paired with its own time segment by index
+                # e.g. "1:00-4:00 F, 1:00-4:00 T Lec" → F:1:00-4:00, T:1:00-4:00
+                for i, override in enumerate(day_overrides):
+                    day = _day_from_override(override)
+                    if day is None:
+                        continue
+                    try:
+                        start, end = parse_time_range(time_segments[i])
+                        blocks.append(TimeBlock(day=day, start_minutes=start, end_minutes=end))
+                    except ValueError:
+                        pass
+            else:
+                # More overrides than times: share the first time across all days
+                # e.g. "10:30-1:30 M Lab, Th Lec" → M:10:30-1:30, Th:10:30-1:30
                 if time_segments:
                     try:
                         start, end = parse_time_range(time_segments[0])
-                        blocks.append(TimeBlock(day=day, start_minutes=start, end_minutes=end))
+                        for override in day_overrides:
+                            day = _day_from_override(override)
+                            if day is not None:
+                                blocks.append(TimeBlock(day=day, start_minutes=start, end_minutes=end))
                     except ValueError:
                         pass
         else:

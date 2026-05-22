@@ -25,7 +25,6 @@ from typing import List, Optional
 from enum import Enum
 
 from sched.models.subject import Subject
-from sched.conflict.intervals import overlaps, parse_time_range
 from sched.conflict.room_sets import rooms_conflict
 
 
@@ -66,14 +65,26 @@ def _check_slot(
     if not a_sched or not b_sched:
         return None
 
+    from sched.models.schedule import ParsedSchedule, DayPattern
+    pattern = DayPattern.MTH if slot_label == "MTH" else DayPattern.TFS
     try:
-        a_start, a_end = parse_time_range(a_sched)
-        b_start, b_end = parse_time_range(b_sched)
-    except ValueError:
+        parsed_a = ParsedSchedule.parse(a_sched, pattern)
+        parsed_b = ParsedSchedule.parse(b_sched, pattern)
+    except Exception:
         return None
 
-    if not overlaps(a_start, a_end, b_start, b_end):
+    if not parsed_a.conflicts_with(parsed_b):
         return None
+
+    # Find the first overlapping block pair for the details dict
+    overlap_a = overlap_b = None
+    for blk_a in parsed_a.blocks:
+        for blk_b in parsed_b.blocks:
+            if blk_a.overlaps(blk_b):
+                overlap_a, overlap_b = blk_a, blk_b
+                break
+        if overlap_a:
+            break
 
     reasons: List[ConflictReason] = [ConflictReason.TIME_OVERLAP]
 
@@ -102,10 +113,10 @@ def _check_slot(
             "b_schedule": b_sched,
             "a_room": a_room,
             "b_room": b_room,
-            "a_start": a_start,
-            "a_end": a_end,
-            "b_start": b_start,
-            "b_end": b_end,
+            "a_start": overlap_a.start_minutes if overlap_a else None,
+            "a_end": overlap_a.end_minutes if overlap_a else None,
+            "b_start": overlap_b.start_minutes if overlap_b else None,
+            "b_end": overlap_b.end_minutes if overlap_b else None,
         },
     )
 

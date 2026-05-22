@@ -1,104 +1,245 @@
 // Day abbreviations for single-day modes (pair mode emits no day prefix)
 const SINGLE_DAY_ABBREV = { mon: 'M', thu: 'Th', tue: 'T', fri: 'F', sat: 'Sat' };
 
+// Full day names per slot for block labels in the UI
+export const PAIR_DAY_NAMES = {
+  mth: { block1: 'Monday', block2: 'Thursday' },
+  tfs: { block1: 'Tuesday', block2: 'Friday' },
+};
+
 /**
  * Build a schedule string from structured card values.
- * Pair mode  → "HH:MM-HH:MM Lec/Lab"       (no day — the column is already the day indicator)
- * Single day → "HH:MM-HH:MM DAY Lec/Lab"   (day abbreviation after the time range)
  *
- * @param {string} slot - 'mth' | 'tfs'
- * @param {string} mode - 'pair' | 'mon' | 'thu' | 'tue' | 'fri' | 'sat'
- * @param {string} startH
- * @param {string} startM
- * @param {string} endH
- * @param {string} endM
- * @param {string} type - 'lec' | 'lab'
- * @returns {string}
+ * Single block (hasSec = false):
+ *   Pair mode  → "HH:MM-HH:MM Lec/Lab"
+ *   Single day → "HH:MM-HH:MM DAY Lec/Lab"
+ *
+ * Double block (hasSec = true):
+ *   Pair mode, same time → "HH:MM-HH:MM Day1 Type1, Day2 Type2"
+ *   Pair mode, diff time → "HH:MM-HH:MM Day1 Type1, HH:MM-HH:MM Day2 Type2"
+ *   Single day, same type → "HH:MM-HH:MM, HH:MM-HH:MM Day Type"
+ *   Single day, diff type → "HH:MM-HH:MM Day Type1, HH:MM-HH:MM Day Type2"
  */
-export function buildScheduleString(slot, mode, startH, startM, endH, endM, type) {
+export function buildScheduleString(
+  slot, mode, startH, startM, endH, endM, type,
+  hasSec = false, startH2, startM2, endH2, endM2, type2
+) {
   if (!slot || !mode || !startH || !endH) return '';
-  const start = `${String(startH).padStart(2, '0')}:${String(startM || '00').padStart(2, '0')}`;
-  const end = `${String(endH).padStart(2, '0')}:${String(endM || '00').padStart(2, '0')}`;
-  const typeSuffix = type === 'lab' ? 'Lab' : 'Lec';
-  if (mode === 'pair') return `${start}-${end} ${typeSuffix}`;
+  const pad = (v) => String(v || '00').padStart(2, '0');
+  const start1 = `${pad(startH)}:${pad(startM)}`;
+  const end1   = `${pad(endH)}:${pad(endM)}`;
+  const suf1   = type === 'both' ? '' : (type === 'lab' ? 'Lab' : 'Lec');
+
+  if (!hasSec) {
+    if (mode === 'pair') {
+      return suf1 ? `${start1}-${end1} ${suf1}` : `${start1}-${end1}`;
+    }
+    const day = SINGLE_DAY_ABBREV[mode] || '';
+    return [start1 + '-' + end1, day, suf1].filter(Boolean).join(' ');
+  }
+
+  // Double block
+  const start2 = `${pad(startH2)}:${pad(startM2)}`;
+  const end2   = `${pad(endH2)}:${pad(endM2)}`;
+  const suf2   = type2 === 'both' ? '' : (type2 === 'lab' ? 'Lab' : 'Lec');
+  const time1  = `${start1}-${end1}`;
+  const time2  = `${start2}-${end2}`;
+
+  if (mode === 'pair') {
+    const [day1, day2] = slot === 'mth' ? ['M', 'Th'] : ['T', 'F'];
+    const block1 = [time1, day1, suf1].filter(Boolean).join(' ');
+    const block2Parts = time1 === time2 ? [day2, suf2] : [time2, day2, suf2];
+    const block2 = block2Parts.filter(Boolean).join(' ');
+    return `${block1}, ${block2}`;
+  }
+
+  // Single day with two time blocks
   const day = SINGLE_DAY_ABBREV[mode] || '';
-  return day ? `${start}-${end} ${day} ${typeSuffix}` : `${start}-${end} ${typeSuffix}`;
+  const dayPart = day ? ` ${day}` : '';
+  if (suf1 === suf2) {
+    return [`${time1},`, time2, day, suf1].filter(Boolean).join(' ');
+  }
+  return [time1 + dayPart, suf1].filter(Boolean).join(' ') + ', ' + [time2 + dayPart, suf2].filter(Boolean).join(' ');
 }
 
 /**
  * Parse a schedule string into structured card state.
  *
- * Handles the actual DB format:
- *   "7:30-9:00"              → pair mode (slot must be supplied by caller)
- *   "1:00-3:00 M"            → mth/mon mode
- *   "1:30-4:30 Sat"          → tfs/sat mode
- *   "1:00-4:00 T Lab, F Lec" → tfs/tue mode, lab (first component only)
+ * Always returns the full shape including block-2 defaults so callers can
+ * spread the result directly: `{ enabled: true, ...parsed }`.
  *
- * Also handles the legacy format our tool previously produced:
- *   "MT 10:00-11:30 Lec"
+ * Handles:
+ *   "7:30-9:00"                   → pair mode (slot must be supplied)
+ *   "1:00-3:00 M"                 → mth/mon
+ *   "1:30-4:30 Sat"               → tfs/sat
+ *   "10:30-1:30 M Lab, Th Lec"    → pair, hasSec=true (same time, diff types)
+ *   "10:30-1:30 M Lab, 14:00-16:00 Th Lec" → pair, hasSec=true (diff time)
+ *   "1:00-4:00, 4:30-6:30 Th Lec" → single day, hasSec=true (two blocks)
+ *   "9:00-12:00,1:00-3:00 Sat"   → sat, hasSec=true
+ *   "1:00-4:00 F, 1:00-4:00 T Lec" → pair TFS (same time both days)
  *
  * @param {string} str
- * @param {string|null} slot - 'mth' | 'tfs' | null  (caller supplies column context)
- * @returns {{ slot, mode, startH, startM, endH, endM, type } | null}
+ * @param {string|null} slot
+ * @returns {{ slot, mode, startH, startM, endH, endM, type, hasSec, startH2, startM2, endH2, endM2, type2 } | null}
  */
 export function parseScheduleString(str, slot = null) {
   if (!str || typeof str !== 'string') return null;
   const trimmed = str.trim();
   if (!trimmed) return null;
 
-  // Normalize AM/PM markers to 24-hour so both regex paths can handle them
-  const normalized = trimmed.replace(/(\d{1,2}:\d{2})\s*(AM|PM)/gi, (_, time, meridiem) => {
+  const SEC_DEFAULTS = { hasSec: false, startH2: '13', startM2: '00', endH2: '16', endM2: '00', type2: 'lec' };
+
+  const normMeridiem = (s) => s.replace(/(\d{1,2}:\d{2})\s*(AM|PM)/gi, (_, time, mer) => {
     const [h, m] = time.split(':').map(Number);
     let hours = h;
-    if (/pm/i.test(meridiem) && hours !== 12) hours += 12;
-    if (/am/i.test(meridiem) && hours === 12) hours = 0;
+    if (/pm/i.test(mer) && hours !== 12) hours += 12;
+    if (/am/i.test(mer) && hours === 12) hours = 0;
     return `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   });
 
-  // --- Primary format: HH:MM-HH:MM [optional suffix tokens] ---
-  const timeMatch = normalized.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/);
+  const normPm = (h) => {
+    const n = parseInt(h, 10);
+    if (n >= 1 && n <= 5) return n + 12;
+    return n;
+  };
+
+  const padH = (n) => String(n).padStart(2, '0');
+
+  const DAY_MAP = {
+    M:       { slot: 'mth', mode: 'mon' },
+    Th:      { slot: 'mth', mode: 'thu' },
+    T:       { slot: 'tfs', mode: 'tue' },
+    F:       { slot: 'tfs', mode: 'fri' },
+    Sat:     { slot: 'tfs', mode: 'sat' },
+    S:       { slot: 'tfs', mode: 'sat' },
+    Saturday:{ slot: 'tfs', mode: 'sat' },
+  };
+
+  const normalized = normMeridiem(trimmed);
+
+  // --- Primary format: first time range at start ---
+  const timeRx = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/s;
+  const timeMatch = normalized.match(timeRx);
+
   if (timeMatch) {
     const [, sh, sm, eh, em, rawRest = ''] = timeMatch;
-    // For complex entries like "T Lab, F Lec", only the first component is used
-    const first = rawRest.split(',')[0].trim();
-    const tokens = first.split(/\s+/).filter(Boolean);
+    const startH24 = normPm(sh);
+    const endH24   = normPm(eh);
 
-    const DAY_MAP = {
-      M:   { slot: 'mth', mode: 'mon' },
-      Th:  { slot: 'mth', mode: 'thu' },
-      T:   { slot: 'tfs', mode: 'tue' },
-      F:   { slot: 'tfs', mode: 'fri' },
-      Sat: { slot: 'tfs', mode: 'sat' },
-      S:   { slot: 'tfs', mode: 'sat' },
-    };
-
-    let resolvedSlot = slot;
-    let mode = 'pair';
-    let type = 'lec';
-
-    for (const token of tokens) {
-      if (/^lec$/i.test(token)) { type = 'lec'; continue; }
-      if (/^lab$/i.test(token)) { type = 'lab'; continue; }
-      // Exact match first, then title-case normalised
-      const dm = DAY_MAP[token]
-        || DAY_MAP[token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()];
-      if (dm) { resolvedSlot = dm.slot; mode = dm.mode; }
+    // Split rawRest on the first comma to check for second block
+    const commaIdx = rawRest.indexOf(',');
+    let firstPart = rawRest;
+    let secondPart = '';
+    if (commaIdx !== -1) {
+      firstPart  = rawRest.slice(0, commaIdx);
+      secondPart = rawRest.slice(commaIdx + 1).trim();
     }
 
+    // Parse tokens from firstPart (day, type)
+    const parseTokens = (part) => {
+      const tokens = part.trim().split(/\s+/).filter(Boolean);
+      let resolvedSlot = slot;
+      let mode = 'pair';
+      let type = 'both';
+      for (const token of tokens) {
+        if (/^lec$/i.test(token)) { type = 'lec'; continue; }
+        if (/^lab$/i.test(token)) { type = 'lab'; continue; }
+        const dm = DAY_MAP[token] || DAY_MAP[token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()];
+        if (dm) { resolvedSlot = dm.slot; mode = dm.mode; }
+      }
+      return { resolvedSlot, mode, type };
+    };
+
+    const { resolvedSlot, mode, type } = parseTokens(firstPart);
     if (!resolvedSlot) return null;
-    // Hours 1–5 without an explicit AM/PM marker must be PM (no class starts at 1–5 AM)
-    let startH24 = parseInt(sh, 10);
-    let endH24   = parseInt(eh, 10);
-    if (startH24 >= 1 && startH24 <= 5) startH24 += 12;
-    if (endH24   >= 1 && endH24   <= 5) endH24   += 12;
+
+    // Check if secondPart contains another time range → two-block single-day schedule
+    const secTimeRx = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})(.*)?$/s;
+    const secTimeMatch = secondPart.match(secTimeRx);
+
+    if (secTimeMatch) {
+      // Two distinct time ranges
+      const [, sh2, sm2, eh2, em2, rest2 = ''] = secTimeMatch;
+      const startH2_24 = normPm(sh2);
+      const endH2_24   = normPm(eh2);
+      // Pick day/type from rest2 or fall back to firstPart's info
+      const { mode: mode2, type: type2 } = parseTokens(rest2 || firstPart);
+      // Resolve final mode: if mode2 gives a more specific day use it
+      const finalMode = mode2 !== 'pair' ? mode2 : mode;
+      return {
+        slot: resolvedSlot, mode: finalMode,
+        startH: padH(startH24), startM: String(sm).padStart(2, '0'),
+        endH:   padH(endH24),   endM:   String(em).padStart(2, '0'),
+        type,
+        hasSec: true,
+        startH2: padH(startH2_24), startM2: String(sm2).padStart(2, '0'),
+        endH2:   padH(endH2_24),   endM2:   String(em2).padStart(2, '0'),
+        type2,
+      };
+    }
+
+    if (secondPart) {
+      // secondPart has no time range — could be "Th Lec" (pair diff-type) or "1:00-4:00 T Lec" (pair same-time already handled above)
+      const secTokens = secondPart.trim().split(/\s+/).filter(Boolean);
+      let secType = 'both';
+      let secDaySlot = resolvedSlot;
+      let secMode = mode;
+      for (const token of secTokens) {
+        if (/^lec$/i.test(token)) { secType = 'lec'; continue; }
+        if (/^lab$/i.test(token)) { secType = 'lab'; continue; }
+        const dm = DAY_MAP[token] || DAY_MAP[token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()];
+        if (dm) { secDaySlot = dm.slot; secMode = dm.mode; }
+      }
+
+      // Determine if both days together form a pair (M+Th or T+F)
+      const isPairMth = (mode === 'mon' && secMode === 'thu') || (mode === 'thu' && secMode === 'mon');
+      const isPairTfs = (mode === 'tue' && secMode === 'fri') || (mode === 'fri' && secMode === 'tue');
+      const formsPair = isPairMth || isPairTfs;
+
+      if (formsPair) {
+        // Block1 = day1, Block2 = day2 (same time)
+        const finalSlot = isPairMth ? 'mth' : 'tfs';
+        const block1Mode = isPairMth
+          ? (mode === 'mon' ? 'mon' : 'thu')
+          : (mode === 'tue' ? 'tue' : 'fri');
+        const block2Mode = isPairMth
+          ? (block1Mode === 'mon' ? 'thu' : 'mon')
+          : (block1Mode === 'tue' ? 'fri' : 'tue');
+
+        // Determine if user wrote "M Lab, Th Lec" → hasSec=true with pair mode
+        // but since block1 and block2 are the two days, use pair mode for the card
+        return {
+          slot: finalSlot, mode: 'pair',
+          startH: padH(startH24), startM: String(sm).padStart(2, '0'),
+          endH:   padH(endH24),   endM:   String(em).padStart(2, '0'),
+          type,
+          hasSec: secType !== type, // only hasSec if types differ; otherwise it's a plain pair
+          startH2: padH(startH24), startM2: String(sm).padStart(2, '0'),
+          endH2:   padH(endH24),   endM2:   String(em).padStart(2, '0'),
+          type2: secType,
+        };
+      }
+
+      // Not a standard pair — treat as pair mode with different types anyway
+      return {
+        slot: resolvedSlot, mode: 'pair',
+        startH: padH(startH24), startM: String(sm).padStart(2, '0'),
+        endH:   padH(endH24),   endM:   String(em).padStart(2, '0'),
+        type,
+        hasSec: true,
+        startH2: padH(startH24), startM2: String(sm).padStart(2, '0'),
+        endH2:   padH(endH24),   endM2:   String(em).padStart(2, '0'),
+        type2: secType,
+      };
+    }
+
+    // Single block
     return {
-      slot: resolvedSlot,
-      mode,
-      startH: String(startH24).padStart(2, '0'),
-      startM: String(sm).padStart(2, '0'),
-      endH: String(endH24).padStart(2, '0'),
-      endM: String(em).padStart(2, '0'),
+      slot: resolvedSlot, mode,
+      startH: padH(startH24), startM: String(sm).padStart(2, '0'),
+      endH:   padH(endH24),   endM:   String(em).padStart(2, '0'),
       type,
+      ...SEC_DEFAULTS,
     };
   }
 
@@ -107,36 +248,23 @@ export function parseScheduleString(str, slot = null) {
   if (legacy) {
     const [, rawDays, sh, sm, eh, em, rawType] = legacy;
     const LEGACY_MAP = {
-      MT:   { slot: 'mth', mode: 'pair' },
-      M:    { slot: 'mth', mode: 'mon'  },
-      Th:   { slot: 'mth', mode: 'thu'  },
-      TF:   { slot: 'tfs', mode: 'pair' },
-      T:    { slot: 'tfs', mode: 'tue'  },
-      F:    { slot: 'tfs', mode: 'fri'  },
-      S:    { slot: 'tfs', mode: 'sat'  },
-      Sat:  { slot: 'tfs', mode: 'sat'  },
-      MWF:  { slot: 'mth', mode: 'pair' },
-      MTH:  { slot: 'mth', mode: 'pair' },
-      TTH:  { slot: 'tfs', mode: 'pair' },
-      TTHS: { slot: 'tfs', mode: 'pair' },
-      TTh:  { slot: 'tfs', mode: 'pair' },
-      TFS:  { slot: 'tfs', mode: 'pair' },
-      MW:   { slot: 'mth', mode: 'pair' },
+      MT: { slot: 'mth', mode: 'pair' }, M: { slot: 'mth', mode: 'mon' }, Th: { slot: 'mth', mode: 'thu' },
+      TF: { slot: 'tfs', mode: 'pair' }, T: { slot: 'tfs', mode: 'tue' }, F: { slot: 'tfs', mode: 'fri' },
+      S: { slot: 'tfs', mode: 'sat' }, Sat: { slot: 'tfs', mode: 'sat' },
+      MWF: { slot: 'mth', mode: 'pair' }, MTH: { slot: 'mth', mode: 'pair' },
+      TTH: { slot: 'tfs', mode: 'pair' }, TTHS: { slot: 'tfs', mode: 'pair' },
+      TTh: { slot: 'tfs', mode: 'pair' }, TFS: { slot: 'tfs', mode: 'pair' }, MW: { slot: 'mth', mode: 'pair' },
     };
     const sm2 = LEGACY_MAP[rawDays] || LEGACY_MAP[rawDays.toUpperCase()];
     if (!sm2) return null;
-    let startH24 = parseInt(sh, 10);
-    let endH24   = parseInt(eh, 10);
-    if (startH24 >= 1 && startH24 <= 5) startH24 += 12;
-    if (endH24   >= 1 && endH24   <= 5) endH24   += 12;
+    const startH24 = normPm(sh);
+    const endH24   = normPm(eh);
     return {
-      slot: sm2.slot,
-      mode: sm2.mode,
-      startH: String(startH24).padStart(2, '0'),
-      startM: String(sm).padStart(2, '0'),
-      endH: String(endH24).padStart(2, '0'),
-      endM: String(em).padStart(2, '0'),
-      type: rawType ? rawType.toLowerCase() : 'lec',
+      slot: sm2.slot, mode: sm2.mode,
+      startH: padH(startH24), startM: String(sm).padStart(2, '0'),
+      endH:   padH(endH24),   endM:   String(em).padStart(2, '0'),
+      type: rawType ? rawType.toLowerCase() : 'both',
+      ...SEC_DEFAULTS,
     };
   }
 
@@ -144,9 +272,7 @@ export function parseScheduleString(str, slot = null) {
 }
 
 /**
- * Convert a "HH:MM" string to minutes since midnight.
- * @param {string} timeStr
- * @returns {number | null}
+ * Convert "HH:MM" to minutes since midnight.
  */
 export function parseTimeToMinutes(timeStr) {
   if (!timeStr) return null;
@@ -156,55 +282,43 @@ export function parseTimeToMinutes(timeStr) {
 }
 
 /**
- * Detect whether two time ranges overlap.
- * All values are minutes since midnight. Ranges are [start, end).
- * @param {number} startA
- * @param {number} endA
- * @param {number} startB
- * @param {number} endB
- * @returns {boolean}
+ * Detect whether two time ranges overlap. Ranges are [start, end).
  */
 export function timesOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
 /**
- * Derive AM/PM from a schedule string based on the start hour.
- * Not stored in DB — display only.
- * Handles both "4:30 PM-6:00 PM" (explicit meridiem) and "16:30-18:00" (24-hour).
- * For ambiguous 12-hour times without meridiem, hours 1–6 are treated as PM
- * because classes cannot start before 7:30 AM.
- * @param {string} scheduleStr
- * @returns {'AM'|'PM'|null}
+ * Derive AM/PM from a schedule string based on the start hour of the first block.
+ * Returns null for complex (multi-block) strings — use isSimpleSchedule() to guard.
  */
 export function getScheduleAmPm(scheduleStr) {
   if (!scheduleStr) return null;
   const s = String(scheduleStr);
-  // Check for explicit AM/PM marker attached to the start time (e.g. "7:30 AM-", "4:30 PM-")
   const meridiemMatch = s.match(/\d{1,2}:\d{2}\s*(AM|PM)\s*[-–]/i);
   if (meridiemMatch) return meridiemMatch[1].toUpperCase();
-  // Fall back to hour-based heuristic
   const hourMatch = s.match(/(\d{1,2}):\d{2}\s*-/);
   if (!hourMatch) return null;
   const hour = Number(hourMatch[1]);
-  // Hours >= 12 are always PM (24-hour or 12-hour noon+)
   if (hour >= 12) return 'PM';
-  // Hours 1–5 must be PM — AM classes cannot start at 1–5 AM; hour 6 is early-morning AM
   if (hour >= 1 && hour <= 5) return 'PM';
-  // Hours 7–11: AM
   return 'AM';
 }
 
 /**
- * Extract the start/end time (in minutes) from a schedule string.
- * Works with both "HH:MM-HH:MM ..." and "DAY HH:MM-HH:MM ..." formats.
- * @param {string} scheduleStr
- * @returns {{ start: number, end: number } | null}
+ * Returns true when the schedule string is a single block (no comma).
+ * Used to decide whether to show the AM/PM badge.
+ */
+export function isSimpleSchedule(scheduleStr) {
+  if (!scheduleStr) return true;
+  return !String(scheduleStr).includes(',');
+}
+
+/**
+ * Extract the start/end time (in minutes) from a schedule string (first block only).
  */
 export function getScheduleTimeRange(scheduleStr) {
   if (!scheduleStr) return null;
-
-  // Normalize "HH:MM AM/PM" → 24-hour so the range regex can always match
   const normalized = String(scheduleStr).replace(
     /(\d{1,2}:\d{2})\s*(AM|PM)/gi,
     (_, time, meridiem) => {
@@ -215,16 +329,12 @@ export function getScheduleTimeRange(scheduleStr) {
       return `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
   );
-
   const match = normalized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
   if (!match) return null;
-
   let startH = Number(match[1]);
   let endH   = Number(match[3]);
-  // Hours 1–5 without a meridiem marker must be PM — no class starts at 1–5 AM
   if (startH >= 1 && startH <= 5) startH += 12;
   if (endH   >= 1 && endH   <= 5) endH   += 12;
-
   const start = startH * 60 + Number(match[2]);
   const end   = endH   * 60 + Number(match[4]);
   if (end <= start) return null;
@@ -232,33 +342,71 @@ export function getScheduleTimeRange(scheduleStr) {
 }
 
 /**
- * Extract and format just the time range from a schedule string for display.
- * Handles all DB formats: "MTH 7:30AM-10:30AM", "07:30-10:30 Lec", "7:30-9:00 M Lec", etc.
- * Returns "H:MM-H:MM" (e.g. "7:30-10:30") or null if no time range found.
- * @param {string} scheduleStr
- * @returns {string|null}
+ * Format a single time range block for display.
+ * Strips leading zeros: "07:30-10:00" → "7:30-10:00".
+ */
+function formatSingleBlock(str) {
+  if (!str) return str;
+  const match = String(str).match(/(\d{1,2}:\d{2})\s*(?:AM|PM)?\s*[-–]\s*(\d{1,2}:\d{2})\s*(?:AM|PM)?(.*)/is);
+  if (!match) return str.trim();
+  const stripZero = (t) => t.replace(/^0(\d)/, '$1');
+  const timeRange = `${stripZero(match[1])}-${stripZero(match[2])}`;
+  const suffix = (match[3] || '').trim();
+  return suffix ? `${timeRange} ${suffix}` : timeRange;
+}
+
+/**
+ * Format a full schedule string for table display.
+ * Handles multi-block strings by splitting on commas and joining with " | ".
+ * For single-block strings the output matches the previous formatScheduleTimeDisplay.
+ */
+export function formatScheduleDisplay(scheduleStr) {
+  if (!scheduleStr) return null;
+  const s = String(scheduleStr);
+  // Split on commas that separate blocks (not within a time range like "12:00-1:00")
+  // Strategy: split on comma, recombine parts that look like they were inside a range
+  const rawParts = s.split(',');
+  const blocks = [];
+  let carry = '';
+  for (const part of rawParts) {
+    const combined = carry ? `${carry},${part}` : part;
+    // A part that starts with a digit right after the comma is a new time block
+    const trimmed = part.trim();
+    if (carry && /^\d/.test(trimmed)) {
+      // New block: flush carry as its own block
+      blocks.push(carry.trim());
+      carry = part;
+    } else if (!carry) {
+      carry = part;
+    } else {
+      // Continuation of carry (e.g. day/type suffix after comma that has no time)
+      blocks.push(combined.trim());
+      carry = '';
+    }
+  }
+  if (carry) blocks.push(carry.trim());
+
+  if (blocks.length <= 1) return formatSingleBlock(s);
+  return blocks.map(formatSingleBlock).join(' | ');
+}
+
+/**
+ * @deprecated Use formatScheduleDisplay instead. Kept for backward compatibility.
  */
 export function formatScheduleTimeDisplay(scheduleStr) {
-  if (!scheduleStr) return null;
-  const match = String(scheduleStr).match(/(\d{1,2}:\d{2})\s*(?:AM|PM)?\s*[-–]\s*(\d{1,2}:\d{2})\s*(?:AM|PM)?/i);
-  if (!match) return scheduleStr;
-  const stripLeadingZero = (t) => t.replace(/^0(\d)/, '$1');
-  return `${stripLeadingZero(match[1])}-${stripLeadingZero(match[2])}`;
+  return formatScheduleDisplay(scheduleStr);
 }
 
 /**
  * Default empty card state for a given slot.
- * @param {string} slot - 'mth' | 'tfs'
- * @returns {{ enabled, mode, startH, startM, endH, endM, type }}
+ * Includes block-2 fields (hasSec = false by default).
  */
 export function emptyCardState(slot) {
   return {
     enabled: false,
     mode: 'pair',
-    startH: '07',
-    startM: '30',
-    endH: '10',
-    endM: '00',
-    type: 'lec',
+    startH: '07', startM: '30', endH: '10', endM: '00', type: 'lec',
+    hasSec: false,
+    startH2: '13', startM2: '00', endH2: '16', endM2: '00', type2: 'lec',
   };
 }
