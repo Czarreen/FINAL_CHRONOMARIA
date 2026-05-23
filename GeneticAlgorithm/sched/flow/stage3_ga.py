@@ -9,7 +9,7 @@ from typing import List, Tuple
 from sched.flow.state import PipelineState
 from sched.flow.census import assert_invariant
 from sched.ga.deap_setup import run_ga_optimization
-from sched.conflict.detector import has_any_conflicts, find_all_conflicts
+from sched.conflict.detector import has_any_conflict, find_all_conflicts
 from sched.models.subject import Subject, SubjectTag
 
 
@@ -47,7 +47,7 @@ def validate_ga_output(
     conflicted: List[Subject] = []
 
     for s in ga_output:
-        if has_any_conflicts([s] + baseline):
+        if has_any_conflict(s, baseline):
             conflicted.append(s)
         else:
             clean.append(s)

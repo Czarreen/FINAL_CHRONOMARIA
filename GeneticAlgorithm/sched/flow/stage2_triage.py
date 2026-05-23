@@ -7,7 +7,7 @@ promoted directly. Empty subjects stay in pending for Stage 3 (GA).
 
 from typing import List
 from sched.flow.state import PipelineState
-from sched.conflict.detector import conflicts
+from sched.conflict.detector import check_conflict
 from sched.models.subject import Subject, SubjectTag
 
 
@@ -23,7 +23,7 @@ def triage(state: PipelineState) -> PipelineState:
         if s.mth_schedule is None and s.tfs_schedule is None:
             still_pending.append(s)
         else:
-            has_conflict = any(conflicts(s, other) is not None for other in baseline)
+            has_conflict = any(check_conflict(s, other)[0] is not None for other in baseline)
             if has_conflict:
                 still_pending.append(s)
             else:

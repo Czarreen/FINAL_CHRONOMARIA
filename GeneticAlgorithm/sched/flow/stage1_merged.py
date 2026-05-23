@@ -8,7 +8,7 @@ against LOCKED first, then against each other.
 from typing import List, Optional
 from sched.flow.state import PipelineState
 from sched.flow.census import assert_invariant
-from sched.conflict.detector import conflicts, find_all_conflicts
+from sched.conflict.detector import check_conflict, find_all_conflicts
 from sched.models.subject import Subject, SubjectTag
 from sched.models.merge_group import MergeGroup
 
@@ -23,7 +23,7 @@ def _group_has_conflict(mg: MergeGroup, baseline: List[Subject]) -> bool:
     members = _group_subjects(mg)
     for m in members:
         for b in baseline:
-            if conflicts(m, b) is not None:
+            if check_conflict(m, b)[0] is not None:
                 return True
     return False
 
