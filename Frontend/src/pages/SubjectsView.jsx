@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
-import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings, GitCompare } from 'lucide-react';
+import { fetchSubjects, fetchSubjectPageNumber, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
 import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
-import { syncSubjectsFromOfferings } from '../services/courseOfferingsApi';
+import { syncSubjectsFromOfferings, applyGeneralTagsToSubjects } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
+import RoomConflictsPanel from '../components/RoomConflictsPanel';
 import { syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { useNotifications } from '../hooks/useNotifications';
@@ -50,6 +51,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
   const [roomNameById, setRoomNameById] = useState({});
+  const [roomObjects, setRoomObjects] = useState([]);
   const [roomBookings, setRoomBookings] = useState([]);
 
   // Structured schedule card state shared between Add and Edit modals
@@ -96,6 +98,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   } = useNotifications();
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
+  const [compareIds, setCompareIds] = useState(null); // null | [id1, id2]
   const [pendingScrollToSubject, setPendingScrollToSubject] = useState(null);
 
   const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
@@ -188,10 +191,21 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   };
 
+  // Strip schedule_conflict issues — those are shown exclusively in the Room Conflicts panel.
+  const subjectNotificationsNoConflicts = useMemo(() => {
+    return subjectNotifications
+      .map((item) => ({
+        ...item,
+        issues: (item.issues || []).filter((i) => i.field !== 'schedule_conflict'),
+        missingFields: (item.missingFields || []).filter((f) => f !== 'schedule_conflict'),
+      }))
+      .filter((item) => item.issues.length > 0);
+  }, [subjectNotifications]);
+
   const visibleSubjectNotifications = useMemo(() => {
     const searchTerm = String(notifSearch || '').trim().toLowerCase();
 
-    return subjectNotifications.filter((item) => {
+    return subjectNotificationsNoConflicts.filter((item) => {
       const severity = normalizeNotificationSeverity(item.severity);
       if (notifSeverityFilter !== 'all' && severity !== notifSeverityFilter) {
         return false;
@@ -213,12 +227,12 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
       return haystack.includes(searchTerm);
     });
-  }, [subjectNotifications, notifSeverityFilter, notifSearch]);
+  }, [subjectNotificationsNoConflicts, notifSeverityFilter, notifSearch]);
 
   const subjectNotificationStats = useMemo(() => {
     const stats = { total: 0, critical: 0, medium: 0, low: 0 };
 
-    for (const item of subjectNotifications) {
+    for (const item of subjectNotificationsNoConflicts) {
       const severity = normalizeNotificationSeverity(item.severity);
       stats.total += 1;
       if (severity === 'critical') stats.critical += 1;
@@ -227,7 +241,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
 
     return stats;
-  }, [subjectNotifications]);
+  }, [subjectNotificationsNoConflicts]);
 
   const { setHighlight } = useRowHighlight();
 
@@ -273,8 +287,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
   // Load subjects data
   useEffect(() => {
+    if (compareIds) return;
     loadSubjects();
-  }, [page, limit, search, searchField, statusFilter, subjectMutationKey]);
+  }, [page, limit, search, searchField, statusFilter, subjectMutationKey, compareIds]);
 
 
   const handleInlineSave = async ({ offeringId, field, value }) => {
@@ -404,6 +419,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
     try {
       const nextLookup = {};
+      const allRoomRows = [];
       const pageSize = 200;
       let currentPage = 1;
       let hasMore = true;
@@ -418,6 +434,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           if (roomId && roomName) {
             nextLookup[roomId] = roomName;
           }
+          allRoomRows.push(row);
         }
 
         hasMore = rows.length === pageSize;
@@ -425,6 +442,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       }
 
       setRoomNameById(nextLookup);
+      setRoomObjects(allRoomRows);
       try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup)); } catch (_) {}
     } catch {
       setRoomNameById({});
@@ -435,6 +453,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     try {
       setFetching(true);
       await syncSubjectsFromOfferings();
+      // Set is_general=true on subjects whose linked course offering has tag='general'
+      await applyGeneralTagsToSubjects().catch(() => {});
       await loadSubjects();
     } catch (_) {
     } finally {
@@ -463,6 +483,28 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
+
+  // Compare mode: fetch exactly the two conflicting subjects by ID.
+  useEffect(() => {
+    if (!compareIds) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all(compareIds.map((id) => fetchSubjectById(id)))
+      .then((results) => {
+        if (!active) return;
+        const rows = results.filter(Boolean);
+        setSubjects(rows);
+        setTotal(rows.length);
+      })
+      .catch(() => { if (active) { setSubjects([]); setTotal(0); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [compareIds]);
+
+  const exitCompareMode = () => {
+    setCompareIds(null);
+  };
 
   function scrollToSubjectRowById(subjectId, severity = null) {
     const rowElement = document.getElementById(`subject-row-${subjectId}`);
@@ -980,6 +1022,25 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             </button>
           </div>
 
+          {/* Room Conflicts panel */}
+          <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+            <RoomConflictsPanel
+              items={subjectNotifications}
+              rooms={roomObjects}
+              entityType="subject"
+              onItemJump={(item) => {
+                const rowId = item.rowId || item.entity_id || null;
+                if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
+              }}
+              onItemEdit={(item) => {
+                const subj = item.subject || subjectNotifications.find((s) => s.rowId === item.rowId)?.subject;
+                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+              }}
+              onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
+            />
+          </div>
+
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             {selectedSubjects.size > 0 && (
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
@@ -1149,6 +1210,22 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               Delete selection
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Compare Mode Banner */}
+      {compareIds && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700">
+          <GitCompare size={15} className="shrink-0 text-blue-500" />
+          <span>Compare Mode — showing 2 conflicting rows</span>
+          <button
+            type="button"
+            onClick={exitCompareMode}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            <X size={12} />
+            Exit Compare
+          </button>
         </div>
       )}
 
@@ -1364,7 +1441,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             </table>
           </div>
 
-          {totalPages > 1 && (
+          {!compareIds && totalPages > 1 && (
             <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-600">
                 Showing {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}

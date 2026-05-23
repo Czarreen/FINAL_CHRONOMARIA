@@ -157,3 +157,15 @@ export async function syncSubjectsFromOfferings() {
   }
   return response.json();
 }
+
+export async function applyGeneralTagsToSubjects() {
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/apply-general-tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+  return response.json();
+}

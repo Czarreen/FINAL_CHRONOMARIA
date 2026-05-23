@@ -5,6 +5,13 @@ import { recordAuditLog } from '../lib/auditLogger.js';
 const router = Router();
 const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
+const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG)/i;
+
+function deriveTag(courseNo) {
+  const cn = String(courseNo || '').trim();
+  return cn && GENERAL_RE.test(cn) ? 'general' : null;
+}
+
 const HEADER_TO_FIELD = {
   currid: 'curr_id',
   curriculumid: 'curr_id',
@@ -559,13 +566,16 @@ function buildCourseOfferingPayload(input = {}, existing = null) {
     tfs_schedule: normalizeCell(input.tfs_schedule ?? existing?.tfs_schedule),
     tfs_room_id: normalizeRoomFieldValue(input.tfs_room_id ?? existing?.tfs_room_id),
     merged: mergedFlag,
+    tag: deriveTag(normalizeCell(input.course_no ?? existing?.course_no)),
   };
 }
 
 function buildSubjectPayloadFromCourseOffering(courseOffering) {
-  return {
+  const courseNo = normalizeCell(courseOffering?.course_no);
+  const tag = courseOffering?.tag ?? deriveTag(courseNo);
+  const payload = {
     subject_code: normalizeCell(courseOffering?.code),
-    subject_course_no: normalizeCell(courseOffering?.course_no),
+    subject_course_no: courseNo,
     subject_descriptive_title: normalizeCell(courseOffering?.descriptive_title),
     curr_id: parseNullableNumber(courseOffering?.curr_id),
     department_id: courseOffering?.department_id ?? null,
@@ -578,6 +588,9 @@ function buildSubjectPayloadFromCourseOffering(courseOffering) {
     mth_room: normalizeCell(courseOffering?.mth_room_id),
     tfs_room: normalizeCell(courseOffering?.tfs_room_id),
   };
+  // Only set is_general to true — never force it to false (preserves manual overrides)
+  if (tag === 'general') payload.is_general = true;
+  return payload;
 }
 
 function buildSubjectSyncChecks(courseOffering, subjectPayload) {
@@ -896,6 +909,7 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
     lab_hrs: labHrs.value,
     mth_schedule: normalizeCell(row.mth_schedule),
     tfs_schedule: normalizeCell(row.tfs_schedule),
+    tag: deriveTag(normalizeCell(row.course_no)),
   };
 
   const mthRoom = resolveRoomIds(row.mth_room_id, roomLookup);
@@ -1683,6 +1697,55 @@ router.post('/sync-subjects', async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error during subject sync.',
+    });
+  }
+});
+
+// POST - Bulk-apply is_general=true to subjects whose linked course offering has tag='general'
+// Subjects with is_general already true are untouched; only false/null ones are upgraded.
+router.post('/apply-general-tags', async (req, res) => {
+  try {
+    const { data: generalOfferings, error: coError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('code, course_no, section, department_id')
+      .eq('tag', 'general');
+
+    if (coError) throw new Error(`Failed to fetch general offerings: ${coError.message}`);
+
+    const offerings = Array.isArray(generalOfferings) ? generalOfferings : [];
+    if (offerings.length === 0) {
+      return res.json({ updated: 0 });
+    }
+
+    const subjectMaps = await preloadSubjectLookups();
+    const toUpdate = new Map(); // subject_id → true
+
+    for (const offering of offerings) {
+      const subjectCode = normalizeCell(offering.code);
+      if (!subjectCode) continue;
+      const section = normalizeCell(offering.section) ?? '';
+      const deptId = offering.department_id;
+      const existing = lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps);
+      if (existing) toUpdate.set(existing.subject_id, true);
+    }
+
+    if (toUpdate.size === 0) {
+      return res.json({ updated: 0 });
+    }
+
+    const subjectIds = Array.from(toUpdate.keys());
+    const { error: updateError } = await supabaseAdmin
+      .from('subjects')
+      .update({ is_general: true })
+      .in('subject_id', subjectIds)
+      .eq('is_general', false);
+
+    if (updateError) throw new Error(`Failed to update subjects: ${updateError.message}`);
+
+    return res.json({ updated: subjectIds.length });
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unknown error during general tag sync.',
     });
   }
 });

@@ -112,6 +112,11 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
         severity: 'high',
         message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
         conflicting_subject_id: conflict.entityId,
+        conflicting_code: conflict.entityCode || null,
+        conflict_room_id: conflict.room || null,
+        conflict_schedule_type: conflict.schedule || null,
+        conflict_days: conflict.conflictingDays || null,
+        conflict_entity_schedule: conflict.schedule === 'MTH' ? (subject.mth_schedule || null) : (subject.tfs_schedule || null),
       });
     }
   }
@@ -138,6 +143,11 @@ export function buildSubjectNotificationRows(subject, allSubjects = []) {
       subject_code: normalizeSubjectText(subject.subject_code) || null,
       subject_descriptive_title: normalizeSubjectText(subject.subject_descriptive_title) || null,
       conflicting_subject_id: issue.conflicting_subject_id || null,
+      conflicting_code: issue.conflicting_code || null,
+      conflict_room_id: issue.conflict_room_id || null,
+      conflict_schedule_type: issue.conflict_schedule_type || null,
+      conflict_days: issue.conflict_days || null,
+      conflict_entity_schedule: issue.conflict_entity_schedule || null,
     },
   }));
 }
