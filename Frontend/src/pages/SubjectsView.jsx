@@ -14,6 +14,8 @@ import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
 import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleDisplay, isSimpleSchedule, getScheduleAmPm } from '../utils/scheduleUtils';
 
+const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG)/i;
+
 const columns = [
   { key: 'curr_id', label: 'Curriculum ID' },
   { key: 'subject_code', label: 'Code' },
@@ -1449,7 +1451,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                       <input
                         type="text"
                         value={newSubject.subject_course_no}
-                        onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewSubject({ ...newSubject, subject_course_no: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                        }}
                         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., HCI-101"
                       />
@@ -1473,7 +1478,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                       <input
                         type="text"
                         value={newSubject.subject_descriptive_title}
-                        onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewSubject({ ...newSubject, subject_descriptive_title: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                        }}
                         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., Introduction to Human Computer Interactions"
                       />
@@ -1690,7 +1698,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <input
                   type="text"
                   value={editingData.subject_course_no}
-                  onChange={(e) => setEditingData({ ...editingData, subject_course_no: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditingData({ ...editingData, subject_course_no: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
@@ -1718,7 +1729,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <input
                   type="text"
                   value={editingData.subject_descriptive_title}
-                  onChange={(e) => setEditingData({ ...editingData, subject_descriptive_title: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditingData({ ...editingData, subject_descriptive_title: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., Introduction to Computer Science"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_descriptive_title')}

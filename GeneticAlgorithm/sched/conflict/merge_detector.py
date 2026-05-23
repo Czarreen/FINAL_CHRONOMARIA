@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from sched.models.merge_group import MergeGroup
 from sched.models.schedule import DayPattern, ParsedSchedule
-from sched.models.subject import Subject, SubjectType
+from sched.models.subject import Subject
 
 
 # ── Normalize helpers ─────────────────────────────────────────────────────────
@@ -185,8 +185,6 @@ def detect_room_based_merges(
 
     for s in subjects:
         if s.subject_id in exclude_ids:
-            continue
-        if s.subject_type == SubjectType.GENERAL:
             continue
 
         is_mth_empty = (s.mth_schedule is None and s.mth_room is None)

@@ -105,7 +105,7 @@ def fix_merged_vs_merged(state: PipelineState) -> PipelineState:
                 a_members = _group_subjects(mg_a)
                 b_members = _group_subjects(mg_b)
                 all_a_vs_b = any(
-                    conflicts(ma, mb) is not None
+                    check_conflict(ma, mb)[0] is not None
                     for ma in a_members
                     for mb in b_members
                 )

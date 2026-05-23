@@ -3,7 +3,7 @@ import pytest
 from sched.flow.preflight import (
     run_preflight, classify_subject_type, classify_subject_state, detect_merge_groups
 )
-from sched.models.subject import Subject, SubjectType, SubjectState, SubjectTag
+from sched.models.subject import Subject, SubjectType, SubjectState
 
 
 def _make_subject(curr_id: int, course_no: str = "ENG 1", section: str = "1A",
@@ -84,19 +84,17 @@ class TestClassifySubjectState:
 
 
 class TestRunPreflight:
-    def test_general_scheduled_goes_to_locked(self):
+    def test_general_scheduled_goes_to_pending(self):
         s = _make_subject(1, course_no="NSTP 1", mth_schedule="7:30-9:00", mth_room="R101")
         state = run_preflight([s])
-        assert len(state.locked) == 1
-        assert state.locked[0].curr_id == 1
-        assert state.locked[0].tag == SubjectTag.GENERAL
+        assert len(state.pending) == 1
+        assert state.pending[0].curr_id == 1
 
-    def test_general_empty_goes_to_manual_review(self):
+    def test_general_empty_goes_to_pending(self):
         s = _make_subject(1, course_no="NSTP 1")
         state = run_preflight([s])
-        assert len(state.manual_review) == 1
-        assert state.manual_review[0].curr_id == 1
-        assert state.manual_review[0].tag == SubjectTag.MANUAL_REVIEW
+        assert len(state.pending) == 1
+        assert state.pending[0].curr_id == 1
 
     def test_regular_empty_goes_to_pending(self):
         s = _make_subject(1, course_no="ENG 1")

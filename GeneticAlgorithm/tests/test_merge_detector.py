@@ -133,10 +133,11 @@ class TestPhase1Skip:
         assert result.confirmed_merges == []
         assert result.partial_data == []
 
-    def test_general_subjects_skipped(self):
+    def test_general_subjects_processed(self):
         s = _subject(1, mth_schedule="7:30-9:00", mth_room="E101",
                      subject_type=SubjectType.GENERAL)
         result = detect_room_based_merges([s])
+        # Single subject — no partner to merge with, so no groups formed
         assert result.confirmed_merges == []
         assert result.likely_merges == []
         assert s.subject_id not in result.skipped_empty_subjects

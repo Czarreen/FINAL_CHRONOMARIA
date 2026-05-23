@@ -29,7 +29,6 @@ class SubjectState(str, Enum):
 
 class SubjectTag(str, Enum):
     """Visual tag applied to the output for the frontend."""
-    GENERAL = "General"
     ORIGINAL = "Original"
     GENERATED = "Generated"
     RESCHEDULED = "Rescheduled"
@@ -88,7 +87,7 @@ class Subject(BaseModel):
         return _empty_to_none(v)
 
     def is_general_subject(self) -> bool:
-        """True if this subject is classified as GENERAL (locked external faculty)."""
+        """True if this subject is classified as a general education subject."""
         return self.subject_type == SubjectType.GENERAL
 
     def is_empty(self) -> bool:

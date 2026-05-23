@@ -17,12 +17,12 @@ class PipelineState(BaseModel):
     Holds all buckets. Mutates as subjects move between stages.
 
     BUCKETS:
-      locked          : general subjects — never modified
+      locked          : Saturday-resolved subjects (populated by stage_sat)
       merged_groups   : grouped subjects awaiting Stage 1
       resolved        : conflict-free, finalized — growing baseline
       pending         : awaiting GA work
       unresolvable    : GA could not schedule within max iterations
-      manual_review   : GENERAL+EMPTY edge cases — flagged for humans
+      manual_review   : subjects flagged for human review (likely merges, partial data)
     """
     locked: List[Subject] = []
     merged_groups: List[MergeGroup] = []

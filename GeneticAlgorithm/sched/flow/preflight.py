@@ -2,11 +2,10 @@
 PRE-FLIGHT stage.
 
 Pipeline contract:
-  - GENERAL + SCHEDULED  -> locked        (tag: General)
-  - GENERAL + EMPTY      -> manual_review (tag: Manual Review)
   - MERGED all-scheduled -> merged_groups (tag: Original)
   - MERGED any-empty     -> pending
-  - REGULAR + *          -> pending
+  - SATURDAY-only TFS    -> saturday_pile
+  - all others           -> pending
 """
 
 import re
@@ -239,14 +238,7 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     for s in subjects:
         if s.subject_id in skip_ids:
             continue
-        if s.subject_type == SubjectType.GENERAL:
-            if s.subject_state == SubjectState.SCHEDULED:
-                s.tag = SubjectTag.GENERAL
-                resolved.append(s)
-            else:
-                s.tag = SubjectTag.MANUAL_REVIEW
-                manual_review.append(s)
-        elif is_saturday_schedule(s.tfs_schedule):
+        if is_saturday_schedule(s.tfs_schedule):
             saturday_pile.append(s)
         else:
             pending.append(s)
