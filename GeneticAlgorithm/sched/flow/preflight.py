@@ -1,22 +1,25 @@
 """
-PRE-FLIGHT stage.
+PRE-FLIGHT stage (Steps 0 + 1 of the pool-based pipeline).
 
-Pipeline contract:
-  - MERGED all-scheduled -> merged_groups (tag: Original)
-  - MERGED any-empty     -> pending
-  - SATURDAY-only TFS    -> saturday_pile
-  - all others           -> pending
+Builds a RoomTypeRegistry and converts all subjects into SchedulingEntity
+objects. Merge groups move as atomic units. Saturday entities are flagged
+for manual review and never enter the pool system.
+
+Returns: (RoomTypeRegistry, List[SchedulingEntity])
 """
 
 import re
 import uuid
-from typing import List, Dict, Set, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
+from sched.models.room import Room, RoomType
 from sched.models.subject import Subject, SubjectType, SubjectState, SubjectTag
 from sched.models.merge_group import MergeGroup
-from sched.flow.state import PipelineState
-from sched.flow.census import assert_invariant
+from sched.models.schedule import ParsedSchedule, DayPattern, TimeBlock
+from sched.conflict.room_sets import expand_room_string
 from sched.conflict.merge_detector import detect_room_based_merges
+from sched.pool.room_types import RoomTypeRegistry
+from sched.pool.pool import SchedulingEntity
 
 
 _GENERAL_RE = re.compile(
@@ -26,15 +29,11 @@ _GENERAL_RE = re.compile(
 
 
 def is_saturday_schedule(sched_str: Optional[str]) -> bool:
-    """
-    Returns True if the schedule string is a Saturday-only day override.
-    Handles: "1:00-3:00 Sat", "1:00-3:00 S", "1:00-3:00 Saturday" (any case/whitespace).
-    """
     if not sched_str:
         return False
     try:
-        from sched.models.schedule import ParsedSchedule, DayPattern, Day
         parsed = ParsedSchedule.parse(sched_str.strip(), DayPattern.TFS)
+        from sched.models.schedule import Day
         return (
             parsed.has_override
             and bool(parsed.blocks)
@@ -45,17 +44,12 @@ def is_saturday_schedule(sched_str: Optional[str]) -> bool:
 
 
 def classify_subject_type(subject: Subject) -> SubjectType:
-    """
-    Classify subject as GENERAL, MERGED, or REGULAR.
-    is_general flag (from DB/Node) takes priority over regex.
-    """
     if subject.is_general is True:
         return SubjectType.GENERAL
     if subject.is_general is False:
         if subject.merged_with:
             return SubjectType.MERGED
         return SubjectType.REGULAR
-    # is_general is None — apply regex heuristic
     if _GENERAL_RE.match(subject.course_no or ''):
         return SubjectType.GENERAL
     if subject.merged_with:
@@ -64,7 +58,6 @@ def classify_subject_type(subject: Subject) -> SubjectType:
 
 
 def classify_subject_state(subject: Subject) -> SubjectState:
-    """EMPTY if both slots absent; SCHEDULED otherwise."""
     if subject.mth_schedule is None and subject.tfs_schedule is None:
         return SubjectState.EMPTY
     return SubjectState.SCHEDULED
@@ -75,23 +68,17 @@ def _make_section_key(dept: str, section: str) -> str:
 
 
 def _tokenize_merged_with(raw: str) -> List[str]:
-    """
-    Split a messy merged_with string into individual reference tokens.
-    Handles comma/semicolon/slash separators and space-separated dept+section pairs.
-    """
     parts: List[str] = []
     for segment in re.split(r'[,;/]', raw):
         segment = segment.strip()
         if not segment:
             continue
-        # findall extracts dept+section combos (e.g. "CS 1B"), pure alpha, or pure digits
         sub_tokens = re.findall(
             r'[A-Za-z]+\s*\d+[A-Za-z]*|[A-Za-z]+|[0-9]+', segment
         )
         i = 0
         while i < len(sub_tokens):
             tok = sub_tokens[i]
-            # Join bare dept token with following alnum section token: "IT" + "2B" -> "IT 2B"
             if (i + 1 < len(sub_tokens)
                     and re.match(r'^[A-Za-z]+$', tok)
                     and re.match(r'^\d+[A-Za-z]*$', sub_tokens[i + 1])):
@@ -104,10 +91,6 @@ def _tokenize_merged_with(raw: str) -> List[str]:
 
 
 def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
-    """
-    Group subjects that reference each other via the merged_with column.
-    Uses Union-Find to cluster related subjects into MergeGroup objects.
-    """
     n = len(subjects)
     if n == 0:
         return []
@@ -187,109 +170,198 @@ def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
     return merge_groups
 
 
-def run_preflight(subjects: List[Subject]) -> PipelineState:
+def _parse_entity_schedule(
+    subject: Subject,
+) -> Tuple[List[TimeBlock], Set[str], Optional[str]]:
     """
-    Tag all subjects, detect merge groups, assign to pipeline buckets.
-    Verifies census invariant before returning.
+    Parse a subject's primary schedule slot into (blocks, room_keys, day_pattern).
+    MTh slot is preferred when both are present.
+    Returns empty collections for EMPTY subjects.
+    """
+    slot_schedule: Optional[str] = None
+    slot_room: Optional[str] = None
+    day_pattern: Optional[str] = None
 
-    Merge detection runs in two passes:
-      1. merged_with column (explicit human annotation)
-      2. Room-time evidence + confidence scoring (new, handles subjects
-         not captured by the merged_with column)
+    if subject.mth_schedule:
+        slot_schedule = subject.mth_schedule
+        slot_room = subject.mth_room
+        day_pattern = "MTh"
+    elif subject.tfs_schedule:
+        slot_schedule = subject.tfs_schedule
+        slot_room = subject.tfs_room
+        day_pattern = "TFS"
+
+    if not slot_schedule:
+        return [], set(), None
+
+    try:
+        dp = DayPattern.MTH if day_pattern == "MTh" else DayPattern.TFS
+        parsed = ParsedSchedule.parse(slot_schedule.strip(), dp)
+        blocks = parsed.blocks
+    except Exception:
+        blocks = []
+
+    room_keys: Set[str] = set()
+    if slot_room:
+        room_keys = expand_room_string(slot_room)
+
+    return blocks, room_keys, day_pattern
+
+
+def _build_entity(
+    entity_id: str,
+    members: List[Subject],
+    is_merge_group: bool,
+    manual_review_reason: Optional[str] = None,
+) -> SchedulingEntity:
+    rep = members[0]
+    blocks, room_keys, day_pattern = _parse_entity_schedule(rep)
+
+    total_units = sum(m.units or 0 for m in members)
+    if is_merge_group and len(members) > 1:
+        total_units = total_units / len(members)
+
+    total_lab_hrs = max((m.lab_hrs or 0) for m in members)
+    total_lec_hrs = max((m.lec_hrs or 0) for m in members)
+    requires_lab_room = any((m.lab_hrs or 0) > 0 for m in members)
+
+    state = classify_subject_state(rep)
+    is_saturday = is_saturday_schedule(rep.tfs_schedule)
+    has_dual = len(room_keys) > 1
+
+    entity = SchedulingEntity(
+        entity_id=entity_id,
+        members=members,
+        is_merge_group=is_merge_group,
+        total_units=total_units,
+        total_lab_hrs=total_lab_hrs,
+        total_lec_hrs=total_lec_hrs,
+        requires_lab_room=requires_lab_room,
+        department_id=rep.department_id,
+        state=state,
+        current_schedule_blocks=blocks,
+        current_room_keys=room_keys,
+        current_day_pattern=day_pattern,
+        has_dual_room=has_dual,
+        manual_review_reason=manual_review_reason,
+    )
+
+    if is_saturday and entity.manual_review_reason is None:
+        entity.manual_review_reason = "saturday_explicit"
+
+    return entity
+
+
+def _build_entities(
+    subjects: List[Subject],
+    all_merge_groups: List[MergeGroup],
+    subject_by_id: Dict[int, Subject],
+    likely_merge_ids: Set[int],
+    partial_data_ids: Set[int],
+) -> List[SchedulingEntity]:
+    entities: List[SchedulingEntity] = []
+    handled_ids: Set[int] = set()
+
+    for mg in all_merge_groups:
+        members: List[Subject] = []
+        for m_dict in mg.members:
+            sid = m_dict['subject_id']
+            s = subject_by_id.get(sid)
+            if s is None:
+                try:
+                    s = Subject(**m_dict)
+                except Exception:
+                    continue
+            s.requires_lab_room = (s.lab_hrs or 0) > 0
+            members.append(s)
+            handled_ids.add(sid)
+
+        if not members:
+            continue
+
+        entity = _build_entity(
+            entity_id=f"MG_{mg.group_id}",
+            members=members,
+            is_merge_group=True,
+        )
+        entities.append(entity)
+
+    for s in subjects:
+        if s.subject_id in handled_ids:
+            continue
+        handled_ids.add(s.subject_id)
+        s.requires_lab_room = (s.lab_hrs or 0) > 0
+
+        reason: Optional[str] = None
+        if s.subject_id in likely_merge_ids:
+            reason = "likely_merge"
+        elif s.subject_id in partial_data_ids:
+            reason = "partial_data"
+
+        entity = _build_entity(
+            entity_id=f"E{s.subject_id}",
+            members=[s],
+            is_merge_group=False,
+            manual_review_reason=reason,
+        )
+        entities.append(entity)
+
+    return entities
+
+
+def run_preflight(
+    subjects: List[Subject],
+    rooms: List[Room],
+) -> Tuple[RoomTypeRegistry, List[SchedulingEntity]]:
     """
+    Steps 0+1: data cleaning, room type registry, merge detection,
+    and SchedulingEntity construction.
+
+    Returns (RoomTypeRegistry, List[SchedulingEntity]).
+    All subjects appear in exactly one entity (census invariant).
+    """
+    registry = RoomTypeRegistry(rooms)
+
     if not subjects:
-        return PipelineState(original_input_ids=[])
+        return registry, []
 
     for s in subjects:
         s.subject_type = classify_subject_type(s)
         s.subject_state = classify_subject_state(s)
+        s.requires_lab_room = (s.lab_hrs or 0) > 0
 
-    # Pass 1: merged_with-based detection (existing logic)
+    subject_by_id: Dict[int, Subject] = {s.subject_id: s for s in subjects}
+
+    # Pass 1: merged_with column
     merge_groups = detect_merge_groups(subjects)
     merged_ids: Set[int] = {
         m['subject_id'] for mg in merge_groups for m in mg.members
     }
 
-    # Pass 2: room-time evidence detection on subjects not already grouped
+    # Pass 2: room-time evidence
     room_result = detect_room_based_merges(subjects, exclude_ids=merged_ids)
 
-    new_confirmed_ids: Set[int] = {
-        m['subject_id']
-        for mg in room_result.confirmed_merges
-        for m in mg.members
+    all_merge_groups = merge_groups + room_result.confirmed_merges
+    likely_merge_ids: Set[int] = {
+        m['subject_id'] for mg in room_result.likely_merges for m in mg.members
     }
-    new_likely_ids: Set[int] = {
-        m['subject_id']
-        for mg in room_result.likely_merges
-        for m in mg.members
-    }
-    new_partial_ids: Set[int] = {s.subject_id for s in room_result.partial_data}
+    partial_data_ids: Set[int] = {s.subject_id for s in room_result.partial_data}
 
-    # All subjects handled by either detector are skipped in the main routing loop
-    skip_ids = merged_ids | new_confirmed_ids | new_likely_ids | new_partial_ids
-
-    subject_by_id: Dict[int, Subject] = {s.subject_id: s for s in subjects}
-
-    resolved: List[Subject] = []
-    manual_review: List[Subject] = []
-    pending: List[Subject] = []
-    saturday_pile: List[Subject] = []
-
-    for s in subjects:
-        if s.subject_id in skip_ids:
-            continue
-        if is_saturday_schedule(s.tfs_schedule):
-            saturday_pile.append(s)
-        else:
-            pending.append(s)
-
-    final_merged_groups: List[MergeGroup] = []
-
-    # Route pass-1 merge groups
-    for mg in merge_groups:
-        if mg.all_scheduled():
-            for m in mg.members:
-                s = subject_by_id.get(m['subject_id'])
-                if s:
-                    s.tag = SubjectTag.ORIGINAL
-            final_merged_groups.append(mg)
-        else:
-            for m in mg.members:
-                s = subject_by_id.get(m['subject_id'])
-                if s:
-                    pending.append(s)
-
-    # Route pass-2 confirmed merges -> merged_groups
-    for mg in room_result.confirmed_merges:
-        for m in mg.members:
-            s = subject_by_id.get(m['subject_id'])
-            if s:
-                s.tag = SubjectTag.ORIGINAL
-        final_merged_groups.append(mg)
-
-    # Route pass-2 likely merges -> manual_review
-    for mg in room_result.likely_merges:
-        for m in mg.members:
-            s = subject_by_id.get(m['subject_id'])
-            if s:
-                s.tag = SubjectTag.MANUAL_REVIEW
-                manual_review.append(s)
-
-    # Route pass-2 partial_data -> manual_review
-    for s in room_result.partial_data:
-        s.tag = SubjectTag.MANUAL_REVIEW
-        manual_review.append(s)
-
-    state = PipelineState(
-        locked=[],
-        merged_groups=final_merged_groups,
-        resolved=resolved,
-        pending=pending,
-        unresolvable=[],
-        manual_review=manual_review,
-        saturday_pile=saturday_pile,
-        original_input_ids=[s.subject_id for s in subjects],
+    entities = _build_entities(
+        subjects=subjects,
+        all_merge_groups=all_merge_groups,
+        subject_by_id=subject_by_id,
+        likely_merge_ids=likely_merge_ids,
+        partial_data_ids=partial_data_ids,
     )
 
-    assert_invariant(subjects, state, "preflight")
-    return state
+    # Census check
+    actual_ids = [sid for e in entities for sid in e.subject_ids]
+    expected_count = len(subjects)
+    if len(actual_ids) != expected_count:
+        raise ValueError(
+            f"Preflight census error: expected {expected_count} subjects, "
+            f"got {len(actual_ids)} in entities"
+        )
+
+    return registry, entities

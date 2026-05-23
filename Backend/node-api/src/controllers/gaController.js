@@ -3108,33 +3108,21 @@ export async function postRunAutomaticScheduler(req, res) {
       );
     }
 
-    const allOutputSubjects = [
-      ...(rawResult.locked || []),
-      ...(rawResult.resolved || []),
-      ...(rawResult.unresolvable || []),
-      ...(rawResult.manual_review || []),
-    ];
-    const allAssignments = allOutputSubjects.map((s) => subjectToOutputRow(s, roomLookup));
+    const allAssignments = (rawResult.rows || []).map((s) => subjectToOutputRow(s, roomLookup));
 
-    const allUnresolved = [
-      ...(rawResult.unresolvable || []).map((s) => ({
+    const allUnresolved = (rawResult.rows || [])
+      .filter((s) => s.tag === 'Manual Review' || s.tag === 'Unresolvable')
+      .map((s) => ({
         ...s,
-        reason: 'Could not be scheduled after all GA iterations — manual assignment required.',
-        reason_type: 'unresolvable_conflict',
-      })),
-      ...(rawResult.manual_review || []).map((s) => ({
-        ...s,
-        reason: 'Requires manual review — general subject without schedule.',
-        reason_type: 'manual_review',
-      })),
-    ];
+        reason: s.manual_review_reason || 'Manual assignment required.',
+        reason_type: s.tag === 'Manual Review' ? 'manual_review' : 'unresolvable_conflict',
+      }));
 
     console.log(
       `[run][automatic] total=${allAssignments.length}, ` +
-      `locked=${(rawResult.locked || []).length}, ` +
-      `resolved=${(rawResult.resolved || []).length}, ` +
-      `unresolvable=${(rawResult.unresolvable || []).length}, ` +
-      `manual_review=${(rawResult.manual_review || []).length}, ` +
+      `pools=${rawResult.diagnostics?.pools_created ?? 0}, ` +
+      `conflicts=${rawResult.diagnostics?.conflicts_detected ?? 0}, ` +
+      `manual_review=${rawResult.diagnostics?.manual_review_count ?? 0}, ` +
       `dry_run=${dryRun}`
     );
 

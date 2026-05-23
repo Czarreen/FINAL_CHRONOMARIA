@@ -79,6 +79,7 @@ class Subject(BaseModel):
     subject_type: Optional[SubjectType] = None
     subject_state: Optional[SubjectState] = None
     tag: Optional[SubjectTag] = None
+    requires_lab_room: Optional[bool] = None
 
     @field_validator('code', 'mth_schedule', 'mth_room', 'tfs_schedule', 'tfs_room',
                      'merged_with', mode='before')

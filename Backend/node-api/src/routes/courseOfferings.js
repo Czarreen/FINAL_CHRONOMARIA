@@ -423,15 +423,23 @@ function isValidRoomName(token) {
   return true;
 }
 
+// Strip trailing parenthetical annotations from a room token before lookup.
+// e.g. "D101 (Lec)" → "D101", "E-103 (Lab) (2)" → "E-103"
+// Stripping is only for matching; the stored value is always the resolved numeric ID.
+function stripRoomAnnotations(token) {
+  return token.replace(/(\s*\([^)]*\))+\s*$/, '').trim();
+}
+
 // Extract individual room name tokens from a raw cell value.
 // Splits on / and , — so "A101/A102" → ["A101", "A102"]
-// Filters out tokens that do not look like real room identifiers.
+// Trailing parenthetical annotations (e.g. "(Lec)", "(Lab)") are stripped before
+// validation and lookup so that "D101 (Lec)" matches the room "D101" in the DB.
 function extractRoomTokens(rawValue) {
   const normalized = normalizeCell(rawValue);
   if (!normalized) return [];
   return normalized
     .split(/\s*[,/]\s*/)
-    .map((t) => t.trim())
+    .map((t) => stripRoomAnnotations(t.trim()))
     .filter((t) => t.length > 0 && isValidRoomName(t));
 }
 
