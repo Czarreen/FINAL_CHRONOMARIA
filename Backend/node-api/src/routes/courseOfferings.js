@@ -5,7 +5,7 @@ import { recordAuditLog } from '../lib/auditLogger.js';
 const router = Router();
 const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
-const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG|GPIC|GSTS|GMATH|GETHICS|GART|GCWORLD|GSELF|GFIL|GRIPH|AOC|ENVISCI|PEECO)/i;
+const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|NSTP 2|ADV\s*ORAL(\s*COM)?|FOR\s*LANG|GPIC|GSTS|GMATH|GETHICS|GART|GCWORLD|GSELF|GFIL|GRIPH|AOC|ENVISCI|PEECO)/i;
 // Check descriptive_title first, then fall back to course_no
 function deriveTag(courseNo, descriptiveTitle) {
   const title = String(descriptiveTitle || '').trim();
