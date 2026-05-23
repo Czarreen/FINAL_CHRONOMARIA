@@ -22,6 +22,7 @@ hard conflicts. Two cascade strategies:
 Never targets Saturday slots. 5-second per-entity wall-clock cap.
 """
 
+import re
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -29,7 +30,7 @@ from sched.conflict.intervals import SCHED_START_MIN, overlaps
 from sched.conflict.detector import check_conflict
 from sched.models.room import RoomType
 from sched.models.schedule import Day, DayPattern, ParsedSchedule, TimeBlock
-from sched.pool.department_rooms import preferred_buildings, extract_building
+from sched.pool.department_rooms import preferred_buildings
 from sched.pool.pool import Pool, SchedulingEntity
 from sched.pool.room_types import RoomTypeRegistry
 
@@ -39,6 +40,12 @@ SCHED_END_MIGRATION = 20 * 60   # 8:00 PM (no Saturday, so earlier cutoff than S
 
 _MTH_DAYS = {Day.MON, Day.THU}
 _TFS_DAYS = {Day.TUE, Day.FRI}
+
+_PATHFIT_RE = re.compile(r'path\s*fit', re.IGNORECASE)
+
+
+def _is_pathfit_entity(entity: SchedulingEntity) -> bool:
+    return any(_PATHFIT_RE.search(m.course_no or '') for m in entity.members)
 
 
 def _candidate_starts(duration: int) -> List[int]:
@@ -62,7 +69,23 @@ def _schedule_str(start: int, duration: int) -> str:
     return f"{s_h}:{s_m:02d}-{e_h}:{e_m:02d}"
 
 
-def _entity_duration(entity: SchedulingEntity) -> int:
+def _effective_duration(entity: SchedulingEntity) -> int:
+    """Use actual block width → raw string parse → hours formula (last resort)."""
+    if entity.current_schedule_blocks:
+        b = entity.current_schedule_blocks[0]
+        return max(30, b.end_minutes - b.start_minutes)
+    for m in entity.members:
+        for sched in (m.mth_schedule, m.tfs_schedule):
+            if not sched:
+                continue
+            match = re.search(r'(\d{1,2}:\d{2})-(\d{1,2}:\d{2})', sched)
+            if match:
+                def _to_min(ts: str) -> int:
+                    h, mn = ts.split(':')
+                    return int(h) * 60 + int(mn)
+                dur = _to_min(match.group(2)) - _to_min(match.group(1))
+                if dur > 0:
+                    return max(30, dur)
     return max(30, round((entity.total_lab_hrs + entity.total_lec_hrs) / 2.0 * 60))
 
 
@@ -94,7 +117,7 @@ def _apply_placement(
     entity.current_day_pattern = pattern
     entity.was_modified = True
     for member in entity.members:
-        sched_str = _schedule_str(blocks[0].start_minutes, _entity_duration(entity))
+        sched_str = _schedule_str(blocks[0].start_minutes, _effective_duration(entity))
         if pattern == "MTh":
             member.mth_schedule = sched_str
             member.mth_room = room_str
@@ -111,7 +134,7 @@ def _try_place_in_pool(
     deadline: float,
 ) -> bool:
     """Attempt to place entity in pool on pattern. Returns True if placed."""
-    duration = _entity_duration(entity)
+    duration = _effective_duration(entity)
     room_str = pool.pool_id.replace("_", "/") if pool.is_dual_room else pool.pool_id
 
     for start in _candidate_starts(duration):
@@ -173,6 +196,23 @@ def _filter_by_type(
     return pools
 
 
+def _filter_gym(
+    pools: List[Pool],
+    registry: RoomTypeRegistry,
+    is_pathfit: bool,
+) -> List[Pool]:
+    """Enforce the gym/Pathfit exclusivity rule: only Pathfit subjects use gym rooms."""
+    result = []
+    for pool in pools:
+        pool_is_gym = any(registry.is_gym(k) for k in pool.room_keys)
+        if pool_is_gym and not is_pathfit:
+            continue
+        if not pool_is_gym and is_pathfit:
+            continue
+        result.append(pool)
+    return result
+
+
 def _try_migrate_entity(
     entity: SchedulingEntity,
     all_pools: List[Pool],
@@ -183,6 +223,7 @@ def _try_migrate_entity(
     orig_pattern = entity.current_day_pattern or "MTh"
     opp_pattern = "TFS" if orig_pattern == "MTh" else "MTh"
     requires_lab = entity.requires_lab_room
+    is_pathfit = _is_pathfit_entity(entity)
 
     for pattern in [orig_pattern, opp_pattern]:
         groups = _stage_pools_for(entity, all_pools, source_pool, registry, pattern)
@@ -190,6 +231,7 @@ def _try_migrate_entity(
             if time.perf_counter() > deadline:
                 return False
             candidates = _filter_by_type(group, requires_lab, prefer_lecture=True)
+            candidates = _filter_gym(candidates, registry, is_pathfit)
             for pool in candidates:
                 if _try_place_in_pool(entity, pool, pattern, deadline):
                     return True

@@ -147,6 +147,16 @@ def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
             if j is not None and j != i:
                 union(i, j)
 
+    # Pass 1b: union subjects sharing a merge_group_id forwarded from Node.js preflight
+    for i, s in enumerate(subjects):
+        if s.merge_group_id is None:
+            continue
+        for j, t in enumerate(subjects):
+            if i == j:
+                continue
+            if t.merge_group_id is not None and t.merge_group_id == s.merge_group_id:
+                union(i, j)
+
     groups: Dict[int, List[int]] = {}
     for i in range(n):
         root = find(i)
@@ -156,7 +166,11 @@ def detect_merge_groups(subjects: List[Subject]) -> List[MergeGroup]:
 
     merge_groups: List[MergeGroup] = []
     for members_idx in groups.values():
-        if not any(subjects[i].merged_with for i in members_idx):
+        has_merge_signal = (
+            any(subjects[i].merged_with for i in members_idx)
+            or any(subjects[i].merge_group_id is not None for i in members_idx)
+        )
+        if not has_merge_signal:
             continue
         if len(members_idx) < 2:
             continue
@@ -214,7 +228,7 @@ def _build_entity(
     is_merge_group: bool,
     manual_review_reason: Optional[str] = None,
 ) -> SchedulingEntity:
-    rep = members[0]
+    rep = next((m for m in members if m.mth_schedule or m.tfs_schedule), members[0])
     blocks, room_keys, day_pattern = _parse_entity_schedule(rep)
 
     total_units = sum(m.units or 0 for m in members)

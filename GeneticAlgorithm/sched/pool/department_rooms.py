@@ -4,36 +4,30 @@ Department-to-building room affinity table.
 Used during migration cascade and empty placement to prefer rooms
 in the subject's home building before falling back to cross-building search.
 
-Building extraction: leading alphabetic characters of a room key.
+Building extraction: leading alphabetic characters of a room name.
   "E101"  -> "E"
   "AP201" -> "AP"
   "RS102" -> "RS"
   "JVD"   -> "JVD"
+
+Keys are the numeric department_id values from the DB departments table.
 """
 
 import re
 from typing import Dict, List
 
-# Maps department_id (string as stored in DB) to preferred building prefixes.
+# Maps department_id (numeric string from DB) to preferred building prefixes.
 # Primary building is index 0; subsequent entries are ordered fallbacks.
-# Update this table to match actual department_id values from the DB.
 _AFFINITY: Dict[str, List[str]] = {
-    # Information Technology
-    "IT":   ["AP"],
-    # Computer Science
-    "CS":   ["AP"],
-    # Library Information Science
-    "LIS":  ["AP"],
-    # Electrical Engineering
-    "EE":   ["E", "S"],
-    # Electronics and Communications Engineering
-    "ECE":  ["E", "S"],
-    # Computer Engineering
-    "CpE":  ["E", "S"],
-    # Civil Engineering
-    "CE":   ["RS", "S"],
-    # Architecture
-    "AR":   ["D"],
+    "1":  ["D"],        # Architecture
+    "2":  ["RS", "S"],  # Civil Engineering
+    "3":  ["E", "S"],   # Computer Engineering
+    "4":  ["E", "S"],   # Electrical Engineering
+    "5":  ["E", "S"],   # Electronics Engineering
+    "6":  ["AP"],       # Information Technology
+    "7":  ["AP"],       # Library Information Science
+    "11": ["AP"],       # Computer Science
+    # Departments 8 (Mathematics) and 10 (ECE) are intentionally excluded.
 }
 
 

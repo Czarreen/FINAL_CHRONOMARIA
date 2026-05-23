@@ -9,7 +9,7 @@ later handling (Steps 5 and manual review).
 from typing import Dict, FrozenSet, List, Set, Tuple
 
 from sched.models.room import RoomType
-from sched.pool.pool import Pool, SchedulingEntity, extract_building
+from sched.pool.pool import Pool, SchedulingEntity
 from sched.pool.room_types import RoomTypeRegistry
 
 
@@ -36,7 +36,7 @@ def ensure_all_room_pools(
         fk = frozenset({room_key})
         if fk in existing_keys:
             continue
-        building = extract_building(room_key)
+        building = registry.building_of(room_key)
         rt = registry.type_of(room_key)
         pools.append(Pool(
             pool_id=room_key,
@@ -106,7 +106,7 @@ def build_pools(
         if valid_keys not in pool_map:
             sorted_keys = sorted(valid_keys)
             pool_id = "_".join(sorted_keys)
-            building = extract_building(sorted_keys[0])
+            building = registry.building_of(sorted_keys[0])
             rt = _resolve_pool_room_type(valid_keys, registry)
             pool_map[valid_keys] = Pool(
                 pool_id=pool_id,

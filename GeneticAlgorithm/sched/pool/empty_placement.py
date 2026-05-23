@@ -8,18 +8,25 @@ Within each phase, entities are sorted by priority (units > lab_hrs > lec_hrs > 
 Each entity is placed against the current state of all pools (incremental).
 """
 
+import re
 import time
 from typing import List, Optional, Set, Tuple
 
 from sched.conflict.intervals import SCHED_START_MIN, overlaps
 from sched.models.room import RoomType
 from sched.models.schedule import Day, TimeBlock
-from sched.pool.department_rooms import preferred_buildings, extract_building
+from sched.pool.department_rooms import preferred_buildings
 from sched.pool.pool import Pool, SchedulingEntity
 from sched.pool.room_types import RoomTypeRegistry
 
 SLOT_STEP = 30
 SCHED_END_PLACEMENT = 20 * 60  # 8:00 PM
+
+_PATHFIT_RE = re.compile(r'path\s*fit', re.IGNORECASE)
+
+
+def _is_pathfit_entity(entity: SchedulingEntity) -> bool:
+    return any(_PATHFIT_RE.search(m.course_no or '') for m in entity.members)
 
 
 def _candidate_starts(duration: int) -> List[int]:
@@ -43,7 +50,23 @@ def _schedule_str(start: int, duration: int) -> str:
     return f"{s_h}:{s_m:02d}-{e_h}:{e_m:02d}"
 
 
-def _entity_duration(entity: SchedulingEntity) -> int:
+def _effective_duration(entity: SchedulingEntity) -> int:
+    """Use actual block width → raw string parse → hours formula (last resort)."""
+    if entity.current_schedule_blocks:
+        b = entity.current_schedule_blocks[0]
+        return max(30, b.end_minutes - b.start_minutes)
+    for m in entity.members:
+        for sched in (m.mth_schedule, m.tfs_schedule):
+            if not sched:
+                continue
+            match = re.search(r'(\d{1,2}:\d{2})-(\d{1,2}:\d{2})', sched)
+            if match:
+                def _to_min(ts: str) -> int:
+                    h, mn = ts.split(':')
+                    return int(h) * 60 + int(mn)
+                dur = _to_min(match.group(2)) - _to_min(match.group(1))
+                if dur > 0:
+                    return max(30, dur)
     return max(30, round((entity.total_lab_hrs + entity.total_lec_hrs) / 2.0 * 60))
 
 
@@ -69,16 +92,36 @@ def _priority_key_lec(entity: SchedulingEntity):
     return (-entity.total_units, -entity.total_lec_hrs, code)
 
 
+def _filter_gym(
+    pools: List[Pool],
+    registry: RoomTypeRegistry,
+    is_pathfit: bool,
+) -> List[Pool]:
+    """Enforce the gym/Pathfit exclusivity rule: only Pathfit subjects use gym rooms."""
+    result = []
+    for pool in pools:
+        pool_is_gym = any(registry.is_gym(k) for k in pool.room_keys)
+        if pool_is_gym and not is_pathfit:
+            continue
+        if not pool_is_gym and is_pathfit:
+            continue
+        result.append(pool)
+    return result
+
+
 def _ordered_pools_for(
     entity: SchedulingEntity,
     pools: List[Pool],
     requires_lab: bool,
+    registry: Optional[RoomTypeRegistry] = None,
 ) -> List[Pool]:
     """
     Returns candidate pools ordered by affinity (dept primary, dept fallback, rest).
     Lab entities: Lab-only pools. Lecture entities: Lecture first, then Lab.
+    Gym pools are reserved exclusively for Pathfit subjects.
     """
     dept_pref = preferred_buildings(entity.department_id)
+    is_pathfit = _is_pathfit_entity(entity)
 
     primary: List[Pool] = []
     fallback: List[Pool] = []
@@ -97,9 +140,14 @@ def _ordered_pools_for(
     if not requires_lab:
         lec = [p for p in primary + fallback + other if p.room_type != RoomType.LABORATORY]
         lab = [p for p in primary + fallback + other if p.room_type == RoomType.LABORATORY]
-        return lec + lab
+        ordered = lec + lab
+    else:
+        ordered = primary + fallback + other
 
-    return primary + fallback + other
+    if registry is not None:
+        ordered = _filter_gym(ordered, registry, is_pathfit)
+
+    return ordered
 
 
 def _try_place(
@@ -107,9 +155,10 @@ def _try_place(
     pools: List[Pool],
     pattern: str,
     deadline: float,
+    registry: Optional[RoomTypeRegistry] = None,
 ) -> bool:
-    duration = _entity_duration(entity)
-    ordered = _ordered_pools_for(entity, pools, entity.requires_lab_room)
+    duration = _effective_duration(entity)
+    ordered = _ordered_pools_for(entity, pools, entity.requires_lab_room, registry=registry)
 
     for pool in ordered:
         if time.perf_counter() > deadline:
@@ -141,6 +190,7 @@ def _place_entity(
     global_start: float,
     global_budget_s: float,
     per_entity_s: float = 5.0,
+    registry: Optional[RoomTypeRegistry] = None,
 ) -> bool:
     remaining = global_budget_s - (time.perf_counter() - global_start)
     if remaining < 1.0:
@@ -148,7 +198,7 @@ def _place_entity(
     deadline = time.perf_counter() + min(per_entity_s, remaining - 0.5)
 
     for pattern in ["MTh", "TFS"]:
-        if _try_place(entity, pools, pattern, deadline):
+        if _try_place(entity, pools, pattern, deadline, registry=registry):
             return True
     return False
 
@@ -182,7 +232,7 @@ def place_empty_entities(
         key=_priority_key_lab,
     )
     for entity in lab_entities:
-        if _place_entity(entity, pools, global_start, global_budget_s):
+        if _place_entity(entity, pools, global_start, global_budget_s, registry=registry):
             placed.append(entity)
         else:
             entity.manual_review_reason = "lab_subject_placement_exhausted"
@@ -194,7 +244,7 @@ def place_empty_entities(
         key=_priority_key_lec,
     )
     for entity in lec_entities:
-        if _place_entity(entity, pools, global_start, global_budget_s):
+        if _place_entity(entity, pools, global_start, global_budget_s, registry=registry):
             placed.append(entity)
         else:
             entity.manual_review_reason = "lecture_subject_placement_exhausted"

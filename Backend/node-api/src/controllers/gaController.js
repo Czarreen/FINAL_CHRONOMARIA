@@ -1923,7 +1923,6 @@ function buildAutomaticSchedulerPreflight(snapshot) {
   // Step 1 — build identity groups
   const mergeIdentityGroups = new Map();
   for (const candidate of candidates) {
-    if (candidate.is_general) continue;
     const courseNorm = normalizeUpper(candidate.course_no || '').replace(/\s+/g, '');
     const titleNorm  = normalizeUpper(candidate.descriptive_title || '').replace(/\s+/g, ' ').trim();
     if (!courseNorm || !titleNorm) continue;
@@ -1992,7 +1991,6 @@ function buildAutomaticSchedulerPreflight(snapshot) {
   // and should be treated as merged regardless of course number or title.
   const schedRoomAllGroups = new Map();
   for (const candidate of candidates) {
-    if (candidate.is_general) continue;
     const mthS = normalizeUpper(candidate.existing_mth_schedule || '');
     const tfsS = normalizeUpper(candidate.existing_tfs_schedule || '');
     const mthR = candidate.existing_mth_room_id
@@ -2087,7 +2085,6 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     // Mark non-merged candidates with a conflict-free schedule+room as unique-clean.
     for (const c of candidates) {
       if (c.merged) continue;
-      if (c.is_general) continue; // general schedules are absolute — never validate or reclassify them
       const hasRoom = c.existing_mth_room_ids || c.existing_mth_room_id || c.existing_tfs_room_ids || c.existing_tfs_room_id;
       const hasSched = c.existing_mth_schedule || c.existing_tfs_schedule;
       if (!hasRoom || !hasSched) continue;
@@ -2125,32 +2122,11 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     console.log(`[preflight][scenario1] unique_clean=${uniqueCleanCount}`);
   }
 
-  const generalSubjects       = candidates.filter((row) => row.is_general);
   const mergedSubjects        = candidates.filter((row) => row.merged);
   const mergeConflictSubjects = []; // Pass B removed — singletons with different schedule are not auto-conflicts
   const uniqueCleanSubjects   = candidates.filter((row) => row.unique_clean);
 
-  // GENERAL + EMPTY edge case: flag for human review (spec: external faculty controls these)
-  for (const c of generalSubjects) {
-    const hasSchedule = Boolean(c.existing_mth_schedule || c.existing_tfs_schedule);
-    const hasRoom = Boolean(
-      c.existing_mth_room_ids || c.existing_mth_room_id ||
-      c.existing_tfs_room_ids || c.existing_tfs_room_id
-    );
-    if (!hasSchedule || !hasRoom) {
-      issues.push({
-        type: 'subject',
-        severity: 'medium',
-        id: c.subject_id,
-        problem: 'General subject has no schedule or room assignment. External faculty controls this — manual assignment required.',
-        entity_label: `${c.code || '-'} ${c.course_no || '-'} ${c.section || '-'}`.trim(),
-        department_name: describeDepartment(c.department_id, departmentLookup),
-      });
-    }
-  }
-
   const excluded = new Set([
-    ...generalSubjects.map((row) => row.subject_id),
     ...mergedSubjects.map((row) => row.subject_id),
     ...uniqueCleanSubjects.map((row) => row.subject_id),
   ]);
@@ -2197,7 +2173,6 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     active_room_count: activeRooms.length,
     subject_count: snapshot.subjects.length,
     assignable_count: assignable.length,
-    excluded_general_count: generalSubjects.length,
     excluded_merged_count: mergedSubjects.length,
     excluded_conflict_count: mergeConflictSubjects.length,
     preserved_merged_count: mergedSubjects.length,
@@ -2207,10 +2182,10 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     assignable_subjects: assignable,
     needs_scheduling_subjects: assignable,
     preserved_subjects: preservedSubjects,
-    excluded_general_subjects: generalSubjects,
     excluded_merged_subjects: mergedSubjects,
     excluded_unique_subjects: uniqueCleanSubjects,
     excluded_conflict_subjects: mergeConflictSubjects,
+    candidates,
     suggested_next_step:
       status === 'blocked'
         ? 'Resolve high-severity data issues before running automatic scheduler.'
@@ -2992,7 +2967,7 @@ function toOptimizerSubject(subject, roomLookup) {
   const tfsRoom = resolveAllRoomIds(subject.tfs_room, roomLookup).join('/') || null;
   return {
     subject_id: toNumber(subject.subject_id),
-    curr_id: toNumber(subject.curr_id) ?? toNumber(subject.subject_id),
+    curr_id: toNumber(subject.curr_id),
     code: normalizeText(subject.subject_code) || null,
     course_no: normalizeText(subject.subject_course_no) || null,
     department_id: normalizeText(subject.department_id) || '0',
@@ -3082,7 +3057,15 @@ export async function postRunAutomaticScheduler(req, res) {
     // ── OPTIMIZER_SCHED.PY PIPELINE ───────────────────────────────────────────
     const timeoutMs = Math.max(env.gaRequestTimeoutMs || 180000, 120000);
 
-    const optimizerSubjects = (snapshot.subjects || []).map((s) => toOptimizerSubject(s, roomLookup));
+    const mergeGroupMap = new Map(
+      (preflight.candidates || [])
+        .filter((c) => c.merge_representative_id != null)
+        .map((c) => [c.subject_id, c.merge_representative_id])
+    );
+    const optimizerSubjects = (snapshot.subjects || []).map((s) => ({
+      ...toOptimizerSubject(s, roomLookup),
+      merge_group_id: mergeGroupMap.get(Number(s.subject_id)) ?? null,
+    }));
     const optimizerRooms = activeRooms.map((r) => ({
       room_id: String(r.room_id),
       room_name: r.room_name || '',

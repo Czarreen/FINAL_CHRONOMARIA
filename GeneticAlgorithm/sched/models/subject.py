@@ -52,8 +52,8 @@ class Subject(BaseModel):
     Units, Lec(hrs), Lab(hrs), MTh SCHEDULE, MTh Room,
     TFS SCHEDULE, TFS Room, MERGED
     """
-    subject_id: int      # DB primary key — pipeline unique identifier
-    curr_id: int         # curriculum_id display column — NOT unique, NOT used as PK
+    subject_id: int           # DB primary key — pipeline unique identifier
+    curr_id: Optional[int] = None  # curriculum_id display column — NOT unique, NOT used as PK
     code: Optional[str] = None
     course_no: str
     department_id: str
@@ -71,6 +71,7 @@ class Subject(BaseModel):
     tfs_room: Optional[str] = None
 
     merged_with: Optional[str] = None
+    merge_group_id: Optional[int] = None
 
     # Flag passed from DB/Node side; takes priority over course_no pattern matching
     is_general: Optional[bool] = None
