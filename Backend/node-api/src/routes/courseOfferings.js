@@ -7,9 +7,13 @@ const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
 const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG)/i;
 
-function deriveTag(courseNo) {
+// Check descriptive_title first, then fall back to course_no
+function deriveTag(courseNo, descriptiveTitle) {
+  const title = String(descriptiveTitle || '').trim();
+  if (title && GENERAL_RE.test(title)) return 'General';
   const cn = String(courseNo || '').trim();
-  return cn && GENERAL_RE.test(cn) ? 'general' : null;
+  if (cn && GENERAL_RE.test(cn)) return 'General';
+  return null;
 }
 
 const HEADER_TO_FIELD = {
@@ -566,13 +570,17 @@ function buildCourseOfferingPayload(input = {}, existing = null) {
     tfs_schedule: normalizeCell(input.tfs_schedule ?? existing?.tfs_schedule),
     tfs_room_id: normalizeRoomFieldValue(input.tfs_room_id ?? existing?.tfs_room_id),
     merged: mergedFlag,
-    tag: deriveTag(normalizeCell(input.course_no ?? existing?.course_no)),
+    tag: deriveTag(
+      normalizeCell(input.course_no ?? existing?.course_no),
+      normalizeCell(input.descriptive_title ?? existing?.descriptive_title)
+    ),
   };
 }
 
 function buildSubjectPayloadFromCourseOffering(courseOffering) {
   const courseNo = normalizeCell(courseOffering?.course_no);
-  const tag = courseOffering?.tag ?? deriveTag(courseNo);
+  const title = normalizeCell(courseOffering?.descriptive_title);
+  const tag = courseOffering?.tag ?? deriveTag(courseNo, title);
   const payload = {
     subject_code: normalizeCell(courseOffering?.code),
     subject_course_no: courseNo,
@@ -589,7 +597,7 @@ function buildSubjectPayloadFromCourseOffering(courseOffering) {
     tfs_room: normalizeCell(courseOffering?.tfs_room_id),
   };
   // Only set is_general to true — never force it to false (preserves manual overrides)
-  if (tag === 'general') payload.is_general = true;
+  if (tag === 'General') payload.is_general = true;
   return payload;
 }
 
@@ -909,7 +917,7 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
     lab_hrs: labHrs.value,
     mth_schedule: normalizeCell(row.mth_schedule),
     tfs_schedule: normalizeCell(row.tfs_schedule),
-    tag: deriveTag(normalizeCell(row.course_no)),
+    tag: deriveTag(normalizeCell(row.course_no), normalizeCell(row.descriptive_title)),
   };
 
   const mthRoom = resolveRoomIds(row.mth_room_id, roomLookup);
@@ -1701,14 +1709,14 @@ router.post('/sync-subjects', async (req, res) => {
   }
 });
 
-// POST - Bulk-apply is_general=true to subjects whose linked course offering has tag='general'
+// POST - Bulk-apply is_general=true to subjects whose linked course offering has tag='General'
 // Subjects with is_general already true are untouched; only false/null ones are upgraded.
 router.post('/apply-general-tags', async (req, res) => {
   try {
     const { data: generalOfferings, error: coError } = await supabaseAdmin
       .from('course_offerings')
       .select('code, course_no, section, department_id')
-      .eq('tag', 'general');
+      .eq('tag', 'General');
 
     if (coError) throw new Error(`Failed to fetch general offerings: ${coError.message}`);
 
