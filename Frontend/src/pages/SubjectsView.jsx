@@ -817,18 +817,27 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = total === 0 ? 0 : (safePage - 1) * limit + 1;
+  const pageEnd = Math.min(safePage * limit, total);
 
   useEffect(() => {
     setPageInput(page);
   }, [page]);
+
+  useEffect(() => {
+    if (total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, total, totalPages]);
 
   const applyPageInput = () => {
     const nextPage = Number(pageInput);
     if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
       setPage(nextPage);
     } else {
-      setPageInput(page);
+      setPageInput(safePage);
     }
   };
 
@@ -1131,7 +1140,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           <div className="flex gap-2 flex-1 md:max-w-xl">
             <select
               value={searchField}
-              onChange={(e) => setSearchField(e.target.value)}
+              onChange={(e) => {
+                setSearchField(e.target.value);
+                setPage(1);
+              }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-on-surface outline-none transition-all hover:border-primary focus:border-primary"
             >
               <option value="all">All Fields</option>
@@ -1444,23 +1456,47 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           {!compareIds && totalPages > 1 && (
             <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-600">
-                Showing {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
+                Showing {pageStart}-{pageEnd} of {total}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                  disabled={safePage === 1}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Previous subjects page"
                 >
                   <ChevronLeft size={16} />
+                  <span>Prev</span>
                 </button>
+                <div className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <label htmlFor="subjects-page-input" className="text-xs font-semibold text-slate-500">
+                    Page
+                  </label>
+                  <input
+                    id="subjects-page-input"
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyPageInput();
+                    }}
+                    className="h-7 w-14 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm font-semibold text-slate-800 outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+                    aria-label="Subjects page number"
+                  />
+                  <span className="text-xs font-semibold text-slate-500">of {totalPages}</span>
+                </div>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+                  disabled={safePage === totalPages}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Next subjects page"
                 >
+                  <span>Next</span>
                   <ChevronRight size={16} />
                 </button>
               </div>
