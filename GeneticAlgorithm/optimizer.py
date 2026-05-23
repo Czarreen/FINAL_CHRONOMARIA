@@ -66,11 +66,31 @@ def split_tokens(value: Any) -> List[str]:
 
 
 def extract_keywords(value: Any) -> Set[str]:
+    # Filter out common stopwords (these should not count as keyword matches)
+    STOP_WORDS = {
+        "AND",
+        "THE",
+        "OF",
+        "IN",
+        "ON",
+        "FOR",
+        "TO",
+        "A",
+        "AN",
+        "BY",
+        "WITH",
+        "IS",
+        "ARE",
+        "FROM",
+        "AT",
+        "AS",
+        "OR",
+    }
     out: Set[str] = set()
     for token in split_tokens(value):
         for part in re.split(r"\s+", token):
             clean = re.sub(r"[^A-Za-z0-9]", "", part).upper()
-            if len(clean) >= 2:
+            if len(clean) >= 2 and clean not in STOP_WORDS:
                 out.add(clean)
     return out
 
@@ -179,8 +199,30 @@ def is_sat_only_offering(offering: Dict[str, Any]) -> bool:
         all_days.update(parse_days_from_text(text, group.upper()))
     if not has_schedule:
         return False
-    # SAT-only when days are present but none of them are automated weekday slots
-    return bool(all_days) and not (all_days & _AUTOMATED_DAYS)
+    # SAT-only when the parsed day tokens are present and consist only of
+    # explicit Saturday entries.
+    return bool(all_days) and all(d == "SAT" for d in all_days)
+
+
+def is_wed_only_offering(offering: Dict[str, Any]) -> bool:
+    """Return True when an offering's schedule tokens are explicitly WED only.
+
+    We treat Wednesday-only subjects as excluded from automatic faculty-loading
+    per the requested policy; this mirrors the Saturday-only handling but is
+    explicitly bounded to WED tokens so other non-automated days are not
+    inadvertently captured.
+    """
+    all_days: Set[str] = set()
+    has_schedule = False
+    for group in ("mth", "tfs"):
+        text = normalize_text(offering.get(f"{group}_schedule"))
+        if not text:
+            continue
+        has_schedule = True
+        all_days.update(parse_days_from_text(text, group.upper()))
+    if not has_schedule:
+        return False
+    return bool(all_days) and all(d == "WED" for d in all_days)
 
 
 def build_schedule_blocks(offering: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -217,6 +259,26 @@ def normalize_role(role: Any) -> str:
     if txt.startswith("PT"):
         return "PT"
     return txt or "UNKNOWN"
+
+
+def prep_limit_for_faculty(faculty: Dict[str, Any]) -> int:
+    """Dynamic F-H8 cap based on faculty_max_units, bounded by the policy max of 4.
+
+    Rule: cap = min(4, floor(max_units / 3)), with a minimum of 1 for active faculty.
+    Examples: 21u -> 4, 15u -> 4, 12u -> 4, 9u -> 3, 6u -> 2.
+    """
+    max_units = max(0.0, to_number(faculty.get("faculty_max_units")) or 0.0)
+    if max_units <= 0:
+        return 4
+    return max(1, min(4, int(math.floor(max_units / 3.0))))
+
+
+def faculty_usage_ratio(faculty: Dict[str, Any], current_load: float) -> float:
+    """Return current load as a fraction of faculty_max_units for tie-breaking."""
+    max_units = max(0.0, to_number(faculty.get("faculty_max_units")) or 0.0)
+    if max_units <= 0:
+        return float(current_load or 0.0)
+    return float(current_load or 0.0) / max_units
 
 
 @functools.lru_cache(maxsize=2048)
@@ -418,7 +480,7 @@ def is_cross_department_no_spec_allowed(
     return off_dept == cs_dept and fac_dept == it_dept and cs_faculty_count == 0
 
 
-def _rejection_reason(fi_: int, faculties, loads, blocks, preps, units, off_blocks, prep_key_cand):
+def _rejection_reason(fi_: int, faculties, loads, blocks, preps_keys, preps_units, units, off_blocks, prep_key_cand):
     """Return a short string explaining why a faculty index is ineligible for an offering."""
     fac_ = faculties[fi_]
     max_u = max(0.0, to_number(fac_.get("faculty_max_units")) or 0.0)
@@ -429,15 +491,23 @@ def _rejection_reason(fi_: int, faculties, loads, blocks, preps, units, off_bloc
     for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT"):
         if consecutive_minutes_for_day(blocks[fi_] + off_blocks, d) > 240.0:
             return f"consecutive_hours_exceeded_on_{d}"
-    if len(set(preps[fi_]) | {prep_key_cand}) > 4:
-        return f"prep_limit_exceeded (has {len(preps[fi_])}: {sorted(preps[fi_])})"
+    # Enforce unit-based prep capacity relative to remaining units
+    prep_units_have = float(preps_units.get(fi_, 0.0))
+    remaining_capacity = max_u - loads[fi_]
+    if max_u > 0 and (prep_units_have + units) > remaining_capacity:
+        return f"prep_units_exceeded (has {prep_units_have:.1f}, adding {units}, remaining {remaining_capacity:.1f})"
+    # Fallback: if faculty has no max_units set, fall back to count-based prep cap
+    prep_limit = prep_limit_for_faculty(fac_)
+    if len(set(preps_keys[fi_]) | {prep_key_cand}) > prep_limit:
+        return f"prep_limit_exceeded (has {len(preps_keys[fi_])}, cap {prep_limit}: {sorted(preps_keys[fi_])})"
     return "ineligible_unknown"
 
 
 def build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences=None, trace=None):
     loads = {i: 0.0 for i in range(len(faculties))}
     blocks = {i: [] for i in range(len(faculties))}
-    preps = {i: set() for i in range(len(faculties))}
+    preps_keys = {i: set() for i in range(len(faculties))}
+    preps_units = {i: 0.0 for i in range(len(faculties))}
     chosen: Dict[int, int] = {}
     if trace is not None:
         trace.setdefault("p1_preassignments", [])
@@ -498,7 +568,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 prep_key_cand = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
                 best_fi: Optional[int] = None
                 # (same_dept, is_ft, -load) — higher tuple wins via max()
-                best_score: tuple = (-1, False, float("-inf"))
+                best_score: tuple = (-1, False, float("inf"), float("-inf"))
                 p1_candidates_trace = []
                 for fi_cand in candidate_fis:
                     max_u = max(0.0, to_number(faculties[fi_cand].get("faculty_max_units")) or 0.0)
@@ -510,12 +580,21 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     elif any(consecutive_minutes_for_day(blocks[fi_cand] + off_blocks, d) > 240.0
                              for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                         rej = "consecutive_hours_exceeded"
-                    elif len(set(preps[fi_cand]) | {prep_key_cand}) > 4:
-                        rej = f"prep_limit_exceeded (has {len(preps[fi_cand])}: {sorted(preps[fi_cand])})"
+                    else:
+                        # unit-based prep reservation check (fallback to count-based prep limit)
+                        prep_units_have_cand = float(preps_units.get(fi_cand, 0.0))
+                        remaining_cap_cand = max_u - loads[fi_cand]
+                        if max_u > 0 and (prep_units_have_cand + units) > remaining_cap_cand:
+                            rej = f"prep_units_exceeded (has {prep_units_have_cand:.1f}, adding {units}, remaining {remaining_cap_cand:.1f})"
+                        else:
+                            prep_cap = prep_limit_for_faculty(faculties[fi_cand])
+                            if len(set(preps_keys[fi_cand]) | {prep_key_cand}) > prep_cap:
+                                rej = f"prep_limit_exceeded (has {len(preps_keys[fi_cand])}, cap {prep_cap}: {sorted(preps_keys[fi_cand])})"
                     fac_dept_id = int(to_number(faculties[fi_cand].get("department_id")) or 0)
                     same_dept = int(fac_dept_id == off_dept_id)
                     is_ft = normalize_role(faculties[fi_cand].get("faculty_role")) == "FT"
-                    cand_score = (same_dept, is_ft, -loads[fi_cand])
+                    usage_ratio = faculty_usage_ratio(faculties[fi_cand], loads[fi_cand])
+                    cand_score = (same_dept, is_ft, -usage_ratio, -loads[fi_cand])
                     if trace is not None:
                         p1_candidates_trace.append({
                             "fi": fi_cand,
@@ -527,7 +606,8 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                             "is_ft": is_ft,
                             "load": round(loads[fi_cand], 2),
                             "max_units": max_u,
-                            "preps_before": sorted(preps[fi_cand]),
+                            "usage_ratio": round(usage_ratio, 4),
+                            "preps_before": sorted(preps_keys[fi_cand]),
                             "score_tuple": list(cand_score),
                             "eligible": rej is None,
                             "rejection": rej,
@@ -573,7 +653,23 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 chosen[oi] = best_fi
                 loads[best_fi] += units
                 blocks[best_fi].extend(off_blocks)
-                preps[best_fi].add(prep_key_cand)
+                # Add prep key and increment prep-units if new
+                if prep_key_cand not in preps_keys[best_fi]:
+                    preps_keys[best_fi].add(prep_key_cand)
+                    # Try to derive units by subject code (fallback to offering units)
+                    try:
+                        code_only = normalize_upper(offering.get('code'))
+                        su = 0.0
+                        # subject_index may contain subject entries with subject_units
+                        for s in subject_index.values():
+                            if normalize_upper(s.get('subject_code')) == code_only:
+                                su = to_number(s.get('subject_units')) or 0.0
+                                break
+                        if not su:
+                            su = units
+                        preps_units[best_fi] += float(su)
+                    except Exception:
+                        preps_units[best_fi] += float(units)
 
     # ── P2/P3 prep slot reservation ──
     # For every P2 or P3 tagged faculty+subject pair, pre-insert the prep key
@@ -591,10 +687,12 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             for code_tag, priority in tag_map.items():
                 if priority not in (2, 3):
                     continue
-                # Never reserve beyond 4 preps — P1 assignments already consume
-                # slots, so reserving past the cap would permanently lock the
-                # faculty out of the main loop for ALL offerings.
-                if len(preps[fi_res]) >= 4:
+                # Reserve prep slots by *units* rather than simple counts.
+                # Determine remaining capacity for this faculty.
+                fac = faculties[fi_res]
+                max_u = max(0.0, to_number(fac.get('faculty_max_units')) or 0.0)
+                remaining_capacity = max_u - loads[fi_res] - preps_units[fi_res]
+                if max_u > 0 and remaining_capacity <= 0:
                     break
                 norm_code = normalize_upper(code_tag)
                 # Find any offering with this subject code to derive the course_no
@@ -603,7 +701,17 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 for off in offerings:
                     if normalize_upper(off.get("code") or "") == norm_code:
                         prep_key = f"{norm_code}|{normalize_upper(off.get('course_no') or '')}"
-                        preps[fi_res].add(prep_key)
+                        # compute candidate units
+                        cand_units = (
+                            to_number(off.get('units'))
+                            or (to_number(off.get('lec_hrs')) or 0.0) + (to_number(off.get('lab_hrs')) or 0.0)
+                            or 0.0
+                        )
+                        # Only reserve if it fits remaining capacity
+                        if max_u > 0 and cand_units > remaining_capacity:
+                            break
+                        preps_keys[fi_res].add(prep_key)
+                        preps_units[fi_res] += float(cand_units)
                         if trace is not None:
                             fac_r = faculties[fi_res]
                             trace["p2p3_reservations"].append({
@@ -613,7 +721,8 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                                 "priority": priority,
                                 "subject_code": norm_code,
                                 "prep_key_reserved": prep_key,
-                                "preps_total_after": len(preps[fi_res]),
+                                "preps_keys_after": sorted(list(preps_keys[fi_res])),
+                                "preps_units_after": round(preps_units[fi_res], 2),
                             })
                         break  # one reservation per subject code is enough
 
@@ -656,7 +765,13 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                    for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                 return False
             prep_key_ = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
-            if len(set(preps[fi_]) | {prep_key_}) > 4:
+            # Unit-based prep capacity check
+            pref_units_have = float(preps_units.get(fi_, 0.0))
+            remaining_capacity_ = max_u - loads[fi_]
+            if max_u > 0 and (pref_units_have + units) > remaining_capacity_:
+                return False
+            # Fallback: count-based cap if no max_units defined
+            if max_u <= 0 and len(set(preps_keys[fi_]) | {prep_key_}) > prep_limit_for_faculty(faculties[fi_]):
                 return False
             return True
 
@@ -664,7 +779,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             role_ = normalize_role(faculties[fi_].get("faculty_role"))
             s = spec_ * (1.0 if dept_match_ else 0.65)
             s += 120.0 if role_ == "FT" else 45.0 if role_ == "PT" else 0.0
-            s -= loads[fi_] * 0.7
+            s -= faculty_usage_ratio(faculties[fi_], loads[fi_]) * 80.0
             return s + rng.random() * 0.001
 
         candidates: List[Tuple[float, int]] = []
@@ -679,6 +794,14 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 if offering_code in _ftags:
                     tagged_fids[_fid_str] = _ftags[offering_code]
 
+        def _explicit_pref_usage_ratio(fi_: int) -> float:
+            if not faculty_preferences:
+                return 1.0
+            fid_str_ = str(int(to_number(faculties[fi_].get("faculty_id")) or 0))
+            if offering_code not in faculty_preferences.get(fid_str_, {}):
+                return 1.0
+            return faculty_usage_ratio(faculties[fi_], loads[fi_])
+
         # Track per-faculty rejection reasons for trace
         rejection_map: Dict[int, str] = {}  # fi -> reason string
 
@@ -686,14 +809,14 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         for fi, faculty in enumerate(faculties):
             fid_str_a = str(int(to_number(faculty.get("faculty_id")) or 0))
             if not _hard_eligible(fi):
-                rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps, units, off_blocks, prep_key_main)
+                rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps_keys, preps_units, units, off_blocks, prep_key_main)
                 continue
             spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
             if spec > 0.0:
                 dept_match = to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))
                 has_explicit_pref = faculty_preferences is not None and offering_code in faculty_preferences.get(fid_str_a, {})
                 effective_dept_match = dept_match or has_explicit_pref
-                candidates.append((_score(fi, spec, effective_dept_match), fi))
+                candidates.append((_score(fi, spec, effective_dept_match), _explicit_pref_usage_ratio(fi), fi))
             else:
                 rejection_map.setdefault(fi, "spec_score_zero_pass_a")
 
@@ -703,10 +826,10 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 if to_number(faculty.get("department_id")) != to_number(offering.get("department_id")):
                     continue
                 if not _hard_eligible(fi):
-                    rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps, units, off_blocks, prep_key_main)
+                    rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps_keys, preps_units, units, off_blocks, prep_key_main)
                     continue
                 spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
-                candidates.append((_score(fi, spec, True), fi))
+                candidates.append((_score(fi, spec, True), _explicit_pref_usage_ratio(fi), fi))
 
         # Pass C — cross-department no-spec fallback (IT->CS zero-faculty only)
         if not candidates:
@@ -720,13 +843,13 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 if to_number(faculty.get("department_id")) == to_number(offering.get("department_id")):
                     continue  # already covered in Pass B
                 if not _hard_eligible(fi):
-                    rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps, units, off_blocks, prep_key_main)
+                    rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps_keys, preps_units, units, off_blocks, prep_key_main)
                     continue
                 spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
-                candidates.append((_score(fi, spec, False), fi))
+                candidates.append((_score(fi, spec, False), _explicit_pref_usage_ratio(fi), fi))
 
-        sorted_cands = sorted(candidates, key=lambda x: (-x[0], x[1]))
-        fi = sorted_cands[0][1] if sorted_cands else -1
+        sorted_cands = sorted(candidates, key=lambda x: (-x[0], x[1], x[2]))
+        fi = sorted_cands[0][2] if sorted_cands else -1
 
         if trace is not None:
             winner_info = None
@@ -739,16 +862,19 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     "role": wf.get("faculty_role"),
                     "dept_id": int(to_number(wf.get("department_id")) or 0),
                     "score": round(sorted_cands[0][0], 4),
+                    "usage_ratio": round(sorted_cands[0][1], 4),
                     "load_after": round(loads[fi] + units, 2),
-                    "preps_before": sorted(preps[fi]),
+                    "preps_before": sorted(preps_keys[fi]),
+                    "preps_units_before": round(preps_units.get(fi, 0.0), 2),
                 }
             top3 = [
                 {
-                    "fi": c[1],
-                    "faculty_id": str(int(to_number(faculties[c[1]].get("faculty_id")) or 0)),
-                    "name": faculties[c[1]].get("faculty_name"),
-                    "role": faculties[c[1]].get("faculty_role"),
+                    "fi": c[2],
+                    "faculty_id": str(int(to_number(faculties[c[2]].get("faculty_id")) or 0)),
+                    "name": faculties[c[2]].get("faculty_name"),
+                    "role": faculties[c[2]].get("faculty_role"),
                     "score": round(c[0], 4),
+                    "usage_ratio": round(c[1], 4),
                 }
                 for c in sorted_cands[:3]
             ]
@@ -774,7 +900,8 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                         "rejection": rej if not in_cands else None,
                         "load": round(loads[tfi], 2),
                         "max_units": max(0.0, to_number(faculties[tfi].get("faculty_max_units")) or 0.0),
-                        "preps": sorted(preps[tfi]),
+                        "preps": sorted(preps_keys[tfi]),
+                        "preps_units": round(preps_units.get(tfi, 0.0), 2),
                     })
             trace["main_loop"].append({
                 "code": offering.get("code"),
@@ -797,7 +924,22 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         chosen[oi] = fi
         loads[fi] += units
         blocks[fi].extend(off_blocks)
-        preps[fi].add(f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}")
+        prep_key_now = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
+        if prep_key_now not in preps_keys[fi]:
+            preps_keys[fi].add(prep_key_now)
+            # increment units for this prep (fallback to offering units)
+            try:
+                su = 0.0
+                code_only = normalize_upper(offering.get('code'))
+                for s in subject_index.values():
+                    if normalize_upper(s.get('subject_code')) == code_only:
+                        su = to_number(s.get('subject_units')) or 0.0
+                        break
+                if not su:
+                    su = units
+                preps_units[fi] += float(su)
+            except Exception:
+                preps_units[fi] += float(units)
 
     if trace is not None:
         trace["faculty_initial_state"] = [
@@ -809,8 +951,9 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 "dept_id": int(to_number(f.get("department_id")) or 0),
                 "units_loaded": round(loads[i], 2),
                 "max_units": max(0.0, to_number(f.get("faculty_max_units")) or 0.0),
-                "prep_count": len(preps[i]),
-                "preps": sorted(preps[i]),
+                "prep_count": len(preps_keys[i]),
+                "prep_units": round(preps_units[i], 2),
+                "preps": sorted(preps_keys[i]),
                 "assignments": sum(1 for v in chosen.values() if v == i),
             }
             for i, f in enumerate(faculties)
@@ -912,13 +1055,6 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
     if unassigned:
         hard_penalty += 180.0 * len(unassigned)
 
-    for k, blks in room_day_blocks.items():
-        ordered = sorted(blks, key=lambda x: x["start"])
-        for i in range(1, len(ordered)):
-            if overlaps(ordered[i - 1], ordered[i]):
-                hard_penalty += 80.0
-                conflicts.append({"type": "room_conflict", "id": k, "problem": f"Room overlap at {k}"})
-
     load_rows = []
     free_rows = []
 
@@ -934,10 +1070,17 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             hard_penalty += (total - max_units) * 120.0
             conflicts.append({"type": "overload", "faculty_id": fid, "problem": "Exceeded max units"})
 
-        prep_count = count_preparations(assigned)
-        if prep_count > 4:
-            hard_penalty += (prep_count - 4) * 100.0
-            conflicts.append({"type": "preparations", "faculty_id": fid, "problem": "More than 4 preparations"})
+        # Compute prep units (sum of unique subject units among assigned offerings)
+        prep_units = 0.0
+        seen_codes = set()
+        for it in assigned:
+            code = normalize_upper(it['offering'].get('code'))
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            matched = it.get('matched_subject') or {}
+            pu = to_number(matched.get('subject_units')) or to_number(it['offering'].get('units')) or 0.0
+            prep_units += float(pu)
 
         if role == "FT":
             soft_penalty -= 9.0
@@ -980,9 +1123,11 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             "department_id": faculty.get("department_id"),
             "total_units": round(total, 2),
             "max_units": round(max_units, 2),
+            "usage_ratio": round(faculty_usage_ratio(faculty, total), 4),
             "free_units": round(free, 2),
             "class_count": len(assigned),
-            "preparations": prep_count,
+            "preparations": count_preparations(assigned),
+            "prep_units": round(prep_units, 2),
             "imbalance_score": round(abs(total - avg_units), 2),
         }
         load_rows.append(row)
@@ -1004,7 +1149,7 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             "faculty_free_units": free_rows,
             "unassigned_subjects": [f"{normalize_text(o.get('code'))}-{normalize_text(o.get('course_no'))}-Sec{normalize_text(o.get('section'))}" for o in unassigned],
             "unresolved_offerings": unresolved_details,
-            "hard_violations": [c for c in conflicts if c["type"] in {"room_conflict", "time_conflict", "overload", "department_mismatch", "consecutive_limit", "preparations", "forbidden_cross_department"}],
+            "hard_violations": [c for c in conflicts if c["type"] in {"time_conflict", "overload", "department_mismatch", "consecutive_limit", "forbidden_cross_department"}],
             "soft_penalties": [],
             "schedule_fragmentation": {"faculty_with_scattered_schedule": [r["faculty_id"] for r in load_rows if r["class_count"] >= 3 and r["imbalance_score"] > 2]},
             "explainability": [f"{a['faculty'].get('faculty_name')}: {normalize_text(a['offering'].get('code'))} {normalize_text(a['offering'].get('descriptive_title'))}" for a in assignments[:16]],
@@ -1052,6 +1197,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     department_faculty_counts = build_department_count_map(payload.get("department_faculty_counts"))
     department_available_faculty_counts = build_department_count_map(payload.get("department_available_faculty_counts"))
     faculty_preferences: Optional[Dict[str, Any]] = payload.get("faculty_preferences") or None
+    problematic_offerings = list(payload.get("problematic_offerings") or [])
 
     # Fallback for callers that do not provide counts.
     if not department_faculty_counts:
@@ -1069,16 +1215,14 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     rng = random.Random(seed)
 
-    # ── SAT-only pre-filter ──────────────────────────────────────────────────
-    # SAT-only offerings are a hard architectural constraint: they are NEVER
-    # faculty-loaded by the GA (Saturday is user-defined, not automated).
-    # Rather than defending against them inside the GA with scattered checks,
-    # we remove them from the input entirely.  The GA runs on ga_offerings only.
-    # sat_only_offerings are merged back into the report with faculty = null.
-    # Use text-based SAT detection so offerings with SAT in tfs_schedule and
-    # an early start time (< 7:30 AM) are not missed by the time-boundary filter.
-    ga_offerings = [o for o in offerings if not is_sat_only_offering(o)]
+    # ── Special-day pre-filter ──────────────────────────────────────────────
+    # Certain user-defined day overrides are excluded from automated GA
+    # faculty-loading.  Historically only Saturday-only subjects were
+    # excluded.  Per configuration/requests we now also treat Wednesday-only
+    # offerings as excluded (they will be reported back as unassigned).
+    ga_offerings = [o for o in offerings if not (is_sat_only_offering(o) or is_wed_only_offering(o))]
     sat_only_offerings = [o for o in offerings if is_sat_only_offering(o)]
+    wed_only_offerings = [o for o in offerings if is_wed_only_offering(o)]
 
     if not faculties or not ga_offerings:
         return {
@@ -1109,6 +1253,8 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "total_offerings": len(offerings),
             "ga_offerings": len(ga_offerings),
             "sat_only_offerings": len(sat_only_offerings),
+            "wed_only_offerings": len(wed_only_offerings),
+            "problematic_offerings": len(problematic_offerings),
             "faculties": len(faculties),
             "tagged_faculty_count": len(faculty_preferences) if faculty_preferences else 0,
         },
@@ -1181,12 +1327,14 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     result["generations"] = generation + 1
     result["runtime_ms"] = int((time.perf_counter() - started) * 1000)
-    # Add SAT-only count to report so the frontend knows they were excluded
+    # Add special-day counts to report so the frontend knows they were excluded
+    result.setdefault("report", {})
     result["report"]["sat_only_count"] = len(sat_only_offerings)
+    result["report"]["wed_only_count"] = len(wed_only_offerings)
     result["report"]["summary"] = (
         f"Generated {len(result['assignments'])} assignment(s) from "
         f"{len(ga_offerings)} eligible offering(s). "
-        f"{len(sat_only_offerings)} SAT-only offering(s) excluded (always unassigned)."
+        f"{len(sat_only_offerings)} SAT-only and {len(wed_only_offerings)} WED-only offering(s) excluded (always unassigned)."
     )
     result["run_id"] = payload.get("run_id") or sha1(
         json.dumps({"seed": seed, "best": best, "count": len(ga_offerings)}, sort_keys=True).encode("utf-8")
@@ -1254,6 +1402,15 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "descriptive_title": o.get("descriptive_title"),
             }
             for o in sat_only_offerings
+        ]
+        _trace["wed_only_excluded"] = [
+            {
+                "offering_id": o.get("id"),
+                "code": o.get("code"),
+                "section": o.get("section"),
+                "descriptive_title": o.get("descriptive_title"),
+            }
+            for o in wed_only_offerings
         ]
 
         _debug_path = _os.path.join(_base, "ga_debug_run.json")

@@ -138,6 +138,12 @@
   align-items: center;
 }
 
+.subject-select-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+}
+
 .subject-select,
 .priority-select {
   flex: 1;
@@ -149,6 +155,154 @@
   background-color: white;
   cursor: pointer;
   transition: border-color 0.2s;
+}
+
+.subject-select-button {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.subject-select-button:hover:not(:disabled) {
+  border-color: #999;
+}
+
+.subject-select-button:focus-visible {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+.subject-select-button:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.subject-select-button-label {
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.subject-select-button-caret {
+  color: #666;
+  flex: 0 0 auto;
+}
+
+.subject-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 280px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+}
+
+.subject-search-wrapper {
+  padding: 4px 4px 8px 4px;
+  border-bottom: 1px solid #eceff1;
+  margin-bottom: 6px;
+}
+
+.subject-search-input {
+  width: 100%;
+  border: 1px solid #d7dce1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+
+.subject-search-input:focus {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+.subject-search-empty {
+  padding: 14px 12px;
+  color: #777;
+  font-size: 13px;
+  text-align: center;
+}
+
+.subject-select-option {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.subject-select-option:hover {
+  background-color: #f5f7fa;
+}
+
+.subject-select-option-text {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.35;
+  color: #222;
+  font-weight: 500;
+}
+
+.subject-count-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2px;
+}
+
+.subject-count-pill.tone-green {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.subject-count-pill.tone-yellow {
+  background: #fff8e1;
+  color: #f57c00;
+}
+
+.subject-count-pill.tone-red {
+  background: #ffebee;
+  color: #c62828;
 }
 
 .subject-select:hover,

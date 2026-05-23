@@ -42,6 +42,10 @@ export async function fetchFacultySubjectPreferences(facultyId) {
     const payload = await response.json();
     return {
       preferences: Array.isArray(payload.preferences) ? payload.preferences : [],
+      prepLimit: Number(payload.prepLimit ?? 4),
+      facultyMaxUnits: Number(payload.facultyMaxUnits ?? 0),
+      usedTaggedUnits: Number(payload.usedTaggedUnits ?? 0),
+      remainingUnits: Number(payload.remainingUnits ?? 0),
       count: Number(payload.count ?? 0),
     };
   } catch (err) {
