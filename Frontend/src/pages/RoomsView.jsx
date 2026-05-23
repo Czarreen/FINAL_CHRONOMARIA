@@ -57,6 +57,14 @@ function inferRoomTypeFromOfferings(offerings) {
   return hasLabHours ? 'Lab' : 'Lecture';
 }
 
+function normalizeRoomName(value) {
+  return String(value ?? '').replace(/[^A-Za-z0-9]/g, '');
+}
+
+function getRoomDisplayName(value, fallback = 'N/A') {
+  return normalizeRoomName(value) || fallback;
+}
+
 function parseRoomDepartmentIds(rawValue) {
   if (rawValue === null || rawValue === undefined || rawValue === '') return [];
 
@@ -364,7 +372,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         const existing = grouped.get(key) || {
           id: roomId,
           room_id: roomId,
-          title: room?.room_name || row.title || `Room #${roomId}`,
+          title: getRoomDisplayName(room?.room_name || row.title, `Room #${roomId}`),
           description: room?.room_type || row.description || '',
           severity: issueSeverity,
           missingFields: [],
@@ -442,8 +450,9 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       ? rooms
       : rooms.filter((r) => {
           const query = searchQuery.toLowerCase();
+          const roomQuery = normalizeRoomName(searchQuery).toLowerCase();
           return (
-            (r.room_name || '').toLowerCase().includes(query) ||
+            (roomQuery && getRoomDisplayName(r.room_name, '').toLowerCase().includes(roomQuery)) ||
             (r.room_type || '').toLowerCase().includes(query) ||
             getRoomDepartmentLabel(r).toLowerCase().includes(query) ||
             (r.room_status || '').toLowerCase().includes(query)
@@ -459,11 +468,11 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
     const getRoomSortValue = (room) => {
       switch (sortConfig.key) {
-        case 'room_name': return String(room.room_name ?? '');
+        case 'room_name': return getRoomDisplayName(room.room_name, '');
         case 'room_type': return String(room.room_type ?? '');
         case 'department_name': return getRoomDepartmentLabel(room);
         case 'room_status': return String(room.room_status ?? '');
-        default: return String(room.room_name ?? '');
+        default: return getRoomDisplayName(room.room_name, '');
       }
     };
     const sorted = [...filteredRooms].sort(
@@ -597,11 +606,11 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     const dirMult = sortConfig.direction === 'asc' ? 1 : -1;
     const getSortVal = (room) => {
       switch (sortConfig.key) {
-        case 'room_name': return String(room.room_name ?? '');
+        case 'room_name': return getRoomDisplayName(room.room_name, '');
         case 'room_type': return String(room.room_type ?? '');
         case 'department_name': return getRoomDepartmentLabel(room);
         case 'room_status': return String(room.room_status ?? '');
-        default: return String(room.room_name ?? '');
+        default: return getRoomDisplayName(room.room_name, '');
       }
     };
     const fullSorted = [...rooms].sort((a, b) =>
@@ -656,7 +665,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       // If there are specific issues, ensure they're addressed
       if (issues.length > 0) {
         // Verify room has basic required data to resolve issues
-        const hasName = room.room_name && room.room_name.trim() !== '';
+        const hasName = getRoomDisplayName(room.room_name, '') !== '';
         const hasType = room.room_type && room.room_type.trim() !== '';
         const hasStatus = room.room_status && room.room_status.trim() !== '';
 
@@ -699,7 +708,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
   const handleEditClick = (room) => {
     setEditingRoom(room);
     setFormData({
-      room_name: room.room_name,
+      room_name: normalizeRoomName(room.room_name),
       room_type: room.room_type || '',
       room_status: room.room_status || 'available',
       department_ids: parseRoomDepartmentIds(room.room_department_ids ?? room.room_department_id),
@@ -752,14 +761,16 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     setIsSubmitting(true);
 
     try {
-      if (!formData.room_name.trim()) {
+      const roomName = normalizeRoomName(formData.room_name);
+
+      if (!roomName) {
         setFormError('Room name is required');
         setIsSubmitting(false);
         return;
       }
 
       const newRoom = await createRoom({
-        room_name: formData.room_name,
+        room_name: roomName,
         room_type: formData.room_type || null,
         room_status: formData.room_status,
         room_department_id: formData.department_ids,
@@ -783,14 +794,16 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
     setIsSubmitting(true);
 
     try {
-      if (!formData.room_name.trim()) {
+      const roomName = normalizeRoomName(formData.room_name);
+
+      if (!roomName) {
         setFormError('Room name is required');
         setIsSubmitting(false);
         return;
       }
 
       const updatedRoom = await updateRoom(editingRoom.room_id, {
-        room_name: formData.room_name,
+        room_name: roomName,
         room_type: formData.room_type || null,
         room_status: formData.room_status,
         room_department_id: formData.department_ids,
@@ -1038,7 +1051,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                           <td key={col.key} className="px-4 py-3 align-top">
                             {col.key === 'room_name' ? (
                               <span className="inline-block rounded-md bg-primary/10 px-3 py-1 text-sm font-bold text-primary">
-                                {room.room_name || 'N/A'}
+                                {getRoomDisplayName(room.room_name)}
                               </span>
                             ) : col.key === 'room_type' ? (
                               <span className="text-sm font-medium text-on-surface">
@@ -1072,7 +1085,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                             onClick={() => handleEditClick(room)}
                             className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:border-transparent hover:bg-primary/10 hover:text-primary"
                             type="button"
-                            aria-label={`Edit ${room.room_name}`}
+                            aria-label={`Edit ${getRoomDisplayName(room.room_name)}`}
                           >
                             <Edit2 size={16} />
                           </button>
@@ -1188,9 +1201,9 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   <input
                     type="text"
                     value={formData.room_name}
-                    onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, room_name: normalizeRoomName(e.target.value) })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., Room 101"
+                    placeholder="e.g., AP104"
                     disabled={isSubmitting}
                   />
                 </div>
@@ -1310,9 +1323,9 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
                   <input
                     type="text"
                     value={formData.room_name}
-                    onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, room_name: normalizeRoomName(e.target.value) })}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., Room 101"
+                    placeholder="e.g., AP104"
                     disabled={isSubmitting}
                   />
                 </div>
@@ -1425,7 +1438,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               )}
 
               <p className="text-on-surface">
-                Are you sure you want to delete <span className="font-bold">{deleteTargetRoom.room_name}</span>? This action cannot be undone.
+                Are you sure you want to delete <span className="font-bold">{getRoomDisplayName(deleteTargetRoom.room_name)}</span>? This action cannot be undone.
               </p>
 
               <div className="flex gap-3 pt-6">
@@ -1515,7 +1528,7 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               <div className="flex items-center justify-between border-b border-white/20 bg-indigo-600 px-6 py-4">
                 <div className="flex items-center gap-3">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{subjectsRoom.room_name}</h3>
+                    <h3 className="text-lg font-bold text-white">{getRoomDisplayName(subjectsRoom.room_name)}</h3>
                     <p className="text-indigo-200 text-xs mt-0.5">Scheduled Course Offerings</p>
                   </div>
                   {totalConflicts > 0 && !subjectsLoading && (
