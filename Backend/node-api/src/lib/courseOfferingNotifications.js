@@ -73,6 +73,11 @@ export function buildOfferingNotificationIssues(offering, allOfferings = [], gym
         message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
         issue_type: 'conflict',
         conflicting_offering_id: conflict.entityId,
+        conflicting_code: conflict.entityCode || null,
+        conflict_room_id: conflict.room || null,
+        conflict_schedule_type: conflict.schedule || null,
+        conflict_days: conflict.conflictingDays || null,
+        conflict_entity_schedule: conflict.schedule === 'MTH' ? (offering.mth_schedule || null) : (offering.tfs_schedule || null),
       });
     }
   }
@@ -105,6 +110,11 @@ export function buildOfferingNotificationRows(offering, allOfferings = [], gymRo
       offering_id: offering.id,
       code: offering.code || null,
       conflicting_offering_id: issue.conflicting_offering_id || null,
+      conflicting_code: issue.conflicting_code || null,
+      conflict_room_id: issue.conflict_room_id || null,
+      conflict_schedule_type: issue.conflict_schedule_type || null,
+      conflict_days: issue.conflict_days || null,
+      conflict_entity_schedule: issue.conflict_entity_schedule || null,
     },
     is_resolved: false,
     created_at: now,

@@ -8,8 +8,15 @@ rooms during the scheduled time.
 
 from pydantic import BaseModel
 from typing import Set, Optional
+from enum import Enum
 
 from sched.conflict.room_sets import expand_room_string
+
+
+class RoomType(str, Enum):
+    LABORATORY = "Laboratory"
+    LECTURE = "Lecture"
+    UNKNOWN = "Unknown"
 
 
 class Room(BaseModel):

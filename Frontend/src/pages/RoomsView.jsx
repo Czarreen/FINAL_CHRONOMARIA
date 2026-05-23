@@ -1100,26 +1100,51 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
             </table>
           </div>
 
-          {totalPages > 1 && (
+          {totalPages > 0 && (
             <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-600">
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, stats.totalRooms)} of {stats.totalRooms}
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                 <button
                   onClick={handlePrevPage}
                   disabled={currentPage === 1}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Previous rooms page"
                 >
                   <ChevronLeft size={16} />
+                  <span>Prev</span>
                 </button>
+                <div className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <label htmlFor="rooms-page-input" className="text-xs font-semibold text-slate-500">
+                    Page
+                  </label>
+                  <input
+                    id="rooms-page-input"
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={pageInput}
+                    onChange={e => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') applyPageInput();
+                    }}
+                    className="h-7 w-14 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm font-semibold text-slate-800 outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+                    aria-label="Rooms page number"
+                  />
+                  <span className="text-xs font-semibold text-slate-500">of {totalPages}</span>
+                </div>
                 <button
                   onClick={handleNextPage}
                   disabled={currentPage === totalPages}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Next rooms page"
                 >
+                  <span>Next</span>
                   <ChevronRight size={16} />
                 </button>
               </div>

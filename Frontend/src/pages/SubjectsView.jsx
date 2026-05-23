@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings } from 'lucide-react';
-import { fetchSubjects, fetchSubjectPageNumber, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings, GitCompare } from 'lucide-react';
+import { fetchSubjects, fetchSubjectPageNumber, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
 import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
-import { syncSubjectsFromOfferings } from '../services/courseOfferingsApi';
+import { syncSubjectsFromOfferings, applyGeneralTagsToSubjects } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
+import RoomConflictsPanel from '../components/RoomConflictsPanel';
 import { syncSubjectNotifications } from '../services/notificationsApi';
 import { useRowHighlight } from '../hooks/useRowHighlight.jsx';
 import { useNotifications } from '../hooks/useNotifications';
@@ -13,6 +14,8 @@ import { highlightRowElement } from '../utils/highlightRow.js';
 import { normalizeNotificationSeverity } from '../utils/notificationUtils';
 import ScheduleCardInput from '../components/ScheduleCardInput';
 import { buildScheduleString, parseScheduleString, emptyCardState, formatScheduleDisplay, isSimpleSchedule, getScheduleAmPm } from '../utils/scheduleUtils';
+
+const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|ADV\s*ORAL(\s*COM)?|FOR\s*LANG)/i;
 
 const columns = [
   { key: 'curr_id', label: 'Curriculum ID' },
@@ -48,6 +51,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [updateError, setUpdateError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'subject_code', direction: 'asc' });
   const [roomNameById, setRoomNameById] = useState({});
+  const [roomObjects, setRoomObjects] = useState([]);
   const [roomBookings, setRoomBookings] = useState([]);
 
   // Structured schedule card state shared between Add and Edit modals
@@ -94,6 +98,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   } = useNotifications();
   const [notifSeverityFilter, setNotifSeverityFilter] = useState('all');
   const [notifSearch, setNotifSearch] = useState('');
+  const [compareIds, setCompareIds] = useState(null); // null | [id1, id2]
   const [pendingScrollToSubject, setPendingScrollToSubject] = useState(null);
 
   const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map(c => c.key)));
@@ -186,10 +191,21 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   };
 
+  // Strip schedule_conflict issues — those are shown exclusively in the Room Conflicts panel.
+  const subjectNotificationsNoConflicts = useMemo(() => {
+    return subjectNotifications
+      .map((item) => ({
+        ...item,
+        issues: (item.issues || []).filter((i) => i.field !== 'schedule_conflict'),
+        missingFields: (item.missingFields || []).filter((f) => f !== 'schedule_conflict'),
+      }))
+      .filter((item) => item.issues.length > 0);
+  }, [subjectNotifications]);
+
   const visibleSubjectNotifications = useMemo(() => {
     const searchTerm = String(notifSearch || '').trim().toLowerCase();
 
-    return subjectNotifications.filter((item) => {
+    return subjectNotificationsNoConflicts.filter((item) => {
       const severity = normalizeNotificationSeverity(item.severity);
       if (notifSeverityFilter !== 'all' && severity !== notifSeverityFilter) {
         return false;
@@ -211,12 +227,12 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
       return haystack.includes(searchTerm);
     });
-  }, [subjectNotifications, notifSeverityFilter, notifSearch]);
+  }, [subjectNotificationsNoConflicts, notifSeverityFilter, notifSearch]);
 
   const subjectNotificationStats = useMemo(() => {
     const stats = { total: 0, critical: 0, medium: 0, low: 0 };
 
-    for (const item of subjectNotifications) {
+    for (const item of subjectNotificationsNoConflicts) {
       const severity = normalizeNotificationSeverity(item.severity);
       stats.total += 1;
       if (severity === 'critical') stats.critical += 1;
@@ -225,7 +241,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
 
     return stats;
-  }, [subjectNotifications]);
+  }, [subjectNotificationsNoConflicts]);
 
   const { setHighlight } = useRowHighlight();
 
@@ -271,8 +287,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
   // Load subjects data
   useEffect(() => {
+    if (compareIds) return;
     loadSubjects();
-  }, [page, limit, search, searchField, statusFilter, subjectMutationKey]);
+  }, [page, limit, search, searchField, statusFilter, subjectMutationKey, compareIds]);
 
 
   const handleInlineSave = async ({ offeringId, field, value }) => {
@@ -402,6 +419,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
     try {
       const nextLookup = {};
+      const allRoomRows = [];
       const pageSize = 200;
       let currentPage = 1;
       let hasMore = true;
@@ -416,6 +434,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           if (roomId && roomName) {
             nextLookup[roomId] = roomName;
           }
+          allRoomRows.push(row);
         }
 
         hasMore = rows.length === pageSize;
@@ -423,6 +442,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       }
 
       setRoomNameById(nextLookup);
+      setRoomObjects(allRoomRows);
       try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup)); } catch (_) {}
     } catch {
       setRoomNameById({});
@@ -433,6 +453,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     try {
       setFetching(true);
       await syncSubjectsFromOfferings();
+      // Set is_general=true on subjects whose linked course offering has tag='general'
+      await applyGeneralTagsToSubjects().catch(() => {});
       await loadSubjects();
     } catch (_) {
     } finally {
@@ -461,6 +483,28 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
+
+  // Compare mode: fetch exactly the two conflicting subjects by ID.
+  useEffect(() => {
+    if (!compareIds) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all(compareIds.map((id) => fetchSubjectById(id)))
+      .then((results) => {
+        if (!active) return;
+        const rows = results.filter(Boolean);
+        setSubjects(rows);
+        setTotal(rows.length);
+      })
+      .catch(() => { if (active) { setSubjects([]); setTotal(0); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [compareIds]);
+
+  const exitCompareMode = () => {
+    setCompareIds(null);
+  };
 
   function scrollToSubjectRowById(subjectId, severity = null) {
     const rowElement = document.getElementById(`subject-row-${subjectId}`);
@@ -773,18 +817,27 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = total === 0 ? 0 : (safePage - 1) * limit + 1;
+  const pageEnd = Math.min(safePage * limit, total);
 
   useEffect(() => {
     setPageInput(page);
   }, [page]);
+
+  useEffect(() => {
+    if (total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, total, totalPages]);
 
   const applyPageInput = () => {
     const nextPage = Number(pageInput);
     if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
       setPage(nextPage);
     } else {
-      setPageInput(page);
+      setPageInput(safePage);
     }
   };
 
@@ -978,6 +1031,25 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             </button>
           </div>
 
+          {/* Room Conflicts panel */}
+          <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+            <RoomConflictsPanel
+              items={subjectNotifications}
+              rooms={roomObjects}
+              entityType="subject"
+              onItemJump={(item) => {
+                const rowId = item.rowId || item.entity_id || null;
+                if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
+              }}
+              onItemEdit={(item) => {
+                const subj = item.subject || subjectNotifications.find((s) => s.rowId === item.rowId)?.subject;
+                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+              }}
+              onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
+            />
+          </div>
+
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
             {selectedSubjects.size > 0 && (
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
@@ -1068,7 +1140,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           <div className="flex gap-2 flex-1 md:max-w-xl">
             <select
               value={searchField}
-              onChange={(e) => setSearchField(e.target.value)}
+              onChange={(e) => {
+                setSearchField(e.target.value);
+                setPage(1);
+              }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-on-surface outline-none transition-all hover:border-primary focus:border-primary"
             >
               <option value="all">All Fields</option>
@@ -1147,6 +1222,22 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
               Delete selection
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Compare Mode Banner */}
+      {compareIds && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700">
+          <GitCompare size={15} className="shrink-0 text-blue-500" />
+          <span>Compare Mode — showing 2 conflicting rows</span>
+          <button
+            type="button"
+            onClick={exitCompareMode}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            <X size={12} />
+            Exit Compare
+          </button>
         </div>
       )}
 
@@ -1362,26 +1453,50 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             </table>
           </div>
 
-          {totalPages > 1 && (
+          {!compareIds && totalPages > 1 && (
             <div className="flex flex-col gap-3 border-t border-slate-200 bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-600">
-                Showing {(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}
+                Showing {pageStart}-{pageEnd} of {total}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                  disabled={safePage === 1}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Previous subjects page"
                 >
                   <ChevronLeft size={16} />
+                  <span>Prev</span>
                 </button>
+                <div className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <label htmlFor="subjects-page-input" className="text-xs font-semibold text-slate-500">
+                    Page
+                  </label>
+                  <input
+                    id="subjects-page-input"
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyPageInput();
+                    }}
+                    className="h-7 w-14 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm font-semibold text-slate-800 outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+                    aria-label="Subjects page number"
+                  />
+                  <span className="text-xs font-semibold text-slate-500">of {totalPages}</span>
+                </div>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+                  disabled={safePage === totalPages}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
+                  aria-label="Next subjects page"
                 >
+                  <span>Next</span>
                   <ChevronRight size={16} />
                 </button>
               </div>
@@ -1449,7 +1564,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                       <input
                         type="text"
                         value={newSubject.subject_course_no}
-                        onChange={(e) => setNewSubject({ ...newSubject, subject_course_no: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewSubject({ ...newSubject, subject_course_no: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                        }}
                         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., HCI-101"
                       />
@@ -1473,7 +1591,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                       <input
                         type="text"
                         value={newSubject.subject_descriptive_title}
-                        onChange={(e) => setNewSubject({ ...newSubject, subject_descriptive_title: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewSubject({ ...newSubject, subject_descriptive_title: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                        }}
                         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
                         placeholder="e.g., Introduction to Human Computer Interactions"
                       />
@@ -1690,7 +1811,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <input
                   type="text"
                   value={editingData.subject_course_no}
-                  onChange={(e) => setEditingData({ ...editingData, subject_course_no: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditingData({ ...editingData, subject_course_no: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., 1"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_course_no')}
@@ -1718,7 +1842,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                 <input
                   type="text"
                   value={editingData.subject_descriptive_title}
-                  onChange={(e) => setEditingData({ ...editingData, subject_descriptive_title: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditingData({ ...editingData, subject_descriptive_title: val, ...(GENERAL_RE.test(val) && { is_general: true }) });
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                   placeholder="e.g., Introduction to Computer Science"
                   disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('subject_descriptive_title')}

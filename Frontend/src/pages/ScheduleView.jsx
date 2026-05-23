@@ -37,6 +37,38 @@ const COURSE_OFFERING_UPDATE_MODES = {
 };
 const TABLE_PAGE_SIZE = 50;
 
+const DRY_RUN_PHRASES = [
+  'Peeking at possibilities…',
+  'Ghost-scheduling your classes…',
+  'Trying on schedules for size…',
+  'Running a dress rehearsal…',
+  'Whispering to the algorithm…',
+  'No subjects were harmed in this preview…',
+  'Simulating the simulation…',
+  'Sneak-peeking the timetable…',
+  'Asking the GA nicely for a sneak peek…',
+  'Almost real, but not quite yet…',
+];
+
+const REAL_RUN_PHRASES = [
+  'Teaching rooms to share nicely…',
+  'Negotiating with stubborn time slots…',
+  'Untangling the schedule spaghetti…',
+  'Playing Tetris with your timetable…',
+  'Convincing 7:30 AM classes they are necessary…',
+  'Evolving the perfect timetable, one generation at a time…',
+  'Herding subjects into time slots…',
+  'Solving the hardest puzzle in academia…',
+  'Arguing with overlapping lectures…',
+  'Making everyone fit without stepping on toes…',
+  'Asking rooms politely to stop double-booking…',
+  'Finding the cosmic alignment of all sections…',
+  'Making Monday bearable, one slot at a time…',
+  'Running 1,000 possible schedules through their paces…',
+  'Bribing the algorithm with better fitness scores…',
+  'Almost there — the GA is on its last lap…',
+];
+
 const ALL_COLUMNS = [
   { key: 'code', label: 'Code' },
   { key: 'course_no', label: 'Course No.' },
@@ -813,6 +845,7 @@ export default function ScheduleView({ onNavigate }) {
   const [showUnresolved, setShowUnresolved] = useState(true);
   const [showGaConflicts, setShowGaConflicts] = useState(true);
   const [showPreflightIssues, setShowPreflightIssues] = useState(true);
+  const [loadingPhraseIdx, setLoadingPhraseIdx] = useState(0);
 
   async function loadPreflight() {
     try {
@@ -852,6 +885,13 @@ export default function ScheduleView({ onNavigate }) {
       try { setLastRunSummary(JSON.parse(raw)); } catch { setLastRunSummary(null); }
     }
   }, []);
+
+  useEffect(() => {
+    if (!running) { setLoadingPhraseIdx(0); return; }
+    const phrases = dryRun ? DRY_RUN_PHRASES : REAL_RUN_PHRASES;
+    const id = setInterval(() => setLoadingPhraseIdx((i) => (i + 1) % phrases.length), 2500);
+    return () => clearInterval(id);
+  }, [running, dryRun]);
 
   const issues = preflight?.issues || [];
   const highIssues = issues.filter((i) => i.severity === 'high').length;
@@ -1414,6 +1454,34 @@ export default function ScheduleView({ onNavigate }) {
             </div>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Full-screen Schedule Generation Overlay */}
+      {running && (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/20 bg-white/10 p-8 text-white shadow-2xl">
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+              <div className="absolute inset-2 animate-spin rounded-full border-4 border-white/10 border-t-white/60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
+            </div>
+            <div className="space-y-1.5 text-center">
+              <p className="text-lg font-bold tracking-tight">
+                {(dryRun ? DRY_RUN_PHRASES : REAL_RUN_PHRASES)[loadingPhraseIdx]}
+              </p>
+              <p className="text-sm text-white/70">
+                {dryRun
+                  ? 'Running the Genetic Algorithm in preview mode. Please wait.'
+                  : 'Running the Genetic Algorithm to assign time slots and rooms. Please wait.'}
+              </p>
+              <p className="text-xs text-white/50">Do not close or refresh this page.</p>
+            </div>
+            {!dryRun && (
+              <div className="w-full rounded-lg border border-primary/30 bg-primary/20 px-4 py-2.5 text-center text-xs text-white/80">
+                This run will save results to the database.
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Update Modal */}

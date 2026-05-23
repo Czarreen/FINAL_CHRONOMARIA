@@ -23,6 +23,7 @@ import {
   Settings,
   Check,
   Lock,
+  GitCompare,
 } from 'lucide-react';
 import {
   fetchCourseOfferings,
@@ -44,6 +45,7 @@ import { useNotifications } from '../hooks/useNotifications';
 import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidation';
 import { NOTIFICATION_FIELD_TO_KEY } from '../utils/notificationTransform';
 import ScheduleCardInput from '../components/ScheduleCardInput';
+import RoomConflictsPanel from '../components/RoomConflictsPanel';
 import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils';
 
 const PAGE_SIZE = 50;
@@ -92,6 +94,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const colMenuRef = useRef(null);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
+  const [compareIds, setCompareIds] = useState(null); // null | [id1, id2]
   const [pendingScrollToOffering, setPendingScrollToOffering] = useState(null);
   const [findingNotificationRow, setFindingNotificationRow] = useState(false);
   const [editingFromNotification, setEditingFromNotification] = useState(false);
@@ -204,6 +207,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
   // Unified data-loading effect — handles both paginated browsing and server-side search
   useEffect(() => {
+    if (compareIds) return;
     let active = true;
 
     async function loadOfferings() {
@@ -246,7 +250,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     return () => {
       active = false;
     };
-  }, [page, refreshToken, sortConfig, debouncedSearch, filterColumn]);
+  }, [page, refreshToken, sortConfig, debouncedSearch, filterColumn, compareIds]);
 
   // Load rooms data
   useEffect(() => {
@@ -290,6 +294,36 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       active = false;
     };
   }, []);
+
+  // Compare mode: fetch exactly the two conflicting offerings by ID.
+  useEffect(() => {
+    if (!compareIds) return;
+    let active = true;
+    setLoading(true);
+    setError('');
+    Promise.all(compareIds.map((id) => fetchCourseOfferingById(id)))
+      .then((results) => {
+        if (!active) return;
+        const rows = results
+          .filter(Boolean)
+          .map((row) => ({
+            ...row,
+            department_name:
+              row.departments?.department_name ??
+              (row.department_id != null ? `Department #${row.department_id}` : null),
+          }));
+        setOfferings(rows);
+        setTotalRows(rows.length);
+      })
+      .catch(() => { if (active) { setOfferings([]); setTotalRows(0); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [compareIds]);
+
+  const exitCompareMode = () => {
+    setCompareIds(null);
+    setRefreshToken((t) => t + 1);
+  };
 
   // Handle scrolling to offering when it appears (after page navigation)
   useLayoutEffect(() => {
@@ -669,10 +703,20 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   // Server-side search and sort are now active — offerings already contain only matching results
   const displayedOfferings = offerings;
 
+  // Strip schedule_conflict issues — those are shown exclusively in the Room Conflicts panel.
+  const notificationsNoConflicts = useMemo(() => {
+    return notifications
+      .map((item) => ({
+        ...item,
+        issues: (item.issues || []).filter((i) => i.field !== 'schedule_conflict'),
+        missingFields: (item.missingFields || []).filter((f) => f !== 'schedule_conflict'),
+      }))
+      .filter((item) => item.issues.length > 0);
+  }, [notifications]);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
-    let filtered = notifications;
+    let filtered = notificationsNoConflicts;
 
     // Filter by severity
     if (notificationFilter !== 'all') {
@@ -691,17 +735,17 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     }
 
     return filtered;
-  }, [notifications, notificationFilter, notificationSearch]);
+  }, [notificationsNoConflicts, notificationFilter, notificationSearch]);
 
   // Calculate notification stats
   const notificationStats = useMemo(() => {
     return {
-      total: notifications.length,
-      critical: notifications.filter((n) => n.severity === 'critical').length,
-      medium: notifications.filter((n) => n.severity === 'medium').length,
-      low: notifications.filter((n) => n.severity === 'low').length,
+      total: notificationsNoConflicts.length,
+      critical: notificationsNoConflicts.filter((n) => n.severity === 'critical').length,
+      medium: notificationsNoConflicts.filter((n) => n.severity === 'medium').length,
+      low: notificationsNoConflicts.filter((n) => n.severity === 'low').length,
     };
-  }, [notifications]);
+  }, [notificationsNoConflicts]);
 
   const focusNotificationItem = (item) => {
     if (!item?.offeringId) return;
@@ -1211,6 +1255,17 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
               </button>
             </div>
+            {/* Room Conflicts panel */}
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+              <RoomConflictsPanel
+                items={notifications}
+                rooms={rooms}
+                entityType="offering"
+                onItemJump={focusNotificationItem}
+                onItemEdit={editNotificationItem}
+                onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
+              />
+            </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
               <BookMarked size={12} className="text-primary" />
               {totalRows}
@@ -1513,6 +1568,22 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         )}
       </div>
 
+      {/* Compare Mode Banner */}
+      {compareIds && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700">
+          <GitCompare size={15} className="shrink-0 text-blue-500" />
+          <span>Compare Mode — showing 2 conflicting rows</span>
+          <button
+            type="button"
+            onClick={exitCompareMode}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            <X size={12} />
+            Exit Compare
+          </button>
+        </div>
+      )}
+
       {/* Data Table - Compact */}
       <div className="glass-panel overflow-hidden flex-1">
         <div className="max-h-[calc(100vh-18rem)] overflow-auto pb-4">
@@ -1667,52 +1738,54 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         </div>
       </div>
 
-      {/* Pagination - Always visible and compact */}
-      <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-4 py-2 gap-3">
-        <p className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
-          {startRow}-{endRow} / {totalRows}
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            type="button"
-            title="Previous page"
-          >
-            <ChevronLeft size={16} />
-            Prev
-          </button>
+      {/* Pagination - hidden in compare mode */}
+      {!compareIds && (
+        <div className="flex items-center justify-between rounded-xl border border-white/50 bg-white/60 px-4 py-2 gap-3">
+          <p className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant/80 whitespace-nowrap">
+            {startRow}-{endRow} / {totalRows}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              type="button"
+              title="Previous page"
+            >
+              <ChevronLeft size={16} />
+              Prev
+            </button>
 
-          <div className="flex items-center gap-3 rounded-lg border border-white/60 bg-white px-3 py-2.5">
-            <span className="text-sm text-on-surface-variant">Page</span>
-            <input
-              type="number"
-              min="1"
-              max={totalPages}
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              onBlur={applyPageInput}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') applyPageInput();
-              }}
-              className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-right text-base text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            />
-            <span className="text-sm text-on-surface-variant">of {totalPages}</span>
+            <div className="flex items-center gap-3 rounded-lg border border-white/60 bg-white px-3 py-2.5">
+              <span className="text-sm text-on-surface-variant">Page</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPages}
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value)}
+                onBlur={applyPageInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') applyPageInput();
+                }}
+                className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-right text-base text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <span className="text-sm text-on-surface-variant">of {totalPages}</span>
+            </div>
+
+            <button
+              className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              type="button"
+              title="Next page"
+            >
+              Next
+              <ChevronRight size={16} />
+            </button>
           </div>
-
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] min-w-[44px]"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            type="button"
-            title="Next page"
-          >
-            Next
-            <ChevronRight size={16} />
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Full-screen Import Loading Overlay — freezes all interaction while import is running */}
       {importingCsv && (

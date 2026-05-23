@@ -5,6 +5,16 @@ import { recordAuditLog } from '../lib/auditLogger.js';
 const router = Router();
 const COURSE_OFFERING_AUDIT_MODULE = 'course_offerings';
 
+const GENERAL_RE = /^(G[- ]|CFE|PATH\s*FIT|NSTP|NSTP 2|ADV\s*ORAL(\s*COM)?|FOR\s*LANG|GPIC|GSTS|GMATH|GETHICS|GART|GCWORLD|GSELF|GFIL|GRIPH|AOC|ENVISCI|PEECO)/i;
+// Check descriptive_title first, then fall back to course_no
+function deriveTag(courseNo, descriptiveTitle) {
+  const title = String(descriptiveTitle || '').trim();
+  if (title && GENERAL_RE.test(title)) return 'General';
+  const cn = String(courseNo || '').trim();
+  if (cn && GENERAL_RE.test(cn)) return 'General';
+  return null;
+}
+
 const HEADER_TO_FIELD = {
   currid: 'curr_id',
   curriculumid: 'curr_id',
@@ -423,15 +433,23 @@ function isValidRoomName(token) {
   return true;
 }
 
+// Strip trailing parenthetical annotations from a room token before lookup.
+// e.g. "D101 (Lec)" → "D101", "E-103 (Lab) (2)" → "E-103"
+// Stripping is only for matching; the stored value is always the resolved numeric ID.
+function stripRoomAnnotations(token) {
+  return token.replace(/(\s*\([^)]*\))+\s*$/, '').trim();
+}
+
 // Extract individual room name tokens from a raw cell value.
 // Splits on / and , — so "A101/A102" → ["A101", "A102"]
-// Filters out tokens that do not look like real room identifiers.
+// Trailing parenthetical annotations (e.g. "(Lec)", "(Lab)") are stripped before
+// validation and lookup so that "D101 (Lec)" matches the room "D101" in the DB.
 function extractRoomTokens(rawValue) {
   const normalized = normalizeCell(rawValue);
   if (!normalized) return [];
   return normalized
     .split(/\s*[,/]\s*/)
-    .map((t) => t.trim())
+    .map((t) => stripRoomAnnotations(t.trim()))
     .filter((t) => t.length > 0 && isValidRoomName(t));
 }
 
@@ -551,13 +569,20 @@ function buildCourseOfferingPayload(input = {}, existing = null) {
     tfs_schedule: normalizeCell(input.tfs_schedule ?? existing?.tfs_schedule),
     tfs_room_id: normalizeRoomFieldValue(input.tfs_room_id ?? existing?.tfs_room_id),
     merged: mergedFlag,
+    tag: deriveTag(
+      normalizeCell(input.course_no ?? existing?.course_no),
+      normalizeCell(input.descriptive_title ?? existing?.descriptive_title)
+    ),
   };
 }
 
 function buildSubjectPayloadFromCourseOffering(courseOffering) {
-  return {
+  const courseNo = normalizeCell(courseOffering?.course_no);
+  const title = normalizeCell(courseOffering?.descriptive_title);
+  const tag = courseOffering?.tag ?? deriveTag(courseNo, title);
+  const payload = {
     subject_code: normalizeCell(courseOffering?.code),
-    subject_course_no: normalizeCell(courseOffering?.course_no),
+    subject_course_no: courseNo,
     subject_descriptive_title: normalizeCell(courseOffering?.descriptive_title),
     curr_id: parseNullableNumber(courseOffering?.curr_id),
     department_id: courseOffering?.department_id ?? null,
@@ -570,6 +595,9 @@ function buildSubjectPayloadFromCourseOffering(courseOffering) {
     mth_room: normalizeCell(courseOffering?.mth_room_id),
     tfs_room: normalizeCell(courseOffering?.tfs_room_id),
   };
+  // Only set is_general to true — never force it to false (preserves manual overrides)
+  if (tag === 'General') payload.is_general = true;
+  return payload;
 }
 
 function buildSubjectSyncChecks(courseOffering, subjectPayload) {
@@ -888,6 +916,7 @@ function sanitizeRow(row, departmentLookup, roomLookup) {
     lab_hrs: labHrs.value,
     mth_schedule: normalizeCell(row.mth_schedule),
     tfs_schedule: normalizeCell(row.tfs_schedule),
+    tag: deriveTag(normalizeCell(row.course_no), normalizeCell(row.descriptive_title)),
   };
 
   const mthRoom = resolveRoomIds(row.mth_room_id, roomLookup);
@@ -1675,6 +1704,55 @@ router.post('/sync-subjects', async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error during subject sync.',
+    });
+  }
+});
+
+// POST - Bulk-apply is_general=true to subjects whose linked course offering has tag='General'
+// Subjects with is_general already true are untouched; only false/null ones are upgraded.
+router.post('/apply-general-tags', async (req, res) => {
+  try {
+    const { data: generalOfferings, error: coError } = await supabaseAdmin
+      .from('course_offerings')
+      .select('code, course_no, section, department_id')
+      .eq('tag', 'General');
+
+    if (coError) throw new Error(`Failed to fetch general offerings: ${coError.message}`);
+
+    const offerings = Array.isArray(generalOfferings) ? generalOfferings : [];
+    if (offerings.length === 0) {
+      return res.json({ updated: 0 });
+    }
+
+    const subjectMaps = await preloadSubjectLookups();
+    const toUpdate = new Map(); // subject_id → true
+
+    for (const offering of offerings) {
+      const subjectCode = normalizeCell(offering.code);
+      if (!subjectCode) continue;
+      const section = normalizeCell(offering.section) ?? '';
+      const deptId = offering.department_id;
+      const existing = lookupSubjectInMaps(subjectCode, section, deptId, subjectMaps);
+      if (existing) toUpdate.set(existing.subject_id, true);
+    }
+
+    if (toUpdate.size === 0) {
+      return res.json({ updated: 0 });
+    }
+
+    const subjectIds = Array.from(toUpdate.keys());
+    const { error: updateError } = await supabaseAdmin
+      .from('subjects')
+      .update({ is_general: true })
+      .in('subject_id', subjectIds)
+      .eq('is_general', false);
+
+    if (updateError) throw new Error(`Failed to update subjects: ${updateError.message}`);
+
+    return res.json({ updated: subjectIds.length });
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unknown error during general tag sync.',
     });
   }
 });

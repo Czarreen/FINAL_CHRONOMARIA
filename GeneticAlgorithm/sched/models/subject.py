@@ -29,7 +29,6 @@ class SubjectState(str, Enum):
 
 class SubjectTag(str, Enum):
     """Visual tag applied to the output for the frontend."""
-    GENERAL = "General"
     ORIGINAL = "Original"
     GENERATED = "Generated"
     RESCHEDULED = "Rescheduled"
@@ -53,8 +52,8 @@ class Subject(BaseModel):
     Units, Lec(hrs), Lab(hrs), MTh SCHEDULE, MTh Room,
     TFS SCHEDULE, TFS Room, MERGED
     """
-    subject_id: int      # DB primary key — pipeline unique identifier
-    curr_id: int         # curriculum_id display column — NOT unique, NOT used as PK
+    subject_id: int           # DB primary key — pipeline unique identifier
+    curr_id: Optional[int] = None  # curriculum_id display column — NOT unique, NOT used as PK
     code: Optional[str] = None
     course_no: str
     department_id: str
@@ -72,6 +71,7 @@ class Subject(BaseModel):
     tfs_room: Optional[str] = None
 
     merged_with: Optional[str] = None
+    merge_group_id: Optional[int] = None
 
     # Flag passed from DB/Node side; takes priority over course_no pattern matching
     is_general: Optional[bool] = None
@@ -80,6 +80,7 @@ class Subject(BaseModel):
     subject_type: Optional[SubjectType] = None
     subject_state: Optional[SubjectState] = None
     tag: Optional[SubjectTag] = None
+    requires_lab_room: Optional[bool] = None
 
     @field_validator('code', 'mth_schedule', 'mth_room', 'tfs_schedule', 'tfs_room',
                      'merged_with', mode='before')
@@ -88,7 +89,7 @@ class Subject(BaseModel):
         return _empty_to_none(v)
 
     def is_general_subject(self) -> bool:
-        """True if this subject is classified as GENERAL (locked external faculty)."""
+        """True if this subject is classified as a general education subject."""
         return self.subject_type == SubjectType.GENERAL
 
     def is_empty(self) -> bool:
