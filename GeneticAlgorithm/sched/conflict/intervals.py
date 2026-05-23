@@ -17,7 +17,7 @@ import re
 from typing import Tuple, List, Optional
 
 SCHED_START_MIN = 7 * 60 + 30   # 450 — 7:30 AM
-SCHED_END_MAX   = 20 * 60        # 1200 — 8:00 PM
+SCHED_END_MAX   = 21 * 60        # 1260 — 9:00 PM (Saturday evening classes end at 8:30 PM)
 PM_THRESHOLD    = 7 * 60         # 420 — raw hours < 7:00 treated as PM
 
 
@@ -104,7 +104,7 @@ def overlaps(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
     return a_start < b_end and b_start < a_end
 
 
-_DAY_TOKENS = r'(?:Saturday|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Mon|Tue|Wed|Thu?|Fri|Sat|Sun|M|T|W|F|S)'
+_DAY_TOKENS = r'(?:Saturday|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Mon|Tue|Wed|Thu?|Fri|Sat|Sun|M|T|F|S)'
 _TYPE_TOKENS = r'(?:Lab|Lec)'
 
 # Matches "HH:MM-HH:MM" optionally followed by " DAY" and " TYPE"
@@ -123,6 +123,26 @@ _DAY_ONLY_RE = re.compile(
 )
 
 
+def pre_clean_schedule(s: str) -> str:
+    """
+    Normalize a raw schedule string before parsing.
+
+    Steps (in order):
+      - Drop date-range annotations like "(Jan 20-..)"
+      - Fix semicolon typos in time positions: "4;30" -> "4:30"
+      - Strip trailing comma
+      - Normalize Saturday variants: saturday/sat/Sat. -> Sat
+    """
+    s = s.strip()
+    s = re.sub(r'\([^)]*\)', '', s).strip()
+    s = re.sub(r'(\d);(\d{2})', r'\1:\2', s)
+    s = s.rstrip(',').strip()
+    s = re.sub(r'\b[Ss]aturday\b', 'Sat', s)
+    s = re.sub(r'\bsat\b', 'Sat', s)
+    s = re.sub(r'\bSat\.', 'Sat', s)
+    return s
+
+
 def strip_day_overrides(s: str) -> Tuple[str, List[str]]:
     """
     Separate the time portion from day-override tokens.
@@ -137,6 +157,7 @@ def strip_day_overrides(s: str) -> Tuple[str, List[str]]:
     "4:30-6:00 T"            -> ("4:30-6:00", ["T"])
     """
     s = s.strip()
+    s = s.replace('/', ',')
     segments = [seg.strip() for seg in s.split(',')]
     time_parts: List[str] = []
     overrides: List[str] = []

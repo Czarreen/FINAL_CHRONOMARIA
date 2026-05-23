@@ -1,6 +1,6 @@
 """Tests for sched/conflict/intervals.py."""
 import pytest
-from sched.conflict.intervals import parse_time, parse_time_range, overlaps, strip_day_overrides
+from sched.conflict.intervals import parse_time, parse_time_range, overlaps, strip_day_overrides, pre_clean_schedule
 
 
 class TestParseTime:
@@ -54,8 +54,14 @@ class TestParseTimeRange:
         with pytest.raises(ValueError):
             parse_time_range("not-a-time")
 
+    def test_saturday_evening_allowed(self):
+        # 5:30 PM - 8:30 PM = 1050 - 1230; within SCHED_END_MAX of 1260
+        start, end = parse_time_range("5:30-8:30")
+        assert start == 1050
+        assert end == 1230
+
     def test_too_late_raises(self):
-        # 9:00 PM start -> raw 21:00 = 1260 > SCHED_END_MAX 1200 -> ValueError
+        # 10:00 PM end = 1320 > SCHED_END_MAX 1260 -> ValueError
         with pytest.raises(ValueError):
             parse_time_range("9:00 PM-10:00 PM")
 
@@ -112,3 +118,31 @@ class TestStripDayOverrides:
         time_part, overrides = strip_day_overrides("4:30-6:00 T")
         assert time_part == "4:30-6:00"
         assert overrides == ["T"]
+
+    def test_slash_treated_as_comma(self):
+        time_part, overrides = strip_day_overrides("7:30-10:30 M Lec/7:30-10:30 Th Lab")
+        assert "7:30-10:30" in time_part
+        assert "M" in overrides or any("M" in o for o in overrides)
+
+
+class TestPreCleanSchedule:
+    def test_semicolon_fix(self):
+        assert pre_clean_schedule("4;30-6:00") == "4:30-6:00"
+
+    def test_date_annotation_dropped(self):
+        assert pre_clean_schedule("11:00-2:00 Sat (Jan 20-..)") == "11:00-2:00 Sat"
+
+    def test_saturday_full_word_normalized(self):
+        assert pre_clean_schedule("1:00-3:00 Saturday") == "1:00-3:00 Sat"
+
+    def test_saturday_lowercase_normalized(self):
+        assert pre_clean_schedule("9:00-12:00 saturday") == "9:00-12:00 Sat"
+
+    def test_saturday_with_period_normalized(self):
+        assert pre_clean_schedule("1:00-3:00 Sat.") == "1:00-3:00 Sat"
+
+    def test_trailing_comma_stripped(self):
+        assert pre_clean_schedule("1:30-4:30 T Lab,") == "1:30-4:30 T Lab"
+
+    def test_no_change_for_clean_string(self):
+        assert pre_clean_schedule("1:00-3:00 M") == "1:00-3:00 M"

@@ -16,13 +16,14 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing import List, Optional
 from enum import Enum
 
-from sched.conflict.intervals import overlaps as _overlaps, parse_time_range, strip_day_overrides
+import re
+
+from sched.conflict.intervals import overlaps as _overlaps, parse_time_range, strip_day_overrides, pre_clean_schedule
 
 
 class Day(str, Enum):
     MON = "M"
     TUE = "T"
-    WED = "W"
     THU = "Th"
     FRI = "F"
     SAT = "Sat"
@@ -46,9 +47,6 @@ _DAY_ALIAS: dict = {
     "T": Day.TUE,
     "TUE": Day.TUE,
     "TUESDAY": Day.TUE,
-    "W": Day.WED,
-    "WED": Day.WED,
-    "WEDNESDAY": Day.WED,
     "TH": Day.THU,
     "THU": Day.THU,
     "THURSDAY": Day.THU,
@@ -117,7 +115,13 @@ class ParsedSchedule(BaseModel):
         and lab/lec splits across days.
         """
         raw = raw.strip()
-        time_portion, day_overrides = strip_day_overrides(raw)
+        cleaned = pre_clean_schedule(raw)
+
+        if re.search(r'\bW\b', cleaned):
+            return cls(raw=raw, default_pattern=default_pattern,
+                       blocks=[], has_override=False)
+
+        time_portion, day_overrides = strip_day_overrides(cleaned)
         has_override = bool(day_overrides)
 
         blocks: List[TimeBlock] = []

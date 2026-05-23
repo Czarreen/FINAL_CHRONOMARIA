@@ -17,6 +17,7 @@ from sched.models.subject import Subject, SubjectType, SubjectState, SubjectTag
 from sched.models.merge_group import MergeGroup
 from sched.flow.state import PipelineState
 from sched.flow.census import assert_invariant
+from sched.conflict.merge_detector import detect_room_based_merges
 
 
 _GENERAL_RE = re.compile(
@@ -191,6 +192,11 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     """
     Tag all subjects, detect merge groups, assign to pipeline buckets.
     Verifies census invariant before returning.
+
+    Merge detection runs in two passes:
+      1. merged_with column (explicit human annotation)
+      2. Room-time evidence + confidence scoring (new, handles subjects
+         not captured by the merged_with column)
     """
     if not subjects:
         return PipelineState(original_input_ids=[])
@@ -199,11 +205,30 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
         s.subject_type = classify_subject_type(s)
         s.subject_state = classify_subject_state(s)
 
+    # Pass 1: merged_with-based detection (existing logic)
     merge_groups = detect_merge_groups(subjects)
-
     merged_ids: Set[int] = {
         m['subject_id'] for mg in merge_groups for m in mg.members
     }
+
+    # Pass 2: room-time evidence detection on subjects not already grouped
+    room_result = detect_room_based_merges(subjects, exclude_ids=merged_ids)
+
+    new_confirmed_ids: Set[int] = {
+        m['subject_id']
+        for mg in room_result.confirmed_merges
+        for m in mg.members
+    }
+    new_likely_ids: Set[int] = {
+        m['subject_id']
+        for mg in room_result.likely_merges
+        for m in mg.members
+    }
+    new_partial_ids: Set[int] = {s.subject_id for s in room_result.partial_data}
+
+    # All subjects handled by either detector are skipped in the main routing loop
+    skip_ids = merged_ids | new_confirmed_ids | new_likely_ids | new_partial_ids
+
     subject_by_id: Dict[int, Subject] = {s.subject_id: s for s in subjects}
 
     resolved: List[Subject] = []
@@ -212,7 +237,7 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
     saturday_pile: List[Subject] = []
 
     for s in subjects:
-        if s.subject_id in merged_ids:
+        if s.subject_id in skip_ids:
             continue
         if s.subject_type == SubjectType.GENERAL:
             if s.subject_state == SubjectState.SCHEDULED:
@@ -228,6 +253,7 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
 
     final_merged_groups: List[MergeGroup] = []
 
+    # Route pass-1 merge groups
     for mg in merge_groups:
         if mg.all_scheduled():
             for m in mg.members:
@@ -240,6 +266,27 @@ def run_preflight(subjects: List[Subject]) -> PipelineState:
                 s = subject_by_id.get(m['subject_id'])
                 if s:
                     pending.append(s)
+
+    # Route pass-2 confirmed merges -> merged_groups
+    for mg in room_result.confirmed_merges:
+        for m in mg.members:
+            s = subject_by_id.get(m['subject_id'])
+            if s:
+                s.tag = SubjectTag.ORIGINAL
+        final_merged_groups.append(mg)
+
+    # Route pass-2 likely merges -> manual_review
+    for mg in room_result.likely_merges:
+        for m in mg.members:
+            s = subject_by_id.get(m['subject_id'])
+            if s:
+                s.tag = SubjectTag.MANUAL_REVIEW
+                manual_review.append(s)
+
+    # Route pass-2 partial_data -> manual_review
+    for s in room_result.partial_data:
+        s.tag = SubjectTag.MANUAL_REVIEW
+        manual_review.append(s)
 
     state = PipelineState(
         locked=[],
