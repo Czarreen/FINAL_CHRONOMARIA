@@ -91,15 +91,21 @@ function qualityTone(quality) {
   }
 }
 
-function isSatOnlySchedule(mthSchedule, tfsSchedule) {
+function getSpecialDayOnlyScheduleLabel(mthSchedule, tfsSchedule) {
   const hasSat = (s) => /\bsat(urday)?\b/i.test(s || '');
-  const hasWeekday = (s) => /\b(mon|tue|wed|thu|fri|mth|tfs)\b/i.test(s || '');
-  const mthEmpty = !mthSchedule;
-  const tfsEmpty = !tfsSchedule;
-  if (mthEmpty && tfsEmpty) return false;
-  const mthOk = mthEmpty || (hasSat(mthSchedule) && !hasWeekday(mthSchedule));
-  const tfsOk = tfsEmpty || (hasSat(tfsSchedule) && !hasWeekday(tfsSchedule));
-  return mthOk && tfsOk && (!mthEmpty || !tfsEmpty);
+  const hasWed = (s) => /\b(wed(nesday)?|w)\b/i.test(s || '');
+  const hasAutomatedWeekday = (s) => /\b(mon|tue|thu|fri|mth|tfs)\b/i.test(s || '');
+  const mthText = String(mthSchedule || '').trim();
+  const tfsText = String(tfsSchedule || '').trim();
+  if (!mthText && !tfsText) return null;
+  const combinedText = `${mthText} ${tfsText}`.trim();
+  if (hasSat(combinedText) && !hasAutomatedWeekday(combinedText)) return 'SAT';
+  if (hasWed(combinedText) && !hasAutomatedWeekday(combinedText)) return 'WED';
+  return null;
+}
+
+function isSatOnlySchedule(mthSchedule, tfsSchedule) {
+  return getSpecialDayOnlyScheduleLabel(mthSchedule, tfsSchedule) === 'SAT';
 }
 
 function formatDateTimeStandard(date) {
@@ -853,7 +859,9 @@ export default function FacultyLoadingView() {
                         <td colSpan={columns.length} className="px-4 py-4 text-center text-xs text-on-surface-variant">No rows match your search.</td>
                       </tr>
                     ) : (
-                      paginatedRows.map((item, index) => (
+                      paginatedRows.map((item, index) => {
+                        const specialDayLabel = getSpecialDayOnlyScheduleLabel(item.mth_schedule, item.tfs_schedule);
+                        return (
                         <tr key={`assignment-${index}`} className="border-t border-white/60">
                           <td className="px-4 py-3 text-on-surface">{item.section || '-'}</td>
                           <td className="px-4 py-3 text-on-surface">{item.code || '-'}</td>
@@ -868,9 +876,12 @@ export default function FacultyLoadingView() {
                                   {getScheduleAmPm(item.mth_schedule)}
                                 </span>
                               )}
-                              {isSatOnlySchedule(item.mth_schedule, item.tfs_schedule) && (
-                                <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700" title="Saturday-only — assign manually">
-                                  SAT
+                              {item.mth_schedule && specialDayLabel && (
+                                <span
+                                  className="px-1 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700"
+                                  title={`${specialDayLabel}-only — assign manually`}
+                                >
+                                  {specialDayLabel}
                                 </span>
                               )}
                             </span>
@@ -883,20 +894,29 @@ export default function FacultyLoadingView() {
                                   {getScheduleAmPm(item.tfs_schedule)}
                                 </span>
                               )}
+                              {item.tfs_schedule && specialDayLabel && (
+                                <span
+                                  className="px-1 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700"
+                                  title={`${specialDayLabel}-only — assign manually`}
+                                >
+                                  {specialDayLabel}
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-on-surface">{item.department_name || 'Unassigned department'}</td>
                           <td className="px-4 py-3 text-on-surface">
                             {item.faculty_name || (
-                              isSatOnlySchedule(item.mth_schedule, item.tfs_schedule)
-                                ? <span className="text-xs text-purple-600 font-medium">Manual (SAT)</span>
+                              specialDayLabel
+                                ? <span className="text-xs text-purple-600 font-medium">Manual ({specialDayLabel})</span>
                                 : '-'
                             )}
                           </td>
                           <td className="px-4 py-3 text-on-surface-variant">{item.merged ? 'Merged' : ''}</td>
                           <td className="px-4 py-3 text-on-surface-variant capitalize">{item.load_status?.replace(/_/g, ' ') || '-'}</td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

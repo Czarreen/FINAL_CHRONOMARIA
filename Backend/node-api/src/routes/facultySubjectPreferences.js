@@ -7,6 +7,7 @@ import { Router } from 'express';
 import {
   fetchAllFacultySubjectPreferences,
   fetchFacultySubjectPreferencesForFaculty,
+  fetchFacultyPrepLimit,
   saveFacultySubjectPreference,
   deleteFacultySubjectPreference,
   autoGenerateFacultySubjectPreferences,
@@ -45,10 +46,18 @@ router.get('/:facultyId/subject-preferences', async (req, res) => {
       return res.status(400).json({ error: 'Valid faculty ID required' });
     }
 
-    const preferences = await fetchFacultySubjectPreferencesForFaculty(Number(facultyId));
+    const numericFacultyId = Number(facultyId);
+    const [preferences, prepMeta] = await Promise.all([
+      fetchFacultySubjectPreferencesForFaculty(numericFacultyId),
+      fetchFacultyPrepLimit(numericFacultyId),
+    ]);
 
     return res.json({
-      facultyId: Number(facultyId),
+      facultyId: numericFacultyId,
+      prepLimit: prepMeta.prepLimit,
+      facultyMaxUnits: prepMeta.facultyMaxUnits,
+      usedTaggedUnits: Number(prepMeta.usedTaggedUnits || 0),
+      remainingUnits: Number(prepMeta.remainingUnits || 0),
       preferences: preferences || [],
       count: preferences ? preferences.length : 0,
     });

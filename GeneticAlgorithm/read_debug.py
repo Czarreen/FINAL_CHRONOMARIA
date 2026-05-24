@@ -12,6 +12,7 @@ print("ga_last_run.json")
 print("=" * 60)
 print("Summary :", rpt.get("summary"))
 print("SAT-only:", rpt.get("sat_only_count", "N/A"))
+print("WED-only:", rpt.get("wed_only_count", "N/A"))
 print(f"Fitness  : overall={run.get('fitness_overall')}  hard={run.get('fitness_hard')}  soft={run.get('fitness_soft')}")
 print(f"Gens     : {run.get('generations')}  Runtime: {run.get('runtime_ms')} ms")
 print(f"Assigned : {len(run.get('assignments', []))}")
@@ -95,4 +96,7 @@ for fac in dbg.get("faculty_initial_state", []):
 
 print("\n--- SAT-only excluded ---")
 for s in dbg.get("sat_only_excluded", []):
+    print(f"  code={s.get('code')} sec={s.get('section')} {s.get('descriptive_title')}")
+print("\n--- WED-only excluded ---")
+for s in dbg.get("wed_only_excluded", []):
     print(f"  code={s.get('code')} sec={s.get('section')} {s.get('descriptive_title')}")

@@ -4,8 +4,9 @@
  * Uses subject_tag (text) instead of subject_id for historical preservation
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  fetchAllFacultySubjectPreferences,
   fetchFacultySubjectPreferences,
   fetchAvailableSubjectsForFaculty,
   addFacultySubjectPreference,
@@ -29,6 +30,13 @@ const PRIORITY_COLORS = {
 export default function FacultySubjectPreferencesModal({ facultyId, facultyName, onClose }) {
   const [preferences, setPreferences] = useState([]);
   const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [tagUsageCounts, setTagUsageCounts] = useState({});
+  const [isSubjectMenuOpen, setIsSubjectMenuOpen] = useState(false);
+  const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
+  const [prepLimit, setPrepLimit] = useState(4);
+  const [facultyMaxUnits, setFacultyMaxUnits] = useState(0);
+  const [usedTaggedUnits, setUsedTaggedUnits] = useState(0);
+  const [remainingUnits, setRemainingUnits] = useState(0);
   const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('2');
   const [loading, setLoading] = useState(true);
@@ -36,6 +44,28 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
   const [successMessage, setSuccessMessage] = useState(null);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const subjectMenuRef = useRef(null);
+  const subjectSearchInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (subjectMenuRef.current && !subjectMenuRef.current.contains(event.target)) {
+        setIsSubjectMenuOpen(false);
+        setSubjectSearchQuery('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isSubjectMenuOpen) {
+      window.requestAnimationFrame(() => {
+        subjectSearchInputRef.current?.focus();
+      });
+    }
+  }, [isSubjectMenuOpen]);
 
   // Fetch initial data
   useEffect(() => {
@@ -44,20 +74,29 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
         setLoading(true);
         setError(null);
 
-        const [preferencesData, subjectsData] = await Promise.all([
+        const [preferencesData, subjectsData, allPreferences] = await Promise.all([
           fetchFacultySubjectPreferences(facultyId),
           fetchAvailableSubjectsForFaculty(facultyId),
+          fetchAllFacultySubjectPreferences().catch(() => ({})),
         ]);
 
-        console.log('📊 Modal Data Loaded:', {
-          facultyId,
-          preferencesCount: preferencesData.preferences?.length || 0,
-          availableSubjectsCount: subjectsData.subjects?.length || 0,
-          preferences: preferencesData.preferences,
-          availableSubjects: subjectsData.subjects,
-        });
+        const usageCounts = {};
+        for (const prefs of Object.values(allPreferences || {})) {
+          for (const pref of prefs || []) {
+            const code = String(pref.subject_tag || '').trim().toUpperCase();
+            if (!code) continue;
+            usageCounts[code] = (usageCounts[code] || 0) + 1;
+          }
+        }
+
+        // modal data loaded
 
         setPreferences(preferencesData.preferences || []);
+        setPrepLimit(Number(preferencesData.prepLimit ?? 4));
+        setFacultyMaxUnits(Number(preferencesData.facultyMaxUnits ?? 0));
+        setUsedTaggedUnits(Number(preferencesData.usedTaggedUnits ?? 0));
+        setRemainingUnits(Number(preferencesData.remainingUnits ?? 0));
+        setTagUsageCounts(usageCounts);
         setAvailableSubjects(subjectsData.subjects || []);
       } catch (err) {
         console.error('❌ Error loading data:', err);
@@ -70,8 +109,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
     loadData();
   }, [facultyId]);
 
-  const MAX_SUBJECT_TAGS = 4;
-
   // Handle adding a new preference
   const handleAddPreference = async () => {
     if (!selectedSubjectCode) {
@@ -79,8 +116,11 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       return;
     }
 
-    if (preferences.length >= MAX_SUBJECT_TAGS) {
-      setError(`Maximum of ${MAX_SUBJECT_TAGS} subject tags allowed. The GA preparation limit is ${MAX_SUBJECT_TAGS} subjects per faculty.`);
+    // Client-side remaining units check
+    const sel = availableSubjects.find((s) => s.subject_code === selectedSubjectCode);
+    const selUnits = Number(sel?.subject_units || 0);
+    if (remainingUnits <= 0 || selUnits > remainingUnits) {
+      setError(`Cannot add subject: only ${remainingUnits} unit(s) remaining for this faculty.`);
       return;
     }
 
@@ -96,10 +136,16 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       // Refresh preferences
       const preferencesData = await fetchFacultySubjectPreferences(facultyId);
       setPreferences(preferencesData.preferences || []);
+      setPrepLimit(Number(preferencesData.prepLimit ?? 4));
+      setFacultyMaxUnits(Number(preferencesData.facultyMaxUnits ?? 0));
+      setUsedTaggedUnits(Number(preferencesData.usedTaggedUnits ?? 0));
+      setRemainingUnits(Number(preferencesData.remainingUnits ?? 0));
 
       // Reset form
       setSelectedSubjectCode('');
       setSelectedPriority('2');
+      setSubjectSearchQuery('');
+      setIsSubjectMenuOpen(false);
       setSuccessMessage('Subject preference added successfully');
 
       // Clear success message after 3 seconds
@@ -126,6 +172,11 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       // Refresh preferences
       const preferencesData = await fetchFacultySubjectPreferences(facultyId);
       setPreferences(preferencesData.preferences || []);
+      setPrepLimit(Number(preferencesData.prepLimit ?? 4));
+      setFacultyMaxUnits(Number(preferencesData.facultyMaxUnits ?? 0));
+      setUsedTaggedUnits(Number(preferencesData.usedTaggedUnits ?? 0));
+      setRemainingUnits(Number(preferencesData.remainingUnits ?? 0));
+      setSubjectSearchQuery('');
 
       setSuccessMessage('Subject preference deleted successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -148,6 +199,11 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       // Refresh preferences
       const preferencesData = await fetchFacultySubjectPreferences(facultyId);
       setPreferences(preferencesData.preferences || []);
+      setPrepLimit(Number(preferencesData.prepLimit ?? 4));
+      setFacultyMaxUnits(Number(preferencesData.facultyMaxUnits ?? 0));
+      setUsedTaggedUnits(Number(preferencesData.usedTaggedUnits ?? 0));
+      setRemainingUnits(Number(preferencesData.remainingUnits ?? 0));
+      setSubjectSearchQuery('');
 
       setSuccessMessage('Priority updated successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -174,6 +230,11 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       // Refresh preferences
       const preferencesData = await fetchFacultySubjectPreferences(facultyId);
       setPreferences(preferencesData.preferences || []);
+      setPrepLimit(Number(preferencesData.prepLimit ?? 4));
+      setFacultyMaxUnits(Number(preferencesData.facultyMaxUnits ?? 0));
+      setUsedTaggedUnits(Number(preferencesData.usedTaggedUnits ?? 0));
+      setRemainingUnits(Number(preferencesData.remainingUnits ?? 0));
+      setSubjectSearchQuery('');
 
       setSuccessMessage(
         `Auto-generated ${result.count} subject preference(s) successfully`
@@ -196,17 +257,141 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
     return parts.join(' - ') || 'Unknown Subject';
   };
 
-  // Get subjects not yet tagged
-  const untaggedSubjects = availableSubjects.filter(
-    (subject) => !preferences.some((pref) => pref.subject_tag === subject.subject_code?.toUpperCase())
-  );
+  const getTagUsageLabel = (subjectCode) => {
+    const count = Number(tagUsageCounts[String(subjectCode || '').toUpperCase()] || 0);
+    return String(count);
+  };
 
-  console.log('🏷️ Subject Status:', {
-    availableCount: availableSubjects.length,
-    taggedCount: preferences.length,
-    untaggedCount: untaggedSubjects.length,
-    isDropdownDisabled: untaggedSubjects.length === 0,
+  const getTagUsageTone = (subjectCode) => {
+    const count = Number(tagUsageCounts[String(subjectCode || '').toUpperCase()] || 0);
+    if (count <= 0) return 'tone-green';
+    if (count <= 3) return 'tone-yellow';
+    return 'tone-red';
+  };
+
+  const normalizeSearchText = (value) =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const compactSearchText = (value) =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+
+  const matchesSearchQuery = (subject, query) => {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) return true;
+    const subjectCode = normalizeSearchText(subject.subject_code);
+    const subjectTitle = normalizeSearchText(subject.subject_descriptive_title);
+    const subjectDisplay = normalizeSearchText(getSubjectDisplay(subject));
+    const compactQuery = compactSearchText(query);
+    const compactCode = compactSearchText(subject.subject_code);
+    const compactTitle = compactSearchText(subject.subject_descriptive_title);
+    const compactDisplay = compactSearchText(getSubjectDisplay(subject));
+    const queryParts = normalizedQuery.split(/\s+/).filter(Boolean);
+
+    if (
+      compactQuery &&
+      (
+        compactCode.includes(compactQuery) ||
+        compactTitle.includes(compactQuery) ||
+        compactDisplay.includes(compactQuery)
+      )
+    ) {
+      return true;
+    }
+
+    return queryParts.every((part) => {
+      return (
+        subjectCode.includes(part) ||
+        subjectTitle.includes(part) ||
+        subjectDisplay.includes(part)
+      );
+    });
+  };
+
+  // Get subjects not yet tagged and that fit remaining capacity
+  const untaggedSubjects = availableSubjects.filter((subject) => {
+    const code = subject.subject_code?.toUpperCase();
+    if (!code) return false;
+    if (preferences.some((pref) => pref.subject_tag === code)) return false;
+    const units = Number(subject.subject_units || 0);
+    if (remainingUnits <= 0) return false;
+    return units <= remainingUnits;
   });
+
+  // Compute a relevance score for each candidate and sort by relevance so
+  // the most relevant subjects appear on top instead of preserving input order.
+  const scoreSubjectMatch = (subject, query) => {
+    const qNorm = normalizeSearchText(query);
+    const qCompact = compactSearchText(query);
+    if (!qNorm) return 100; // no query — keep original ordering but high score so appears
+
+    const code = String(subject.subject_code || '').toLowerCase();
+    const title = normalizeSearchText(subject.subject_descriptive_title || '');
+    const display = normalizeSearchText(getSubjectDisplay(subject));
+    const compactCode = compactSearchText(subject.subject_code || '');
+    const compactTitle = compactSearchText(subject.subject_descriptive_title || '');
+
+    // Start with a base score if the legacy matcher considers it a match
+    let score = matchesSearchQuery(subject, query) ? 100 : 0;
+
+    // Exact code match (highest)
+    if (compactCode === qCompact && qCompact) score += 1000;
+    // Code starts with query
+    if (compactCode.startsWith(qCompact) && qCompact) score += 500;
+    // Code contains query
+    if (compactCode.includes(qCompact) && qCompact) score += 250;
+
+    // Title exact phrase
+    if (display.includes(qNorm) && qNorm) score += 200;
+    // Title token matches: more tokens matched -> higher score
+    const qParts = qNorm.split(/\s+/).filter(Boolean);
+    let titleMatchCount = 0;
+    for (const p of qParts) {
+      if (title.includes(p) || display.includes(p)) titleMatchCount += 1;
+    }
+    score += titleMatchCount * 50;
+
+    // Fallback small score if compact display contains compact query
+    if (compactTitle.includes(qCompact) || compactCode.includes(qCompact)) score += 10;
+
+    return score;
+  };
+
+  const searchableSubjects = (() => {
+    // Map candidates to scored objects
+    const scored = untaggedSubjects.map((subject) => ({
+      subject,
+      score: scoreSubjectMatch(subject, subjectSearchQuery),
+    }));
+
+    // Filter out non-matches when query present
+    const filtered = subjectSearchQuery
+      ? scored.filter((s) => s.score > 0)
+      : scored;
+
+    // Sort by score desc, then by subject_code asc for stability
+    filtered.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aCode = String(a.subject.subject_code || '');
+      const bCode = String(b.subject.subject_code || '');
+      return aCode.localeCompare(bCode);
+    });
+
+    // no debug logging
+
+    return filtered.map((f) => f.subject);
+  })();
+
+  const openSubjectMenu = () => {
+    if (untaggedSubjects.length === 0 || isAdding || remainingUnits <= 0) return;
+    setIsSubjectMenuOpen((open) => !open);
+  };
+
+  // subject status availableCount/taggedCount/untaggedCount
 
   if (loading) {
     return (
@@ -248,25 +433,73 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
           <div className="add-subject-section">
             <h3>Add Subject Tag</h3>
             <div className="add-subject-form">
-              <select
-                value={selectedSubjectCode}
-                onChange={(e) => setSelectedSubjectCode(e.target.value)}
-                className="subject-select"
-                disabled={untaggedSubjects.length === 0 || isAdding || preferences.length >= MAX_SUBJECT_TAGS}
-              >
-                <option value="">
-                  {preferences.length >= MAX_SUBJECT_TAGS
-                    ? 'Tag limit reached (4 max)'
-                    : untaggedSubjects.length === 0
-                    ? 'All subjects tagged'
-                    : 'Select a subject...'}
-                </option>
-                {untaggedSubjects.map((subject) => (
-                  <option key={subject.subject_code} value={subject.subject_code}>
-                    {getSubjectDisplay(subject)}
-                  </option>
-                ))}
-              </select>
+              <div className="subject-select-wrapper" ref={subjectMenuRef}>
+                <button
+                  type="button"
+                  className="subject-select-button"
+                  onClick={openSubjectMenu}
+                  disabled={untaggedSubjects.length === 0 || isAdding || remainingUnits <= 0}
+                >
+                  <span className="subject-select-button-label">
+                    {selectedSubjectCode
+                      ? getSubjectDisplay(
+                          availableSubjects.find((subject) => subject.subject_code === selectedSubjectCode)
+                        )
+                      : remainingUnits <= 0
+                      ? `No remaining units (${usedTaggedUnits}/${facultyMaxUnits})`
+                      : untaggedSubjects.length === 0
+                      ? 'No eligible subjects available'
+                      : 'Select a subject...'}
+                  </span>
+                  <span className="subject-select-button-caret">▾</span>
+                </button>
+
+                {isSubjectMenuOpen && untaggedSubjects.length > 0 && remainingUnits > 0 && (
+                  <div className="subject-select-menu">
+                    <div className="subject-search-wrapper">
+                      <input
+                        type="text"
+                        className="subject-search-input"
+                        placeholder="Search subject code or title..."
+                        value={subjectSearchQuery}
+                        onChange={(e) => setSubjectSearchQuery(e.target.value)}
+                        ref={subjectSearchInputRef}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+
+                    {searchableSubjects.length === 0 ? (
+                      <div className="subject-search-empty">No matching subjects</div>
+                    ) : (
+                      searchableSubjects.map((subject, idx) => {
+                        const code = subject.subject_code;
+                        const countLabel = getTagUsageLabel(code);
+                        const uniqueKey = `${String(code || '')}__${String(subject.subject_descriptive_title || '')}__${idx}`;
+                        return (
+                          <button
+                            key={uniqueKey}
+                            type="button"
+                            className="subject-select-option"
+                            onClick={() => {
+                              setSelectedSubjectCode(code);
+                              setSubjectSearchQuery('');
+                              setIsSubjectMenuOpen(false);
+                            }}
+                          >
+                            <span className="subject-select-option-text">
+                              {getSubjectDisplay(subject)}
+                            </span>
+                            <span className={`subject-count-pill ${getTagUsageTone(code)}`}>
+                              {countLabel}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
 
               <select
                 value={selectedPriority}
@@ -284,7 +517,7 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
               <button
                 onClick={handleAddPreference}
                 className="btn btn-primary"
-                disabled={!selectedSubjectCode || isAdding || preferences.length >= MAX_SUBJECT_TAGS}
+                disabled={!selectedSubjectCode || isAdding || remainingUnits <= 0}
               >
                 {isAdding ? 'Adding...' : 'Add'}
               </button>
@@ -308,18 +541,18 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
           {/* Current Tags Section */}
           <div className="current-tags-section">
             <h3>
-              Current Tags ({preferences.length} / {MAX_SUBJECT_TAGS})
-              {preferences.length >= MAX_SUBJECT_TAGS && (
-                <span className="tag-limit-warning"> — Limit reached</span>
-              )}
+              Current Tags ({preferences.length})
             </h3>
+            <p className="help-text">
+              Units used: {usedTaggedUnits} / {facultyMaxUnits || 0} — Remaining: {remainingUnits}
+            </p>
 
             {/* Prep slot breakdown */}
             {preferences.length > 0 && (() => {
               const p1Count = preferences.filter(p => p.priority_level === 1).length;
               const p2Count = preferences.filter(p => p.priority_level === 2).length;
               const p3Count = preferences.filter(p => p.priority_level === 3).length;
-              const remaining = MAX_SUBJECT_TAGS - preferences.length;
+              const remaining = Math.max(0, prepLimit - preferences.length);
               return (
                 <div className="prep-slot-breakdown">
                   <span className="prep-slot-item prep-slot-p1" title="Hard pre-assigned before GA runs">

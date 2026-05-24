@@ -1366,6 +1366,7 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     faculty_loading: snapshot.faculty_loading || [],
     department_faculty_counts: departmentFacultyCounts,
     department_available_faculty_counts: departmentAvailableFacultyCounts,
+    problematic_offerings: preFlight.problematic_offerings || [],
     constraints: normalizedConstraints,
     run_id: runId,
   };
@@ -1394,6 +1395,17 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     run_id: optimizerResult.run_id || runId,
     preflight: preFlight,
   };
+
+  const preflightProblemMap = new Map(
+    (preFlight.problematic_offerings || []).map((item) => [
+      [
+        String(item.code || '').toUpperCase(),
+        String(item.course_no || '').toUpperCase(),
+        String(item.section || '').toUpperCase(),
+      ].join('|'),
+      item,
+    ])
+  );
 
   if (!dryRun) {
     mergedResult.persistence = await persistFacultyLoading(optimizerResult.assignments || [], subjectDrivenSnapshot);
@@ -1443,6 +1455,13 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
       ? optimizerResult.report.unresolved_offerings.map((item) => ({
           ...item,
           department_name: describeDepartment(item.department_id, reportDeptLookup),
+          preflight_reason: preflightProblemMap.get(
+            [
+              String(item.code || '').toUpperCase(),
+              String(item.course_no || '').toUpperCase(),
+              String(item.section || '').toUpperCase(),
+            ].join('|')
+          )?.reasons?.join(' | ') || null,
         }))
       : [],
     generated_rows: generatedRowsWithIssues,
@@ -1452,6 +1471,7 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     },
     assignable_offerings: preFlight.assignable_offerings || [],
     problematic_offerings: preFlight.problematic_offerings || [],
+    preflight_problematic_offerings: preFlight.problematic_offerings || [],
     general_offerings: preFlight.general_offerings || [],
   };
 

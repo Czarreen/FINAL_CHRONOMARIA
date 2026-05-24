@@ -5,6 +5,49 @@
 
 import { supabaseAdmin } from './supabase.js';
 
+export function derivePrepLimitFromMaxUnits(maxUnits) {
+  const numeric = Number(maxUnits || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 4;
+  // F-H8 dynamic cap: min(4, floor(max_units / 3)), at least 1.
+  return Math.max(1, Math.min(4, Math.floor(numeric / 3)));
+}
+
+export async function fetchFacultyPrepLimit(facultyId) {
+  const { data, error } = await supabaseAdmin
+    .from('faculty')
+    .select('faculty_max_units')
+    .eq('faculty_id', facultyId)
+    .single();
+
+  if (error) throw error;
+  const facultyMaxUnits = Number(data?.faculty_max_units || 0);
+  const prepLimit = derivePrepLimitFromMaxUnits(facultyMaxUnits);
+  // Compute current tagged units for this faculty
+  const { data: tagsData, error: tagsErr } = await supabaseAdmin
+    .from('faculty_subject_tags')
+    .select('subject_tag')
+    .eq('faculty_id', facultyId);
+
+  if (tagsErr) throw tagsErr;
+
+  const tagged = (tagsData || []).map((r) => String(r.subject_tag || '').toUpperCase());
+  let usedTaggedUnits = 0.0;
+  if (tagged.length > 0) {
+    const { data: subjRows, error: subjErr } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_code, subject_units')
+      .in('subject_code', tagged);
+    if (!subjErr && subjRows) {
+      const map = {};
+      for (const s of subjRows) map[String(s.subject_code || '').toUpperCase()] = Number(s.subject_units || 0);
+      for (const t of tagged) usedTaggedUnits += Number(map[t] || 0);
+    }
+  }
+
+  const remainingUnits = Math.max(0, facultyMaxUnits - usedTaggedUnits);
+  return { facultyMaxUnits, prepLimit, usedTaggedUnits, remainingUnits };
+}
+
 /**
  * Fetch all subject preferences for a specific faculty member
  * @param {number} facultyId - Faculty ID
@@ -58,7 +101,23 @@ export async function fetchFacultySubjectPreferencesForFaculty(facultyId) {
       throw error;
     }
 
-    return data || [];
+    const rows = data || [];
+    // Attach subject_units where possible
+    const codes = rows.map((r) => String(r.subject_tag || '').toUpperCase()).filter(Boolean);
+    let subjMap = {};
+    if (codes.length > 0) {
+      const { data: subjRows, error: subjErr } = await supabaseAdmin
+        .from('subjects')
+        .select('subject_code, subject_units')
+        .in('subject_code', codes);
+      if (!subjErr && subjRows) {
+        for (const s of subjRows) subjMap[String(s.subject_code || '').toUpperCase()] = Number(s.subject_units || 0);
+      }
+    }
+    return rows.map((r) => ({
+      ...r,
+      subject_units: Number(subjMap[String(r.subject_tag || '').toUpperCase()] || 0),
+    }));
   } catch (err) {
     console.error('fetchFacultySubjectPreferencesForFaculty error:', err);
     throw err;
@@ -86,6 +145,41 @@ export async function saveFacultySubjectPreference({ facultyId, subjectTag, prio
 
     // Normalize subject tag
     const normalizedTag = subjectTag.trim().toUpperCase();
+
+    // Enforce unit-sum based limit: faculty_max_units - sum(tagged subject_units)
+    const prepMeta = await fetchFacultyPrepLimit(facultyId);
+    const facultyMaxUnits = Number(prepMeta.facultyMaxUnits || 0);
+    const usedTaggedUnits = Number(prepMeta.usedTaggedUnits || 0);
+
+    const { data: subjRow, error: subjErr } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_code, subject_units')
+      .eq('subject_code', normalizedTag)
+      .limit(1)
+      .single();
+    if (subjErr) {
+      // If we can't find the subject units, fall back to allowing upsert but warn
+      console.warn('Could not fetch subject units for', normalizedTag, subjErr.message || subjErr);
+    }
+    const subjectUnits = Number(subjRow?.subject_units || 0);
+
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('faculty_subject_tags')
+      .select('subject_tag')
+      .eq('faculty_id', facultyId);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existing = existingRows || [];
+    const alreadyTagged = existing.some((row) => String(row.subject_tag || '').toUpperCase() === normalizedTag);
+    if (!alreadyTagged) {
+      const remainingUnits = Math.max(0, facultyMaxUnits - usedTaggedUnits);
+      if (facultyMaxUnits > 0 && subjectUnits > remainingUnits) {
+        throw new Error(`Cannot add ${normalizedTag}: subject units (${subjectUnits}) exceed remaining faculty units (${remainingUnits}).`);
+      }
+    }
 
     // Upsert preference
     const { data, error } = await supabaseAdmin
@@ -194,7 +288,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     // Fetch faculty record with specialization
     const { data: facultyData, error: facultyError } = await supabaseAdmin
       .from('faculty')
-      .select('faculty_specialization, department_id')
+      .select('faculty_specialization, department_id, faculty_max_units')
       .eq('faculty_id', facultyId)
       .single();
 
@@ -207,6 +301,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     }
 
     const { faculty_specialization: specialization, department_id: departmentId } = facultyData;
+    const prepLimit = derivePrepLimitFromMaxUnits(facultyData?.faculty_max_units);
 
     if (!specialization || specialization.trim() === '') {
       return []; // No specialization, no auto-generation
@@ -225,7 +320,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     // Fetch all subjects from the faculty's department
     const { data: subjectsData, error: subjectsError } = await supabaseAdmin
       .from('subjects')
-      .select('subject_code, subject_descriptive_title, department_id')
+      .select('subject_code, subject_descriptive_title, department_id, subject_units')
       .eq('department_id', departmentId);
 
     if (subjectsError) {
@@ -235,7 +330,6 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     const subjects = subjectsData || [];
 
     // Score and tag subjects
-    const tagsToCreate = [];
     const uniqueSubjects = new Map(); // Track subjects to avoid duplicates
 
     for (const subject of subjects) {
@@ -262,6 +356,8 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
             faculty_id: facultyId,
             subject_tag: subjectTag,
             priority_level: priorityLevel,
+            match_score: maxScore,
+            subject_units: Number(subject.subject_units || 0),
             updated_at: new Date().toISOString(),
           });
         }
@@ -272,8 +368,44 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
       return []; // No matches found
     }
 
-    // Upsert all tags
-    const tagsArray = Array.from(uniqueSubjects.values());
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('faculty_subject_tags')
+      .select('subject_tag')
+      .eq('faculty_id', facultyId);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existingTagSet = new Set((existingRows || []).map((r) => String(r.subject_tag || '').toUpperCase()));
+    const allGenerated = Array.from(uniqueSubjects.values());
+    const existingMatches = allGenerated.filter((r) => existingTagSet.has(r.subject_tag));
+    const newCandidates = allGenerated
+      .filter((r) => !existingTagSet.has(r.subject_tag))
+      .sort((a, b) => (b.match_score - a.match_score) || (a.priority_level - b.priority_level) || a.subject_tag.localeCompare(b.subject_tag));
+
+    // Convert prepLimit/count-based slot to remaining units-based generation
+    const prepMeta = await fetchFacultyPrepLimit(facultyId);
+    const facultyMaxUnits = Number(prepMeta.facultyMaxUnits || 0);
+    const usedTaggedUnits = Number(prepMeta.usedTaggedUnits || 0);
+    let remainingUnits = Math.max(0, facultyMaxUnits - usedTaggedUnits);
+
+    const limitedNew = [];
+    for (const cand of newCandidates) {
+      const candUnits = Number(cand.subject_units || 0);
+      if (candUnits <= remainingUnits && remainingUnits > 0) {
+        limitedNew.push(cand);
+        remainingUnits -= candUnits;
+      }
+      if (remainingUnits <= 0) break;
+    }
+
+    // Upsert existing matches (priority refresh) + capped number of new tags.
+    const tagsArray = [...existingMatches, ...limitedNew].map(({ match_score, ...row }) => row);
+    if (tagsArray.length === 0) {
+      return [];
+    }
+
     const { data, error } = await supabaseAdmin
       .from('faculty_subject_tags')
       .upsert(tagsArray, { onConflict: 'faculty_id,subject_tag' })
@@ -344,7 +476,7 @@ export async function fetchAvailableSubjectsForFaculty(facultyId) {
     
     const { data: subjectsData, error: subjectsError } = await supabaseAdmin
       .from('subjects')
-      .select('subject_code, subject_descriptive_title, subject_status')
+      .select('subject_code, subject_descriptive_title, subject_status, subject_units')
       .eq('subject_status', 'active')
       .order('subject_code', { ascending: true });
 
