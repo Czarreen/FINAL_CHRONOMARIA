@@ -1119,26 +1119,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           </div>
         </div>
 
-        {/* Filter + Action row */}
+        {/* Action + Filter row */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Status filter pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {['', 'active', 'inactive'].map((status) => (
-              <button
-                key={status}
-                onClick={() => { setStatusFilter(status); setPage(1); }}
-                type="button"
-                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] transition min-h-[36px] ${
-                  statusFilter === status
-                    ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
-                }`}
-              >
-                {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
-              </button>
-            ))}
-          </div>
-
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -1220,6 +1202,24 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
             >
               Reset
             </button>
+          </div>
+
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {['', 'active', 'inactive'].map((status) => (
+              <button
+                key={status}
+                onClick={() => { setStatusFilter(status); setPage(1); }}
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] transition min-h-[36px] ${
+                  statusFilter === status
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
+                }`}
+              >
+                {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
+              </button>
+            ))}
           </div>
         </div>
 
