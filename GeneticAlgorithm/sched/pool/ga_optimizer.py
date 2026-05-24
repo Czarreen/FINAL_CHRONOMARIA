@@ -12,7 +12,9 @@ Delegates to the existing run_ga_optimization() in sched/ga/deap_setup.py
 via the existing chromosome representation.
 """
 
+import sys
 import time
+import traceback
 from typing import List
 
 from sched.models.room import Room
@@ -65,7 +67,9 @@ def run_intra_pool_ga(
     movable = [e for e in pool.entities if e.was_modified]
 
     # Preserve the invariant: original schedules are never touched by the GA.
-    if not movable or locked:
+    # Only skip if there is nothing movable; locked entities are excluded from
+    # the GA subjects list entirely (line below), so their presence is fine.
+    if not movable:
         return pool
 
     try:
@@ -113,7 +117,8 @@ def run_intra_pool_ga(
                 entity.was_modified = True
 
     except Exception:
-        pass
+        print(f"[ga_optimizer] intra-pool GA failed for pool {pool.pool_id}:\n"
+              f"{traceback.format_exc()}", file=sys.stderr)
 
     return pool
 

@@ -428,15 +428,18 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   }, [subjectNotifications, subjects, subjectNotificationsLoading]);
 
   async function loadRoomLookup({ forceRefresh = false } = {}) {
-    // Use sessionStorage cache to avoid re-fetching rooms on every mount
     const CACHE_KEY = 'chronomaria_room_lookup';
+    const OBJECTS_CACHE_KEY = 'chronomaria_room_objects';
     if (!forceRefresh) {
       try {
         const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
+        const cachedObjects = sessionStorage.getItem(OBJECTS_CACHE_KEY);
+        if (cached && cachedObjects) {
           const parsed = JSON.parse(cached);
-          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          const parsedObjects = JSON.parse(cachedObjects);
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0 && Array.isArray(parsedObjects)) {
             setRoomNameById(parsed);
+            setRoomObjects(parsedObjects);
             return;
           }
         }
@@ -471,7 +474,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
       setRoomNameById(nextLookup);
       setRoomObjects(allRoomRows);
-      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup)); } catch (_) {}
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup));
+        sessionStorage.setItem(OBJECTS_CACHE_KEY, JSON.stringify(allRoomRows));
+      } catch (_) {}
     } catch {
       setRoomNameById({});
     }

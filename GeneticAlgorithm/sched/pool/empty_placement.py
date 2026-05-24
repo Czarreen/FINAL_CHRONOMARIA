@@ -76,7 +76,7 @@ def _effective_duration(entity: SchedulingEntity) -> int:
 
 
 def _time_free_in_pool(pool: Pool, blocks: List[TimeBlock]) -> bool:
-    for existing_entity in pool.entities:
+    for existing_entity in pool.entities + pool.locked_entities:
         for eb in existing_entity.current_schedule_blocks:
             for nb in blocks:
                 if eb.day == nb.day and overlaps(

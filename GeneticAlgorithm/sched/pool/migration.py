@@ -43,6 +43,20 @@ LUNCH_END_MIN       = 13 * 60   # 780 -  1:00 PM (lunch window end)
 _MTH_DAYS = {Day.MON, Day.THU}
 _TFS_DAYS = {Day.TUE, Day.FRI}
 
+_DAY_TO_PATTERN: Dict[Day, str] = {
+    Day.MON: "MTh",
+    Day.THU: "MTh",
+    Day.TUE: "TFS",
+    Day.FRI: "TFS",
+}
+
+_SINGLE_SLOT_FALLBACK: Dict[Day, List[Day]] = {
+    Day.MON: [Day.MON, Day.THU, Day.TUE, Day.FRI],
+    Day.THU: [Day.THU, Day.MON, Day.FRI, Day.TUE],
+    Day.TUE: [Day.TUE, Day.FRI, Day.MON, Day.THU],
+    Day.FRI: [Day.FRI, Day.TUE, Day.THU, Day.MON],
+}
+
 # Room name format: {Building letters}{Floor digit}0{Room digits}  e.g. E103, AP201
 _ROOM_NAME_RE = re.compile(r'^([A-Za-z]+)(\d)0(\d+)$')
 
@@ -91,6 +105,10 @@ def _make_blocks(start: int, duration: int, pattern: str) -> List[TimeBlock]:
     return [TimeBlock(day=d, start_minutes=start, end_minutes=end) for d in days]
 
 
+def _make_single_day_blocks(start: int, duration: int, day: Day) -> List[TimeBlock]:
+    return [TimeBlock(day=day, start_minutes=start, end_minutes=start + duration)]
+
+
 def _schedule_str(start: int, duration: int) -> str:
     s_h, s_m = divmod(start, 60)
     e_h, e_m = divmod(start + duration, 60)
@@ -119,7 +137,7 @@ def _effective_duration(entity: SchedulingEntity) -> int:
 
 def _time_free_in_pool(pool: Pool, blocks_to_place: List[TimeBlock]) -> bool:
     """True if placing blocks_to_place into pool causes no conflicts."""
-    for entity in pool.entities:
+    for entity in pool.entities + pool.locked_entities:
         for existing_block in entity.current_schedule_blocks:
             for new_block in blocks_to_place:
                 if existing_block.day == new_block.day:
@@ -171,6 +189,52 @@ def _try_place_in_pool(
         blocks = _make_blocks(start, duration, pattern)
         if _time_free_in_pool(pool, blocks):
             _apply_placement(entity, pool, blocks, pattern, room_str)
+            return True
+    return False
+
+
+def _apply_placement_single_day(
+    entity: SchedulingEntity,
+    target_pool: Pool,
+    blocks: List[TimeBlock],
+    pattern: str,
+    day: Day,
+    room_str: str,
+) -> None:
+    entity.current_schedule_blocks = blocks
+    entity.current_room_keys = set(target_pool.room_keys)
+    entity.current_day_pattern = pattern
+    entity.was_modified = True
+    sched_str = f"{_schedule_str(blocks[0].start_minutes, blocks[0].end_minutes - blocks[0].start_minutes)} {day.value}"
+    for member in entity.members:
+        if pattern == "MTh":
+            member.mth_schedule = sched_str
+            member.mth_room = room_str
+            member.tfs_schedule = None
+            member.tfs_room = None
+        else:
+            member.tfs_schedule = sched_str
+            member.tfs_room = room_str
+            member.mth_schedule = None
+            member.mth_room = None
+    target_pool.entities.append(entity)
+
+
+def _try_place_single_day_in_pool(
+    entity: SchedulingEntity,
+    pool: Pool,
+    day: Day,
+    deadline: float,
+) -> bool:
+    duration = _effective_duration(entity)
+    pattern = _DAY_TO_PATTERN[day]
+    room_str = pool.pool_id.replace("_", "/") if pool.is_dual_room else pool.pool_id
+    for start in _candidate_starts(duration):
+        if time.perf_counter() > deadline:
+            return False
+        blocks = _make_single_day_blocks(start, duration, day)
+        if _time_free_in_pool(pool, blocks):
+            _apply_placement_single_day(entity, pool, blocks, pattern, day, room_str)
             return True
     return False
 
@@ -255,10 +319,39 @@ def _try_migrate_entity(
     registry: RoomTypeRegistry,
     deadline: float,
 ) -> bool:
-    orig_pattern = entity.current_day_pattern or "MTh"
-    opp_pattern = "TFS" if orig_pattern == "MTh" else "MTh"
     requires_lab = entity.requires_lab_room
     is_pathfit = _is_pathfit_entity(entity)
+
+    # Single-slot path: entity has exactly one TimeBlock (e.g., "7:30-10:00 M").
+    # Stay single-slot and search days in the defined priority order.
+    if len(entity.current_schedule_blocks) == 1:
+        origin_day = entity.current_schedule_blocks[0].day
+        fallback_days = _SINGLE_SLOT_FALLBACK.get(
+            origin_day, [Day.MON, Day.THU, Day.TUE, Day.FRI]
+        )
+
+        # Step 0: same room, same day, different time slot.
+        if not time.perf_counter() > deadline:
+            if _try_place_single_day_in_pool(entity, source_pool, origin_day, deadline):
+                return True
+
+        # Steps 1-N: 6-stage room search per fallback day in priority order.
+        for day in fallback_days:
+            pattern = _DAY_TO_PATTERN[day]
+            groups = _stage_pools_for(entity, all_pools, source_pool, registry, pattern)
+            for group in groups:
+                if time.perf_counter() > deadline:
+                    return False
+                candidates = _filter_by_type(group, requires_lab, prefer_lecture=True)
+                candidates = _filter_gym(candidates, registry, is_pathfit)
+                for pool in candidates:
+                    if _try_place_single_day_in_pool(entity, pool, day, deadline):
+                        return True
+        return False
+
+    # Paired-day path (original logic).
+    orig_pattern = entity.current_day_pattern or "MTh"
+    opp_pattern = "TFS" if orig_pattern == "MTh" else "MTh"
 
     # Step 0: try a different time slot within the same room before moving anywhere.
     # _time_free_in_pool checks against pool.entities (which still contains the

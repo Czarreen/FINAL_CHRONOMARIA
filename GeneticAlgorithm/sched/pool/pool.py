@@ -59,6 +59,7 @@ class Pool:
     is_dual_room: bool
     entities: List[SchedulingEntity] = field(default_factory=list)
     conflicted_entities: List[SchedulingEntity] = field(default_factory=list)
+    locked_entities: List[SchedulingEntity] = field(default_factory=list)
 
     def all_entities(self) -> List[SchedulingEntity]:
         return self.entities + self.conflicted_entities

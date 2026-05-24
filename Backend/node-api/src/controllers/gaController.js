@@ -3150,13 +3150,19 @@ export async function postRunAutomaticScheduler(req, res) {
 
     const humanReview = allUnresolved.filter((u) => u.reason_type === 'unresolvable_conflict');
 
+    const totalRows = rawResult.census?.output_count || allAssignments.length;
+    const manualReviewCount = rawResult.diagnostics?.manual_review_count ?? allUnresolved.length;
+    const computedHard = totalRows === 0 ? 0 : Math.round(((totalRows - manualReviewCount) / totalRows) * 10000) / 100;
+    const computedSoft = computedHard;
+    const computedOverall = computedHard;
+
     return res.json({
       status: 'completed',
       dry_run: dryRun,
       used_genetic_algorithm: true,
-      fitness_overall: 0,
-      fitness_hard: 0,
-      fitness_soft: 0,
+      fitness_overall: computedOverall,
+      fitness_hard: computedHard,
+      fitness_soft: computedSoft,
       generations: rawResult.stats?.generations_run ?? 0,
       runtime_ms: null,
       assignments: allAssignments,

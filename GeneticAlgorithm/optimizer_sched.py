@@ -48,6 +48,20 @@ def main():
         pools, unassigned = build_pools(entities, registry, active_room_keys)
         pools = ensure_all_room_pools(pools, registry, active_room_keys)
 
+        # Lock manual-review scheduled entities as room/time constraints so
+        # Steps 4 and 5 never place other subjects into their occupied slots.
+        pool_by_room = {
+            next(iter(p.room_keys)): p
+            for p in pools if not p.is_dual_room
+        }
+        for entity in unassigned:
+            if (entity.manual_review_reason is not None
+                    and entity.current_room_keys
+                    and entity.current_schedule_blocks):
+                for room_key in entity.current_room_keys:
+                    if room_key in pool_by_room:
+                        pool_by_room[room_key].locked_entities.append(entity)
+
         diagnostics: dict = {
             "pools_created": len(pools),
             "conflicts_detected": 0,
