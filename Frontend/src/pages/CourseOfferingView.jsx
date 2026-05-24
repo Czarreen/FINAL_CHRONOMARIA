@@ -762,6 +762,30 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       .filter((item) => item.issues.length > 0);
   }, [notifications]);
 
+  // Map of offeringId → conflict info, built from raw notifications (includes schedule_conflict).
+  // Also marks the peer offering — deduplicateConflictPairs absorbs one side of each pair into
+  // item.conflictPeer so the peer never appears as its own top-level notification item.
+  const conflictOfferingMap = useMemo(() => {
+    const map = new Map();
+    for (const item of notifications) {
+      const id = Number(item.entity_id || item.offeringId);
+      if (!id) continue;
+      const conflictIssues = (item.issues || []).filter(
+        (issue) => issue.field === 'schedule_conflict'
+      );
+      if (conflictIssues.length > 0) {
+        map.set(id, { hasScheduleConflict: true });
+        for (const issue of conflictIssues) {
+          const peerId = Number(issue.details?.conflicting_offering_id);
+          if (peerId && !Number.isNaN(peerId)) {
+            map.set(peerId, { hasScheduleConflict: true });
+          }
+        }
+      }
+    }
+    return map;
+  }, [notifications]);
+
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
     let filtered = notificationsNoConflicts;
@@ -1715,8 +1739,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {!loading && !error && displayedOfferings.map((offering, index) => {
                 const isSelected = selectedOfferings.has(offering.id);
+                const conflictState = conflictOfferingMap.get(offering.id);
+                const hasConflict = !!conflictState?.hasScheduleConflict;
                 return (
-                  <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
+                  <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : hasConflict ? 'bg-red-50/70' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected && !hasConflict ? 'bg-white/6' : ''}`}>
                     <td className="px-3 py-3 text-center">
                       <input
                         type="checkbox"
@@ -1730,9 +1756,16 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     return (
                       <td key={col.key} className={`px-3 py-3 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
                         {col.key === 'code' ? (
-                          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-                            {renderCellValue(offering[col.key])}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                              {renderCellValue(offering[col.key])}
+                            </span>
+                            {hasConflict && (
+                              <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                Conflict
+                              </span>
+                            )}
+                          </div>
                         ) : col.key === 'course_no' ? (
                           <span className="text-xs font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}

@@ -327,16 +327,24 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   }, []);
 
   // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
+  // Also marks the peer subject — deduplicateConflictPairs absorbs one side of each pair into
+  // item.conflictPeer so the peer never appears as its own top-level notification item.
   const conflictSubjectMap = useMemo(() => {
     const map = new Map();
     for (const item of subjectNotifications) {
-      const id = Number(item.rowId);
+      const id = Number(item.entity_id || item.rowId);
       if (!id) continue;
-      const conflictCount = (item.issues || []).filter(
+      const conflictIssues = (item.issues || []).filter(
         (issue) => issue.field === 'schedule_conflict' || issue.field_name === 'schedule_conflict'
-      ).length;
-      if (conflictCount > 0) {
-        map.set(id, { hasScheduleConflict: true, conflictingCount: conflictCount });
+      );
+      if (conflictIssues.length > 0) {
+        map.set(id, { hasScheduleConflict: true });
+        for (const issue of conflictIssues) {
+          const peerId = Number(issue.details?.conflicting_subject_id);
+          if (peerId && !Number.isNaN(peerId)) {
+            map.set(peerId, { hasScheduleConflict: true });
+          }
+        }
       }
     }
     return map;
@@ -1344,7 +1352,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                               </span>
                               {issueState.hasScheduleConflict && (
                                 <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                                  Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
+                                  Conflict
                                 </span>
                               )}
                             </div>
