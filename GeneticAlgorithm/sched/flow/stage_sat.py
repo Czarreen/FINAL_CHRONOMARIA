@@ -27,10 +27,12 @@ from sched.models.room import Room
 from sched.conflict.intervals import overlaps, parse_time_range
 from sched.conflict.room_sets import rooms_conflict
 
-SCHED_START    = 7 * 60 + 30   # 7:30 AM in minutes
-SCHED_END      = 20 * 60        # 8:00 PM in minutes
-SLOT_STEP      = 30             # 30-minute increments
-MAX_SAT_PASSES = 10
+SCHED_START      = 7 * 60 + 30   # 7:30 AM in minutes
+SCHED_END        = 20 * 60        # 8:00 PM in minutes
+SLOT_STEP        = 30             # 30-minute increments
+MAX_SAT_PASSES   = 10
+LUNCH_START_MIN  = 12 * 60        # 12:00 PM
+LUNCH_END_MIN    = 13 * 60        #  1:00 PM
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +83,9 @@ def _candidate_starts(duration_min: int) -> List[int]:
     starts: List[int] = []
     t = SCHED_START
     while t + duration_min <= SCHED_END:
+        if t < LUNCH_END_MIN and t + duration_min > LUNCH_START_MIN:
+            t = LUNCH_END_MIN
+            continue
         starts.append(t)
         t += SLOT_STEP
     return starts
@@ -90,7 +95,7 @@ def _format_sat_schedule(start_min: int, end_min: int) -> str:
     """Format a time range into a schedule string with Sat day override."""
     s_h, s_m = divmod(start_min, 60)
     e_h, e_m = divmod(end_min, 60)
-    return f"{s_h}:{s_m:02d}-{e_h}:{e_m:02d} Sat"
+    return f"{s_h % 12 or 12}:{s_m:02d}-{e_h % 12 or 12}:{e_m:02d} Sat"
 
 
 def _find_free_sat_slot(

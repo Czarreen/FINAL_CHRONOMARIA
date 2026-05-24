@@ -21,6 +21,8 @@ from sched.pool.room_types import RoomTypeRegistry
 
 SLOT_STEP = 30
 SCHED_END_PLACEMENT = 20 * 60  # 8:00 PM
+LUNCH_START_MIN     = 12 * 60  # 12:00 PM
+LUNCH_END_MIN       = 13 * 60  #  1:00 PM
 
 _PATHFIT_RE = re.compile(r'path\s*fit', re.IGNORECASE)
 
@@ -33,6 +35,9 @@ def _candidate_starts(duration: int) -> List[int]:
     starts = []
     t = SCHED_START_MIN
     while t + duration <= SCHED_END_PLACEMENT:
+        if t < LUNCH_END_MIN and t + duration > LUNCH_START_MIN:
+            t = LUNCH_END_MIN
+            continue
         starts.append(t)
         t += SLOT_STEP
     return starts
@@ -47,7 +52,7 @@ def _make_blocks(start: int, duration: int, pattern: str) -> List[TimeBlock]:
 def _schedule_str(start: int, duration: int) -> str:
     s_h, s_m = divmod(start, 60)
     e_h, e_m = divmod(start + duration, 60)
-    return f"{s_h}:{s_m:02d}-{e_h}:{e_m:02d}"
+    return f"{s_h % 12 or 12}:{s_m:02d}-{e_h % 12 or 12}:{e_m:02d}"
 
 
 def _effective_duration(entity: SchedulingEntity) -> int:

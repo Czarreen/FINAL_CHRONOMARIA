@@ -77,7 +77,7 @@ def _candidate_starts(duration: int) -> List[int]:
         # Skip slots whose start falls inside the lunch break (12:00–13:00).
         # A class that ends at 12:30 (start=10:00) is still allowed; only
         # a class that would START at 12:00-12:59 is deferred to 13:00.
-        if LUNCH_START_MIN <= t < LUNCH_END_MIN:
+        if t < LUNCH_END_MIN and t + duration > LUNCH_START_MIN:
             t = LUNCH_END_MIN
             continue
         starts.append(t)
@@ -94,7 +94,7 @@ def _make_blocks(start: int, duration: int, pattern: str) -> List[TimeBlock]:
 def _schedule_str(start: int, duration: int) -> str:
     s_h, s_m = divmod(start, 60)
     e_h, e_m = divmod(start + duration, 60)
-    return f"{s_h}:{s_m:02d}-{e_h}:{e_m:02d}"
+    return f"{s_h % 12 or 12}:{s_m:02d}-{e_h % 12 or 12}:{e_m:02d}"
 
 
 def _effective_duration(entity: SchedulingEntity) -> int:
