@@ -1,7 +1,10 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
+import Toast from '../components/Toast';
 import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings, GitCompare, Download } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchDepartments } from '../services/departmentsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
 import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
 import { syncSubjectsFromOfferings, applyGeneralTagsToSubjects } from '../services/courseOfferingsApi';
@@ -53,6 +56,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [roomNameById, setRoomNameById] = useState({});
   const [roomObjects, setRoomObjects] = useState([]);
   const [roomBookings, setRoomBookings] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [successToast, setSuccessToast] = useState(null);
 
   // Structured schedule card state shared between Add and Edit modals
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
@@ -76,6 +81,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     tfs_room: [],
     subject_status: 'active',
     curr_id: '',
+    department_id: '',
   });
   const [savingSubject, setSavingSubject] = useState(false);
   const [subjectError, setSubjectError] = useState(null);
@@ -108,6 +114,12 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const colMenuRef = useRef(null);
   const pendingStatusUpdatesRef = useRef(new Set());
   const skipNextSearchResetRef = useRef(false);
+
+  useEffect(() => {
+    if (!successToast) return;
+    const timer = setTimeout(() => setSuccessToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [successToast]);
 
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -323,6 +335,14 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       .then((rows) => { if (active) setRoomBookings(rows); })
       .catch((err) => console.error('Failed to load room bookings:', err));
 
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchDepartments()
+      .then((rows) => { if (active) setDepartments(Array.isArray(rows) ? rows : []); })
+      .catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -653,6 +673,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       if ((previousStatus === 'active') !== (updated.subject_status === 'active')) {
         setActiveCount((currentCount) => currentCount + (updated.subject_status === 'active' ? 1 : -1));
       }
+      setSuccessToast(`Updated "${editingSubject.subject_code}"`);
       setShowEditModal(false);
       setEditingSubject(null);
       setMthCard(emptyCardState('mth'));
@@ -690,6 +711,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           if (subject.subject_status === 'active') {
             setActiveCount((c) => Math.max(0, c - 1));
           }
+          setSuccessToast(`Deleted "${subject.subject_code}"`);
           await loadSubjects();
           refreshNotifications();
         } catch (err) {
@@ -793,6 +815,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         tfs_room: tfsCard.enabled ? buildCombinedRoomId(newSubject.tfs_room) : '',
       };
       const createdSubject = await createSubject(payload);
+      setSuccessToast(`Created "${newSubject.subject_code}"`);
       // Reset form and close modal
       setShowAddModal(false);
       setMthCard(emptyCardState('mth'));
@@ -1014,6 +1037,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   };
 
   return (
+<>
 <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
       {/* Header — identity + health monitoring only */}
       <div className="glass-panel p-3">
@@ -1625,6 +1649,23 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                         placeholder="e.g., 1"
                       />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Department
+                      </label>
+                      <select
+                        value={newSubject.department_id ?? ''}
+                        onChange={(e) => setNewSubject({ ...newSubject, department_id: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      >
+                        <option value="">Select department</option>
+                        {(departments || []).map((dept) => (
+                          <option key={dept.department_id} value={dept.department_id}>
+                            {dept.department_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="sm:col-span-2">
                       <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Descriptive Title
@@ -1878,6 +1919,25 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Department
+                </label>
+                <select
+                  value={editingData.department_id ?? ''}
+                  onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('department_id')}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                >
+                  <option value="">Select department</option>
+                  {(departments || []).map((dept) => (
+                    <option key={dept.department_id} value={dept.department_id}>
+                      {dept.department_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                   Descriptive Title
                 </label>
                 <input
@@ -2091,5 +2151,15 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         </div>
       )}
     </div>
+    <AnimatePresence>
+      {successToast && (
+        <Toast
+          key={successToast}
+          message={successToast}
+          onClose={() => setSuccessToast(null)}
+        />
+      )}
+    </AnimatePresence>
+</>
   );
 }

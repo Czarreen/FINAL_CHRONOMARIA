@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
+import Toast from '../components/Toast';
 import {
   BookMarked,
   Layers,
@@ -1267,6 +1269,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   };
 
   return (
+    <>
     <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
       {/* Header — identity + health monitoring only */}
       <div className="glass-panel p-3">
@@ -1619,12 +1622,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 </div>
               </div>
             )}
-          </div>
-        )}
-        {successMessage && (
-          <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700" role="alert">
-            <Check size={18} />
-            {successMessage}
           </div>
         )}
       </div>
@@ -2180,95 +2177,193 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
             {editingId && (
               <div className="space-y-4">
-                {columnGroups.flatMap((group) =>
-                  group.title === 'Schedule'
-                    ? [
-                        <div key="schedule" className="space-y-3">
-                          {(() => {
-                            const mthLocked = editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id');
-                            const tfsLocked = editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id');
-                            const mthMissing = editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'));
-                            const tfsMissing = editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'));
-                            return (
-                              <>
-                                <ScheduleCardInput
-                                  slot="mth"
-                                  value={mthCard}
-                                  onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
-                                  onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
-                                  canDisable={tfsCard.enabled}
-                                  roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
-                                    arr[0] = id ? String(id) : '';
-                                    return { ...d, mth_room_id: arr };
-                                  })}
-                                  roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
-                                  onRoomChange2={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
-                                    if (arr.length < 2) arr.push('');
-                                    arr[1] = id ? String(id) : '';
-                                    return { ...d, mth_room_id: arr };
-                                  })}
-                                  rooms={rooms}
-                                  getConflictingOfferings={getConflictingOfferings}
-                                  editingId={editingId}
-                                  isMissing={mthMissing}
-                                  disabled={mthLocked}
-                                />
-                                <ScheduleCardInput
-                                  slot="tfs"
-                                  value={tfsCard}
-                                  onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
-                                  onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
-                                  canDisable={mthCard.enabled}
-                                  roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
-                                    arr[0] = id ? String(id) : '';
-                                    return { ...d, tfs_room_id: arr };
-                                  })}
-                                  roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
-                                  onRoomChange2={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
-                                    if (arr.length < 2) arr.push('');
-                                    arr[1] = id ? String(id) : '';
-                                    return { ...d, tfs_room_id: arr };
-                                  })}
-                                  rooms={rooms}
-                                  getConflictingOfferings={getConflictingOfferings}
-                                  editingId={editingId}
-                                  isMissing={tfsMissing}
-                                  disabled={tfsLocked}
-                                />
-                              </>
-                            );
-                          })()}
-                        </div>,
-                      ]
-                    : group.columns.map((col) => {
-                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
-                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
-                        return (
-                          <div key={col.key}>
-                            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                              {col.label}
-                            </label>
-                            <input
-                              type={numericCols.has(col.key) ? 'number' : 'text'}
-                              value={editingData[col.key] ?? ''}
-                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                              disabled={isLocked}
-                              className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
-                                isMissing
-                                  ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
-                                  : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'
-                              }`}
-                            />
-                          </div>
-                        );
-                      })
-                )}
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Course Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.code ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, code: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('code')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('code') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., BSCS-101-A"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Course Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.course_no ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, course_no: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('course_no')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('course_no') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., CMSC 11"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Section *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.section ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, section: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('section')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('section') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., A"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Department *
+                  </label>
+                  <select
+                    value={editingData.department_id ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('department_id')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('department_id') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                  >
+                    <option value="">Select department</option>
+                    {(departments || []).map((dept) => (
+                      <option key={dept.department_id} value={dept.department_id}>
+                        {dept.department_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Curriculum ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.curr_id ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, curr_id: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('curr_id')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('curr_id') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., 1"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Descriptive Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.descriptive_title ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, descriptive_title: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('descriptive_title')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('descriptive_title') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., Introduction to Computer Science"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <ScheduleCardInput
+                    slot="mth"
+                    value={mthCard}
+                    onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
+                    onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
+                    canDisable={tfsCard.enabled}
+                    roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
+                    onRoomChange={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                      arr[0] = id ? String(id) : '';
+                      return { ...d, mth_room_id: arr };
+                    })}
+                    roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
+                    onRoomChange2={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id ? String(id) : '';
+                      return { ...d, mth_room_id: arr };
+                    })}
+                    rooms={rooms}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={editingId}
+                    isMissing={editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'))}
+                    disabled={editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id')}
+                  />
+                  <ScheduleCardInput
+                    slot="tfs"
+                    value={tfsCard}
+                    onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
+                    onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
+                    canDisable={mthCard.enabled}
+                    roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
+                    onRoomChange={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                      arr[0] = id ? String(id) : '';
+                      return { ...d, tfs_room_id: arr };
+                    })}
+                    roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
+                    onRoomChange2={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id ? String(id) : '';
+                      return { ...d, tfs_room_id: arr };
+                    })}
+                    rooms={rooms}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={editingId}
+                    isMissing={editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'))}
+                    disabled={editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id')}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Units
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.units ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, units: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lec Hrs
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.lec_hrs ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, lec_hrs: e.target.value })}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('lec_hrs') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                      disabled={editableKeys !== null && !editableKeys.has('lec_hrs')}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lab Hrs
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.lab_hrs ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, lab_hrs: e.target.value })}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('lab_hrs') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                      disabled={editableKeys !== null && !editableKeys.has('lab_hrs')}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex gap-3 pt-6">
                   <button
                     onClick={() => {
@@ -2585,5 +2680,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         </div>
       )}
     </div>
+    <AnimatePresence>
+      {successMessage && (
+        <Toast
+          key={successMessage}
+          message={successMessage}
+          onClose={() => setSuccessMessage(null)}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 }

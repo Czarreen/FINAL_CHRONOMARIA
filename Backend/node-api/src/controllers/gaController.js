@@ -2005,10 +2005,10 @@ function buildAutomaticSchedulerPreflight(snapshot) {
   }
   console.log(`[preflight][merge] candidates=${candidates.length}, merged sub-groups=${mergeGroupCount}`);
 
-  // Pass B — catch cross-course and title-mismatch subjects that share the same
-  // physical slot (same schedule + same room) but were not caught by the identity-based
-  // Pass A above. Any 2+ subjects occupying the exact same room+time are co-located
-  // and should be treated as merged regardless of course number or title.
+  // Pass B — catch subjects that share the exact same physical slot (schedule + room)
+  // but were not caught by Pass A's identity-based grouping. Restricted to subjects
+  // with matching descriptive titles: different-title subjects in the same slot are a
+  // room conflict (handled by Python's conflict resolver), not a merge.
   const schedRoomAllGroups = new Map();
   for (const candidate of candidates) {
     const mthS = normalizeUpper(candidate.existing_mth_schedule || '');
@@ -2029,6 +2029,13 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     if (srGroup.length < 2) continue;
     const unmerged = srGroup.filter((c) => !c.merged);
     if (unmerged.length === 0) continue;
+    // Only merge subjects that share the same normalized title; differing titles
+    // indicate a room conflict that Python's pool conflict resolver must handle.
+    const repTitle = normalizeUpper(srGroup[0].descriptive_title || '').replace(/\s+/g, ' ').trim();
+    const allSameTitle = repTitle && srGroup.every(
+      (c) => normalizeUpper(c.descriptive_title || '').replace(/\s+/g, ' ').trim() === repTitle
+    );
+    if (!allSameTitle) continue;
     srGroup.sort((a, b) => (a.subject_id || 0) - (b.subject_id || 0));
     const repId = srGroup[0].subject_id;
     for (const c of unmerged) {
@@ -3026,7 +3033,13 @@ function subjectToOutputRow(s, roomLookup) {
     tfs_room_id: s.tfs_room || null,
     tfs_room_name: tfsRoomName || null,
     merged: s.merged_with ? 'preserved' : 'false',
-    preflight_tag: s.tag === 'General' ? 'general' : (s.tag === 'Original' ? 'original' : null),
+    preflight_tag: ({
+      'Original':      'original',
+      'Generated':     'generated',
+      'Rescheduled':   'rescheduled',
+      'Manual Review': 'manual_review',
+      'Saturday':      'saturday',
+    })[s.tag] ?? null,
   };
 }
 

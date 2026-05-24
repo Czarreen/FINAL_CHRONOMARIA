@@ -37,9 +37,31 @@ from sched.pool.room_types import RoomTypeRegistry
 # 26 30-minute slots from 7:30 AM to 8:00 PM
 SLOT_STEP = 30
 SCHED_END_MIGRATION = 20 * 60   # 8:00 PM (no Saturday, so earlier cutoff than SCHED_END_MAX)
+LUNCH_START_MIN     = 12 * 60   # 720 - 12:00 PM (lunch window start)
+LUNCH_END_MIN       = 13 * 60   # 780 -  1:00 PM (lunch window end)
 
 _MTH_DAYS = {Day.MON, Day.THU}
 _TFS_DAYS = {Day.TUE, Day.FRI}
+
+# Room name format: {Building letters}{Floor digit}0{Room digits}  e.g. E103, AP201
+_ROOM_NAME_RE = re.compile(r'^([A-Za-z]+)(\d)0(\d+)$')
+
+
+def _parse_room_name(name: str) -> Tuple[str, int, int]:
+    """Return (building, floor, room_num) from a room name like 'E103'."""
+    m = _ROOM_NAME_RE.match(name.strip())
+    if m:
+        return (m.group(1).upper(), int(m.group(2)), int(m.group(3)))
+    return ('~', 99, 99)
+
+
+def _pool_room_sort_key(pool: Pool, registry: RoomTypeRegistry) -> Tuple:
+    """Sort key (floor, room_num) so rooms are traversed floor-then-room ascending."""
+    if pool.is_dual_room:
+        return (99, 99)
+    name = registry.name_of(next(iter(pool.room_keys)))
+    _, floor, room_num = _parse_room_name(name)
+    return (floor, room_num)
 
 _PATHFIT_RE = re.compile(r'path\s*fit', re.IGNORECASE)
 
@@ -52,6 +74,12 @@ def _candidate_starts(duration: int) -> List[int]:
     starts = []
     t = SCHED_START_MIN
     while t + duration <= SCHED_END_MIGRATION:
+        # Skip slots whose start falls inside the lunch break (12:00–13:00).
+        # A class that ends at 12:30 (start=10:00) is still allowed; only
+        # a class that would START at 12:00-12:59 is deferred to 13:00.
+        if LUNCH_START_MIN <= t < LUNCH_END_MIN:
+            t = LUNCH_END_MIN
+            continue
         starts.append(t)
         t += SLOT_STEP
     return starts
@@ -179,6 +207,13 @@ def _stage_pools_for(
         else:
             other.append(pool)
 
+    # Within each group traverse rooms in ascending floor then room-number order
+    # so the scheduler walks E101→E102→E104→E201→E202→... before crossing buildings.
+    key = lambda p: _pool_room_sort_key(p, registry)
+    same_building.sort(key=key)
+    dept_fallback.sort(key=key)
+    other.sort(key=key)
+
     return [same_building, dept_fallback, other]
 
 
@@ -225,6 +260,14 @@ def _try_migrate_entity(
     requires_lab = entity.requires_lab_room
     is_pathfit = _is_pathfit_entity(entity)
 
+    # Step 0: try a different time slot within the same room before moving anywhere.
+    # _time_free_in_pool checks against pool.entities (which still contains the
+    # winner that displaced this entity), so conflicted times are correctly rejected.
+    if not time.perf_counter() > deadline:
+        if _try_place_in_pool(entity, source_pool, orig_pattern, deadline):
+            return True
+
+    # Steps 1-6: migrate to a different room, ordered by proximity.
     for pattern in [orig_pattern, opp_pattern]:
         groups = _stage_pools_for(entity, all_pools, source_pool, registry, pattern)
         for group in groups:

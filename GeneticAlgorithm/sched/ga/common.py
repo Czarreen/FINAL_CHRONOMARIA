@@ -40,8 +40,25 @@ def _duration_cached(lec_hrs: float, lab_hrs: float) -> int:
     return max(30, round(((lec_hrs or 0.0) + (lab_hrs or 0.0)) / 2.0 * 60))
 
 
+_TIME_RANGE_RE = re.compile(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})')
+
+
 def subject_duration(s: Subject) -> int:
-    """Per-day duration in minutes (total hours split over 2 pattern days)."""
+    """Per-day duration in minutes.
+
+    Reads the actual scheduled block width when the subject already has a
+    schedule (so the GA never shortens a 150-min session to 90 min because the
+    formula disagrees). Falls back to the hours formula for empty subjects.
+    """
+    for sched_str in (s.mth_schedule, s.tfs_schedule):
+        if not sched_str:
+            continue
+        m = _TIME_RANGE_RE.search(sched_str)
+        if m:
+            start = int(m.group(1)) * 60 + int(m.group(2))
+            end   = int(m.group(3)) * 60 + int(m.group(4))
+            if end > start:
+                return max(30, end - start)
     return _duration_cached(s.lec_hrs or 0.0, s.lab_hrs or 0.0)
 
 

@@ -497,17 +497,20 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
         return (
           <div className="flex flex-col gap-0.5">
             <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">{row.code || '—'}</span>
-            {row.preflight_tag === 'general' && (
-              <span className="flex gap-1 flex-wrap">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">Original</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-300">General</span>
-              </span>
-            )}
             {row.preflight_tag === 'original' && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300 self-start">Original</span>
             )}
-            {!row.preflight_tag && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300 self-start">New!</span>
+            {row.preflight_tag === 'generated' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300 self-start">Generated</span>
+            )}
+            {row.preflight_tag === 'rescheduled' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-700 border border-sky-300 self-start">Rescheduled</span>
+            )}
+            {row.preflight_tag === 'manual_review' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300 self-start">Manual Review</span>
+            )}
+            {row.preflight_tag === 'saturday' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-300 self-start">Saturday</span>
             )}
           </div>
         );
@@ -528,9 +531,6 @@ function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRo
         return (
           <span className="inline-flex items-center gap-1 flex-wrap" title={row.descriptive_title}>
             <span className="text-xs text-on-surface-variant truncate max-w-xs">{row.descriptive_title || '—'}</span>
-            {row.preflight_tag === 'general' && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-300 shrink-0">General</span>
-            )}
           </span>
         );
       case 'lec_hrs':
