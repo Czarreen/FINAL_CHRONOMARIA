@@ -5,6 +5,90 @@
 
 import { supabaseAdmin } from './supabase.js';
 
+const SPECIALIZATION_STOP_WORDS = new Set([
+  'AND',
+  'THE',
+  'OF',
+  'IN',
+  'ON',
+  'FOR',
+  'TO',
+  'A',
+  'AN',
+  'BY',
+  'WITH',
+  'IS',
+  'ARE',
+  'FROM',
+  'AT',
+  'AS',
+  'OR',
+  'DESIGN',
+  'ANALYSIS',
+  'ENGINEERING',
+  'ENGINEER',
+  'SYSTEM',
+  'SYSTEMS',
+  'TECHNOLOGY',
+  'TECHNOLOGIES',
+  'METHOD',
+  'METHODS',
+  'PROJECT',
+  'PROJECTS',
+  'RESEARCH',
+  'STUDY',
+  'STUDIES',
+  'INTRODUCTION',
+  'INTRODUCTORY',
+  'FUNDAMENTAL',
+  'FUNDAMENTALS',
+  'CAPSTONE',
+  'PRACTICE',
+  'APPLICATION',
+  'APPLICATIONS',
+  'ADVANCED',
+  'SPECIALIZATION',
+]);
+
+const SPECIALIZATION_SYNONYMS = new Map([
+  ['ARCHITECTURAL', 'ARCHITECTURE'],
+  ['ARCHITECTURE', 'ARCHITECTURE'],
+  ['MATHEMATICS', 'MATH'],
+  ['MATH', 'MATH'],
+  ['STATISTICS', 'STATISTICS'],
+  ['STATISTICAL', 'STATISTICS'],
+]);
+
+function normalizeSpecializationToken(token) {
+  const cleaned = String(token || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cleaned || cleaned.length < 2 || SPECIALIZATION_STOP_WORDS.has(cleaned)) {
+    return '';
+  }
+  return SPECIALIZATION_SYNONYMS.get(cleaned) || cleaned;
+}
+
+function extractMeaningfulKeywords(value) {
+  const out = new Set();
+  const text = String(value || '').trim().toUpperCase();
+  if (!text) {
+    return out;
+  }
+
+  for (const segment of text.split(/[,;/|]+/)) {
+    const words = segment
+      .replace(/&/g, ' ')
+      .split(/\s+/)
+      .map(normalizeSpecializationToken)
+      .filter(Boolean);
+
+    for (const word of words) {
+      out.add(word);
+    }
+  }
+
+  return out;
+}
+
 export function derivePrepLimitFromMaxUnits(maxUnits) {
   const numeric = Number(maxUnits || 0);
   if (!Number.isFinite(numeric) || numeric <= 0) return 4;
@@ -124,6 +208,161 @@ export async function fetchFacultySubjectPreferencesForFaculty(facultyId) {
   }
 }
 
+export async function fetchFacultyPreferenceRecordsForFaculty(facultyId, { limit = 20, offset = 0 } = {}) {
+  try {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+
+    const { data, error, count } = await supabaseAdmin
+      .from('faculty_preference_records')
+      .select('id, faculty_id, subject_tag, priority_level, source_table, record_action, created_at', { count: 'exact' })
+      .eq('faculty_id', facultyId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(safeOffset, safeOffset + safeLimit - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = data || [];
+    const codes = rows.map((r) => String(r.subject_tag || '').toUpperCase()).filter(Boolean);
+    let subjMap = {};
+
+    if (codes.length > 0) {
+      const { data: subjRows, error: subjErr } = await supabaseAdmin
+        .from('subjects')
+        .select('subject_code, subject_descriptive_title, subject_units')
+        .in('subject_code', codes);
+
+      if (!subjErr && subjRows) {
+        for (const s of subjRows) {
+          subjMap[String(s.subject_code || '').toUpperCase()] = {
+            title: s.subject_descriptive_title || null,
+            units: Number(s.subject_units || 0),
+          };
+        }
+      }
+    }
+
+    const totalCount = Number(count ?? rows.length);
+
+    return {
+      records: rows.map((row) => {
+        const meta = subjMap[String(row.subject_tag || '').toUpperCase()] || {};
+        return {
+          ...row,
+          subject_descriptive_title: meta.title,
+          subject_units: meta.units ?? 0,
+        };
+      }),
+      count: totalCount,
+      limit: safeLimit,
+      offset: safeOffset,
+      hasMore: safeOffset + rows.length < totalCount,
+    };
+  } catch (err) {
+    console.error('fetchFacultyPreferenceRecordsForFaculty error:', err);
+    throw err;
+  }
+}
+
+export async function recordFacultyPreferenceRecord({ facultyId, subjectTag, priorityLevel, sourceTable = 'faculty_subject_tags', recordAction = 'upsert' }) {
+  try {
+    const payload = {
+      faculty_id: facultyId,
+      subject_tag: String(subjectTag || '').trim().toUpperCase(),
+      priority_level: Number(priorityLevel) || 2,
+      source_table: sourceTable,
+      record_action: recordAction,
+      created_at: new Date().toISOString(),
+    };
+
+    const upsertResult = await supabaseAdmin
+      .from('faculty_preference_records')
+      .upsert(payload, { onConflict: 'faculty_id,subject_tag' })
+      .select('id, faculty_id, subject_tag, priority_level, source_table, record_action, created_at')
+      .single();
+
+    if (!upsertResult.error) {
+      return upsertResult.data || null;
+    }
+
+    const message = String(upsertResult.error?.message || '').toLowerCase();
+    const code = String(upsertResult.error?.code || '');
+
+    const conflictMissing =
+      code === '42P10' ||
+      message.includes('no unique or exclusion constraint matching the on conflict specification');
+
+    if (!conflictMissing) {
+      if (code === '42P01' || message.includes('does not exist')) {
+        return null;
+      }
+      throw upsertResult.error;
+    }
+
+    const { data: existingRows, error: existingErr } = await supabaseAdmin
+      .from('faculty_preference_records')
+      .select('id')
+      .eq('faculty_id', payload.faculty_id)
+      .eq('subject_tag', payload.subject_tag)
+      .limit(1);
+
+    if (existingErr) {
+      throw existingErr;
+    }
+
+    if (existingRows && existingRows.length > 0) {
+      const { data: updatedRows, error: updateErr } = await supabaseAdmin
+        .from('faculty_preference_records')
+        .update(payload)
+        .eq('id', existingRows[0].id)
+        .select('id, faculty_id, subject_tag, priority_level, source_table, record_action, created_at');
+
+      if (updateErr) {
+        throw updateErr;
+      }
+
+      return updatedRows ? updatedRows[0] : null;
+    }
+
+    const { data: insertedRows, error: insertErr } = await supabaseAdmin
+      .from('faculty_preference_records')
+      .insert(payload)
+      .select('id, faculty_id, subject_tag, priority_level, source_table, record_action, created_at');
+
+    if (insertErr) {
+      throw insertErr;
+    }
+
+    return insertedRows ? insertedRows[0] : null;
+  } catch (err) {
+    console.error('recordFacultyPreferenceRecord error:', err);
+    return null;
+  }
+}
+
+export async function deleteFacultyPreferenceRecord({ facultyId, recordId }) {
+  try {
+    const query = supabaseAdmin.from('faculty_preference_records').delete().eq('id', recordId);
+    if (facultyId !== undefined && facultyId !== null) {
+      query.eq('faculty_id', facultyId);
+    }
+
+    const { data, error } = await query.select('id, faculty_id, subject_tag, priority_level, source_table, record_action, created_at');
+
+    if (error) {
+      throw error;
+    }
+
+    return data ? data[0] : null;
+  } catch (err) {
+    console.error('deleteFacultyPreferenceRecord error:', err);
+    throw err;
+  }
+}
+
 /**
  * Save (upsert) a faculty subject preference with department validation
  * @param {Object} params
@@ -199,6 +438,16 @@ export async function saveFacultySubjectPreference({ facultyId, subjectTag, prio
       throw error;
     }
 
+    if (data && data[0]) {
+      await recordFacultyPreferenceRecord({
+        facultyId,
+        subjectTag: data[0].subject_tag,
+        priorityLevel: data[0].priority_level,
+        sourceTable: 'faculty_subject_tags',
+        recordAction: 'upsert',
+      });
+    }
+
     return data ? data[0] : null;
   } catch (err) {
     console.error('saveFacultySubjectPreference error:', err);
@@ -237,41 +486,64 @@ export async function deleteFacultySubjectPreference({ facultyId, subjectTag }) 
 
 /**
  * Calculate match score for subject matching against specialization keywords
- * @param {string} keyword - Single keyword from specialization
+ * @param {string} keyword - Specialization text or seed subject title/code
  * @param {Object} subject - Subject object with code, title, course_no
  * @returns {number} Match score (0-40)
  */
 export function scoreSubjectMatch(keyword, subject) {
+  const sourceText = String(keyword || '').trim().toUpperCase();
+  if (!sourceText) {
+    return 0;
+  }
+
+  const targetCode = String(subject.code || subject.subject_code || '').trim().toUpperCase();
+  const targetTitle = String(subject.title || subject.subject_descriptive_title || '').trim().toUpperCase();
+  const targetCourseNo = String(subject.course_no || subject.subject_course_no || '').trim().toUpperCase();
+  const targetText = [targetCode, targetTitle, targetCourseNo].filter(Boolean).join(' ');
+
+  const sourceTerms = extractMeaningfulKeywords(sourceText);
+  const targetTerms = extractMeaningfulKeywords(targetText);
+
+  if (sourceTerms.size === 0) {
+    return 0;
+  }
+
   let score = 0;
-  const lowerKeyword = keyword.toLowerCase().trim();
-  const lowerCode = (subject.code || '').toLowerCase();
-  const lowerTitle = (subject.title || '').toLowerCase();
-  const lowerCourseNo = (subject.course_no || '').toLowerCase();
+
+  for (const term of sourceTerms) {
+    if (targetTerms.has(term)) {
+      score += term.includes(' ') ? 18 : 8;
+    }
+  }
 
   // Exact match in title (24 points)
-  if (lowerTitle === lowerKeyword) {
+  if (targetTitle === sourceText) {
     score += 24;
   }
 
   // Exact match in code (16 points)
-  if (lowerCode === lowerKeyword) {
+  if (targetCode === sourceText) {
     score += 16;
   }
 
   // Exact match in course_no (14 points)
-  if (lowerCourseNo === lowerKeyword) {
+  if (targetCourseNo === sourceText) {
     score += 14;
   }
 
   // Partial matches (10 points each)
-  if (lowerTitle.includes(lowerKeyword)) {
+  if (targetTitle.includes(sourceText)) {
     score += 10;
   }
-  if (lowerCode.includes(lowerKeyword)) {
+  if (targetCode.includes(sourceText)) {
     score += 10;
   }
-  if (lowerCourseNo.includes(lowerKeyword)) {
+  if (targetCourseNo.includes(sourceText)) {
     score += 10;
+  }
+
+  if (sourceText.length >= 4 && targetText.includes(sourceText)) {
+    score += 6;
   }
 
   return score;
@@ -300,81 +572,114 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
       throw new Error('Faculty not found');
     }
 
-    const { faculty_specialization: specialization, department_id: departmentId } = facultyData;
     const prepLimit = derivePrepLimitFromMaxUnits(facultyData?.faculty_max_units);
 
-    if (!specialization || specialization.trim() === '') {
-      return []; // No specialization, no auto-generation
+    const { data: existingRows, error: existingError } = await supabaseAdmin
+      .from('faculty_subject_tags')
+      .select('subject_tag, priority_level')
+      .eq('faculty_id', facultyId);
+
+    if (existingError) {
+      throw existingError;
     }
 
-    // Extract keywords from specialization
-    const keywords = specialization
-      .split(/[,;/|]/g) // Split by common delimiters
-      .map((k) => k.trim().toLowerCase())
-      .filter((k) => k.length >= 2 && /^[a-z0-9]+$/i.test(k)); // Keep 2+ chars, alphanumeric
+    const specialization = String(facultyData.faculty_specialization || '').trim();
+
+    const existingCodes = (existingRows || [])
+      .map((row) => String(row.subject_tag || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    const existingTitleSeeds = [];
+    if (existingCodes.length > 0) {
+      const { data: seedRows, error: seedError } = await supabaseAdmin
+        .from('subjects')
+        .select('subject_code, subject_descriptive_title')
+        .in('subject_code', existingCodes);
+
+      if (seedError) {
+        throw seedError;
+      }
+
+      for (const row of seedRows || []) {
+        if (row?.subject_code) {
+          existingTitleSeeds.push(String(row.subject_code || '').trim());
+        }
+        if (row?.subject_descriptive_title) {
+          existingTitleSeeds.push(String(row.subject_descriptive_title || '').trim());
+        }
+      }
+    }
+
+    const seedTexts = [specialization, ...existingTitleSeeds].filter(Boolean);
+
+    const keywords = seedTexts;
 
     if (keywords.length === 0) {
       return [];
     }
 
-    // Fetch all subjects from the faculty's department
-    const { data: subjectsData, error: subjectsError } = await supabaseAdmin
-      .from('subjects')
-      .select('subject_code, subject_descriptive_title, department_id, subject_units')
-      .eq('department_id', departmentId);
+    const fetchSubjects = async (activeOnly) => {
+      const query = supabaseAdmin
+        .from('subjects')
+        .select('subject_code, subject_descriptive_title, department_id, subject_units, subject_status');
 
-    if (subjectsError) {
-      throw new Error(`Error fetching subjects: ${subjectsError.message}`);
-    }
-
-    const subjects = subjectsData || [];
-
-    // Score and tag subjects
-    const uniqueSubjects = new Map(); // Track subjects to avoid duplicates
-
-    for (const subject of subjects) {
-      let maxScore = 0;
-
-      for (const keyword of keywords) {
-        const score = scoreSubjectMatch(keyword, subject);
-        maxScore = Math.max(maxScore, score);
+      if (activeOnly) {
+        query.eq('subject_status', 'active');
       }
 
-      if (maxScore > 0) {
-        // Determine priority based on score
-        let priorityLevel = 3; // Fallback
-        if (maxScore >= 30) {
-          priorityLevel = 1; // High
-        } else if (maxScore >= 15) {
-          priorityLevel = 2; // Capable
+      const { data, error } = await query;
+      if (error) {
+        throw new Error(`Error fetching subjects: ${error.message}`);
+      }
+      return data || [];
+    };
+
+    const scoreSubjects = (subjects) => {
+      const uniqueSubjects = new Map();
+
+      for (const subject of subjects) {
+        let maxScore = 0;
+
+        for (const keyword of keywords) {
+          const score = scoreSubjectMatch(keyword, subject);
+          maxScore = Math.max(maxScore, score);
         }
 
-        // Use subject code as the tag
-        const subjectTag = (subject.subject_code || '').trim().toUpperCase();
-        if (subjectTag) {
-          uniqueSubjects.set(subjectTag, {
-            faculty_id: facultyId,
-            subject_tag: subjectTag,
-            priority_level: priorityLevel,
-            match_score: maxScore,
-            subject_units: Number(subject.subject_units || 0),
-            updated_at: new Date().toISOString(),
-          });
+        if (maxScore > 0) {
+          let priorityLevel = 3;
+          if (maxScore >= 45) {
+            priorityLevel = 1;
+          } else if (maxScore >= 20) {
+            priorityLevel = 2;
+          }
+
+          const subjectTag = (subject.subject_code || '').trim().toUpperCase();
+          if (subjectTag) {
+            uniqueSubjects.set(subjectTag, {
+              faculty_id: facultyId,
+              subject_tag: subjectTag,
+              priority_level: priorityLevel,
+              match_score: maxScore,
+              _subject_units: Number(subject.subject_units || 0),
+              updated_at: new Date().toISOString(),
+            });
+          }
         }
       }
+
+      return uniqueSubjects;
+    };
+
+    // Prefer active subjects first so generated preferences stay aligned with
+    // what the UI can already show. If that yields nothing, fall back to the
+    // full subject table so inactive-but-valid matches do not get lost.
+    let uniqueSubjects = scoreSubjects(await fetchSubjects(true));
+    if (uniqueSubjects.size === 0) {
+      uniqueSubjects = scoreSubjects(await fetchSubjects(false));
     }
 
     if (uniqueSubjects.size === 0) {
       return []; // No matches found
-    }
-
-    const { data: existingRows, error: existingError } = await supabaseAdmin
-      .from('faculty_subject_tags')
-      .select('subject_tag')
-      .eq('faculty_id', facultyId);
-
-    if (existingError) {
-      throw existingError;
     }
 
     const existingTagSet = new Set((existingRows || []).map((r) => String(r.subject_tag || '').toUpperCase()));
@@ -392,7 +697,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
 
     const limitedNew = [];
     for (const cand of newCandidates) {
-      const candUnits = Number(cand.subject_units || 0);
+      const candUnits = Number(cand._subject_units || 0);
       if (candUnits <= remainingUnits && remainingUnits > 0) {
         limitedNew.push(cand);
         remainingUnits -= candUnits;
@@ -401,7 +706,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     }
 
     // Upsert existing matches (priority refresh) + capped number of new tags.
-    const tagsArray = [...existingMatches, ...limitedNew].map(({ match_score, ...row }) => row);
+    const tagsArray = [...existingMatches, ...limitedNew].map(({ match_score, _subject_units, ...row }) => row);
     if (tagsArray.length === 0) {
       return [];
     }
@@ -415,9 +720,78 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
       throw error;
     }
 
+    await Promise.all((data || []).map((row) => recordFacultyPreferenceRecord({
+      facultyId,
+      subjectTag: row.subject_tag,
+      priorityLevel: row.priority_level,
+      sourceTable: 'faculty_subject_tags',
+      recordAction: 'auto-generate',
+    })));
+
     return data || [];
   } catch (err) {
     console.error('autoGenerateFacultySubjectPreferences error:', err);
+    throw err;
+  }
+}
+
+/**
+ * Auto-generate specialization keywords from a faculty's selected subject preferences
+ * Produces canonicalized variants for each selected subject descriptive title.
+ * Example: "Discrete Mathematics" -> ["DISCRETE MATHEMATICS","DISCRETE MATH","MATH"]
+ * @param {number} facultyId
+ * @returns {Promise<Array<string>>} Array of generated specialization keyword strings
+ */
+export async function autoGenerateSpecializationFromPreferences(facultyId) {
+  try {
+    const prefs = await fetchFacultySubjectPreferencesForFaculty(facultyId);
+    if (!prefs || prefs.length === 0) return [];
+
+    const codes = prefs
+      .map((p) => String(p.subject_tag || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    if (codes.length === 0) return [];
+
+    const { data: subjRows, error: subjErr } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_code, subject_descriptive_title')
+      .in('subject_code', codes);
+
+    if (subjErr) {
+      throw subjErr;
+    }
+
+    const generated = new Set();
+
+    for (const s of subjRows || []) {
+      const rawTitle = String(s.subject_descriptive_title || '').trim();
+      if (!rawTitle) continue;
+
+      // Original descriptive title (cleaned)
+      const orig = rawTitle.toUpperCase().replace(/\s+/g, ' ').trim();
+      if (orig) generated.add(orig);
+
+      // Tokenize and normalize each word (uses synonyms map)
+      const words = orig.replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+      const mapped = words.map((w) => SPECIALIZATION_SYNONYMS.get(w) || w);
+
+      if (mapped.length > 0) {
+        // Mapped full phrase (e.g., DISCRETE MATH)
+        generated.add(mapped.join(' '));
+
+        // Single-term variants (e.g., MATH)
+        for (const token of mapped) {
+          if (token && token.length >= 2 && !SPECIALIZATION_STOP_WORDS.has(token)) {
+            generated.add(token);
+          }
+        }
+      }
+    }
+
+    return Array.from(generated);
+  } catch (err) {
+    console.error('autoGenerateSpecializationFromPreferences error:', err);
     throw err;
   }
 }

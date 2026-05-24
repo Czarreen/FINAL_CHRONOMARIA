@@ -40,6 +40,60 @@ DAY_ALIASES = {
     "S": "SAT",
 }
 
+SPECIALIZATION_STOP_WORDS = {
+    'AND',
+    'THE',
+    'OF',
+    'IN',
+    'ON',
+    'FOR',
+    'TO',
+    'A',
+    'AN',
+    'BY',
+    'WITH',
+    'IS',
+    'ARE',
+    'FROM',
+    'AT',
+    'AS',
+    'OR',
+    'DESIGN',
+    'ANALYSIS',
+    'ENGINEERING',
+    'ENGINEER',
+    'SYSTEM',
+    'SYSTEMS',
+    'TECHNOLOGY',
+    'TECHNOLOGIES',
+    'METHOD',
+    'METHODS',
+    'PROJECT',
+    'PROJECTS',
+    'RESEARCH',
+    'STUDY',
+    'STUDIES',
+    'INTRODUCTION',
+    'INTRODUCTORY',
+    'FUNDAMENTAL',
+    'FUNDAMENTALS',
+    'CAPSTONE',
+    'PRACTICE',
+    'APPLICATION',
+    'APPLICATIONS',
+    'ADVANCED',
+    'SPECIALIZATION',
+}
+
+SPECIALIZATION_SYNONYMS = {
+    'ARCHITECTURAL': 'ARCHITECTURE',
+    'ARCHITECTURE': 'ARCHITECTURE',
+    'MATHEMATICS': 'MATH',
+    'MATH': 'MATH',
+    'STATISTICS': 'STATISTICS',
+    'STATISTICAL': 'STATISTICS',
+}
+
 
 def normalize_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
@@ -66,32 +120,13 @@ def split_tokens(value: Any) -> List[str]:
 
 
 def extract_keywords(value: Any) -> Set[str]:
-    # Filter out common stopwords (these should not count as keyword matches)
-    STOP_WORDS = {
-        "AND",
-        "THE",
-        "OF",
-        "IN",
-        "ON",
-        "FOR",
-        "TO",
-        "A",
-        "AN",
-        "BY",
-        "WITH",
-        "IS",
-        "ARE",
-        "FROM",
-        "AT",
-        "AS",
-        "OR",
-    }
     out: Set[str] = set()
     for token in split_tokens(value):
-        for part in re.split(r"\s+", token):
+        for part in re.split(r"\s+", token.replace('&', ' ')):
             clean = re.sub(r"[^A-Za-z0-9]", "", part).upper()
-            if len(clean) >= 2 and clean not in STOP_WORDS:
-                out.add(clean)
+            if len(clean) < 2 or clean in SPECIALIZATION_STOP_WORDS:
+                continue
+            out.add(SPECIALIZATION_SYNONYMS.get(clean, clean))
     return out
 
 
@@ -412,11 +447,11 @@ def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any]
         )
     )
     score = float(len(extract_keywords(src).intersection(extract_keywords(tgt))) * 10)
-    if normalize_upper(offering.get("descriptive_title")) in src:
+    if normalize_upper(offering.get("descriptive_title")) and normalize_upper(offering.get("descriptive_title")) in src:
         score += 24.0
-    if normalize_upper(offering.get("code")) in src:
+    if normalize_upper(offering.get("code")) and normalize_upper(offering.get("code")) in src:
         score += 16.0
-    if normalize_upper(offering.get("course_no")) in src:
+    if normalize_upper(offering.get("course_no")) and normalize_upper(offering.get("course_no")) in src:
         score += 14.0
     return score
 

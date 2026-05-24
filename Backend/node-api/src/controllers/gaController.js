@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { env } from '../config/env.js';
 import { fetchFacultyPreferenceMapForGA } from '../lib/facultySubjectPreferences.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { query, withPgClient } from '../lib/postgres.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1141,7 +1142,7 @@ async function callPythonScheduleGA(payload) {
   }
 }
 
-async function persistFacultyLoading(assignments, snapshot) {
+async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
   const roomLookup = buildRoomLookup(snapshot.rooms);
   const assignmentByOfferingId = new Map();
 
@@ -1408,7 +1409,10 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   );
 
   if (!dryRun) {
-    mergedResult.persistence = await persistFacultyLoading(optimizerResult.assignments || [], subjectDrivenSnapshot);
+    mergedResult.persistence = await persistFacultyLoading(optimizerResult.assignments || [], subjectDrivenSnapshot, {
+      runId,
+      source: 'faculty_loading',
+    });
   } else {
     mergedResult.persistence = { persisted: 0, dry_run: true };
   }

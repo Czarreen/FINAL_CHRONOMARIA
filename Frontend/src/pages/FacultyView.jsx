@@ -91,6 +91,7 @@ export default function FacultyView() {
     { key: 'faculty_specialization', label: 'Specialization' },
     { key: 'subject_tags', label: 'Subject Tags' },
     { key: 'faculty_max_units', label: 'Units' },
+    { key: 'faculty_status', label: 'Status' },
   ];
 
   const [visibleColumns, setVisibleColumns] = useState(new Set(columns.map((c) => c.key)));
@@ -1269,7 +1270,6 @@ export default function FacultyView() {
           </div>
         </div>
       )}
-
       {showDeleteConfirm && facultyToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -1489,9 +1489,28 @@ export default function FacultyView() {
         <FacultySubjectPreferencesModal
           facultyId={preferencesModalFacultyId}
           facultyName={preferencesModalFacultyName}
-          onClose={() => {
+          onClose={async () => {
             setShowPreferencesModal(false);
-            fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
+            // Always refresh faculty list and preferences after modal closes
+            try {
+              await loadFaculty();
+            } catch (e) {
+              console.warn('Error refreshing faculty list after closing modal', e);
+            }
+            try {
+              await fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
+            } catch (e) {
+              console.warn('Error refreshing preferences map after closing modal', e);
+            }
+          }}
+          onSaved={async () => {
+            // Also refresh when saved inside modal (redundant but safe)
+            try {
+              await loadFaculty();
+              await fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
+            } catch (e) {
+              console.warn('Error refreshing after modal save', e);
+            }
           }}
         />
       )}
