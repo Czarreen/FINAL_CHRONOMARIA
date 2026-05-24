@@ -29,6 +29,8 @@ SCHED_PATTERNS: List[Tuple[str, List[str]]] = [
 SCHED_START_MIN = 450    # 7:30 AM
 SCHED_END_MAX   = 1200   # 8:00 PM
 SCHED_SLOT_STEP = 30
+LUNCH_START_MIN = 720    # 12:00 PM
+LUNCH_END_MIN   = 780    #  1:00 PM
 GYM_MAX_OVERLAP = 3
 
 _PATHFIT_RE = re.compile(r"path\s*fit", re.IGNORECASE)
@@ -40,14 +42,36 @@ def _duration_cached(lec_hrs: float, lab_hrs: float) -> int:
     return max(30, round(((lec_hrs or 0.0) + (lab_hrs or 0.0)) / 2.0 * 60))
 
 
+_TIME_RANGE_RE = re.compile(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})')
+
+
 def subject_duration(s: Subject) -> int:
-    """Per-day duration in minutes (total hours split over 2 pattern days)."""
+    """Per-day duration in minutes.
+
+    Reads the actual scheduled block width when the subject already has a
+    schedule (so the GA never shortens a 150-min session to 90 min because the
+    formula disagrees). Falls back to the hours formula for empty subjects.
+    """
+    for sched_str in (s.mth_schedule, s.tfs_schedule):
+        if not sched_str:
+            continue
+        m = _TIME_RANGE_RE.search(sched_str)
+        if m:
+            start = int(m.group(1)) * 60 + int(m.group(2))
+            end   = int(m.group(3)) * 60 + int(m.group(4))
+            if end <= start:   # 12h PM rollover: "11:00-1:30" → end 90 → 810
+                end += 720
+            if end > start:
+                return max(30, end - start)
     return _duration_cached(s.lec_hrs or 0.0, s.lab_hrs or 0.0)
 
 
 @functools.lru_cache(maxsize=256)
 def _valid_starts_cached(duration: int) -> Tuple[int, ...]:
-    return tuple(range(SCHED_START_MIN, SCHED_END_MAX - duration + 1, SCHED_SLOT_STEP))
+    return tuple(
+        t for t in range(SCHED_START_MIN, SCHED_END_MAX - duration + 1, SCHED_SLOT_STEP)
+        if not (t < LUNCH_END_MIN and t + duration > LUNCH_START_MIN)
+    )
 
 
 def valid_starts(duration: int) -> List[int]:

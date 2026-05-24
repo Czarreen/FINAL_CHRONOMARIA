@@ -26,6 +26,8 @@ from sched.models.subject import SubjectState, SubjectTag
 
 
 def _compute_tag(entity: SchedulingEntity) -> str:
+    if entity.manual_review_reason == "saturday_explicit":
+        return SubjectTag.SATURDAY.value
     if entity.manual_review_reason is not None:
         return SubjectTag.MANUAL_REVIEW.value
     if entity.state == SubjectState.EMPTY:

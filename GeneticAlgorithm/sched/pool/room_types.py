@@ -61,6 +61,10 @@ class RoomTypeRegistry:
     def rooms_of_type(self, rt: RoomType) -> Set[str]:
         return {k for k, v in self._map.items() if v == rt}
 
+    def name_of(self, room_key: str) -> str:
+        """Return the room name for a key, or the key itself if unknown."""
+        return self._name_map.get(str(room_key).strip(), str(room_key).strip())
+
     def all_keys(self) -> Set[str]:
         return set(self._map.keys())
 

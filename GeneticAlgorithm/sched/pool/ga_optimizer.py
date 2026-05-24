@@ -12,7 +12,9 @@ Delegates to the existing run_ga_optimization() in sched/ga/deap_setup.py
 via the existing chromosome representation.
 """
 
+import sys
 import time
+import traceback
 from typing import List
 
 from sched.models.room import Room
@@ -46,7 +48,12 @@ def run_intra_pool_ga(
 ) -> Pool:
     """
     Run a short intra-pool GA to improve soft objectives within the pool.
-    Skips if < 2 entities or < 10 seconds of global budget remain.
+
+    Only operates on entities that were already moved by the scheduler
+    (was_modified=True). If the pool contains any original/untouched entity
+    (was_modified=False) the GA is skipped entirely — those subjects must not
+    be rescheduled, and the resolved parameter in run_ga_optimization is not
+    currently enforced in the fitness function.
     """
     if len(pool.entities) < 2:
         return pool
@@ -56,10 +63,25 @@ def run_intra_pool_ga(
     if remaining < 10.0:
         return pool
 
+    locked  = [e for e in pool.entities if not e.was_modified]
+    movable = [e for e in pool.entities if e.was_modified]
+
+    # Preserve the invariant: original schedules are never touched by the GA.
+    # Only skip if there is nothing movable; locked entities are excluded from
+    # the GA subjects list entirely (line below), so their presence is fine.
+    if not movable:
+        return pool
+
     try:
         from sched.ga.deap_setup import run_ga_optimization
 
-        subjects = [m for e in pool.entities for m in e.members]
+        # Snapshot blocks so we can detect changes and set was_modified correctly.
+        before_blocks = {
+            e.entity_id: list(e.current_schedule_blocks)
+            for e in pool.entities
+        }
+
+        subjects = [m for e in movable for m in e.members]
 
         pool_rooms = [r for r in rooms if str(r.room_id) in pool.room_keys]
         if not pool_rooms:
@@ -83,14 +105,20 @@ def run_intra_pool_ga(
         )
 
         subject_map = {s.subject_id: s for s in optimized}
-        for entity in pool.entities:
+        for entity in movable:
             for i, member in enumerate(entity.members):
                 if member.subject_id in subject_map:
                     entity.members[i] = subject_map[member.subject_id]
             entity.current_schedule_blocks = _parse_blocks_from_member(entity.members[0])
 
+        # Safety: flag any entity whose blocks actually changed.
+        for entity in pool.entities:
+            if entity.current_schedule_blocks != before_blocks.get(entity.entity_id, []):
+                entity.was_modified = True
+
     except Exception:
-        pass
+        print(f"[ga_optimizer] intra-pool GA failed for pool {pool.pool_id}:\n"
+              f"{traceback.format_exc()}", file=sys.stderr)
 
     return pool
 

@@ -1,7 +1,10 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings, GitCompare } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import Toast from '../components/Toast';
+import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, ChevronRight, Check, X, AlertCircle, RotateCcw, RefreshCw, Settings, GitCompare, Download } from 'lucide-react';
 import { fetchSubjects, fetchSubjectPageNumber, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
+import { fetchDepartments } from '../services/departmentsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
 import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
 import { syncSubjectsFromOfferings, applyGeneralTagsToSubjects } from '../services/courseOfferingsApi';
@@ -53,6 +56,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const [roomNameById, setRoomNameById] = useState({});
   const [roomObjects, setRoomObjects] = useState([]);
   const [roomBookings, setRoomBookings] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [successToast, setSuccessToast] = useState(null);
 
   // Structured schedule card state shared between Add and Edit modals
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
@@ -76,6 +81,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     tfs_room: [],
     subject_status: 'active',
     curr_id: '',
+    department_id: '',
   });
   const [savingSubject, setSavingSubject] = useState(false);
   const [subjectError, setSubjectError] = useState(null);
@@ -108,6 +114,12 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   const colMenuRef = useRef(null);
   const pendingStatusUpdatesRef = useRef(new Set());
   const skipNextSearchResetRef = useRef(false);
+
+  useEffect(() => {
+    if (!successToast) return;
+    const timer = setTimeout(() => setSuccessToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [successToast]);
 
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -326,17 +338,33 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    fetchDepartments()
+      .then((rows) => { if (active) setDepartments(Array.isArray(rows) ? rows : []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
+  // Also marks the peer subject — deduplicateConflictPairs absorbs one side of each pair into
+  // item.conflictPeer so the peer never appears as its own top-level notification item.
   const conflictSubjectMap = useMemo(() => {
     const map = new Map();
     for (const item of subjectNotifications) {
-      const id = Number(item.rowId);
+      const id = Number(item.entity_id || item.rowId);
       if (!id) continue;
-      const conflictCount = (item.issues || []).filter(
+      const conflictIssues = (item.issues || []).filter(
         (issue) => issue.field === 'schedule_conflict' || issue.field_name === 'schedule_conflict'
-      ).length;
-      if (conflictCount > 0) {
-        map.set(id, { hasScheduleConflict: true, conflictingCount: conflictCount });
+      );
+      if (conflictIssues.length > 0) {
+        map.set(id, { hasScheduleConflict: true });
+        for (const issue of conflictIssues) {
+          const peerId = Number(issue.details?.conflicting_subject_id);
+          if (peerId && !Number.isNaN(peerId)) {
+            map.set(peerId, { hasScheduleConflict: true });
+          }
+        }
       }
     }
     return map;
@@ -400,15 +428,18 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   }, [subjectNotifications, subjects, subjectNotificationsLoading]);
 
   async function loadRoomLookup({ forceRefresh = false } = {}) {
-    // Use sessionStorage cache to avoid re-fetching rooms on every mount
     const CACHE_KEY = 'chronomaria_room_lookup';
+    const OBJECTS_CACHE_KEY = 'chronomaria_room_objects';
     if (!forceRefresh) {
       try {
         const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
+        const cachedObjects = sessionStorage.getItem(OBJECTS_CACHE_KEY);
+        if (cached && cachedObjects) {
           const parsed = JSON.parse(cached);
-          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          const parsedObjects = JSON.parse(cachedObjects);
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0 && Array.isArray(parsedObjects)) {
             setRoomNameById(parsed);
+            setRoomObjects(parsedObjects);
             return;
           }
         }
@@ -443,7 +474,10 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
       setRoomNameById(nextLookup);
       setRoomObjects(allRoomRows);
-      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup)); } catch (_) {}
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(nextLookup));
+        sessionStorage.setItem(OBJECTS_CACHE_KEY, JSON.stringify(allRoomRows));
+      } catch (_) {}
     } catch {
       setRoomNameById({});
     }
@@ -645,6 +679,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       if ((previousStatus === 'active') !== (updated.subject_status === 'active')) {
         setActiveCount((currentCount) => currentCount + (updated.subject_status === 'active' ? 1 : -1));
       }
+      setSuccessToast(`Updated "${editingSubject.subject_code}"`);
       setShowEditModal(false);
       setEditingSubject(null);
       setMthCard(emptyCardState('mth'));
@@ -682,6 +717,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
           if (subject.subject_status === 'active') {
             setActiveCount((c) => Math.max(0, c - 1));
           }
+          setSuccessToast(`Deleted "${subject.subject_code}"`);
           await loadSubjects();
           refreshNotifications();
         } catch (err) {
@@ -785,6 +821,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         tfs_room: tfsCard.enabled ? buildCombinedRoomId(newSubject.tfs_room) : '',
       };
       const createdSubject = await createSubject(payload);
+      setSuccessToast(`Created "${newSubject.subject_code}"`);
       // Reset form and close modal
       setShowAddModal(false);
       setMthCard(emptyCardState('mth'));
@@ -984,207 +1021,235 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     curr_id: 'curriculum ID',
   };
 
+  const exportToCSV = () => {
+    if (!subjects.length) return;
+    const visibleCols = columns.filter((c) => visibleColumns.has(c.key));
+    const headers = visibleCols.map((c) => c.label);
+    const rows = subjects.map((s) =>
+      visibleCols.map((c) => {
+        const v = s[c.key];
+        if (v === null || v === undefined) return '';
+        return String(v);
+      })
+    );
+    const csv = [
+      headers.join(','),
+      ...rows.map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+    const a = document.createElement('a');
+    a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+    a.download = `subjects-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
   return (
+<>
 <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
-      {/* Header with Title, Description, and Action Buttons */}
-      <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-0.5 min-w-0">
-          <h2 className="text-lg font-bold text-on-surface truncate">Curriculum Repository</h2>
-          <p className="text-xs text-on-surface-variant truncate">Manage subjects, credit units, and classifications.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
-            <NotificationButton
-              panelSize="lg"
-              buttonClassName="btn-primary"
-              items={visibleSubjectNotifications}
-              title="Subject Notifications"
-              emptyLabel="No subject issues"
-              buttonLabel="Issues"
-              onItemInlineSave={handleInlineSave}
-              onItemEdit={(item) => {
-                const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
-                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
-                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
-              }}
-              onItemJump={(item) => {
-                const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
-                if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
-              }}
-              onItemResolve={(item) => handleResolveNotification(item)}
-              severityFilter={notifSeverityFilter}
-              onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
-              notificationSearch={notifSearch}
-              onNotificationSearchChange={(v) => setNotifSearch(v)}
-              notificationStats={subjectNotificationStats}
-              isRescanning={rescanning}
-            />
-            <button
-              onClick={handleRescanNotifications}
-              disabled={rescanning}
-              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
-              title="Re-detect all subject issues"
-              type="button"
-            >
-              <RotateCcw size={14} className={rescanning ? 'animate-spin' : ''} />
-              <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
-            </button>
-          </div>
-
-          {/* Room Conflicts panel */}
-          <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
-            <RoomConflictsPanel
-              items={subjectNotifications}
-              rooms={roomObjects}
-              entityType="subject"
-              onItemJump={(item) => {
-                const rowId = item.rowId || item.entity_id || null;
-                if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
-              }}
-              onItemEdit={(item) => {
-                const subj = item.subject || subjectNotifications.find((s) => s.rowId === item.rowId)?.subject;
-                const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
-                if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
-              }}
-              onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
-            />
-          </div>
-
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
-            {selectedSubjects.size > 0 && (
-              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm">
-                {selectedSubjects.size} selected
+      {/* Header — identity + health monitoring only */}
+      <div className="glass-panel p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Identity */}
+          <div>
+            <h2 className="text-2xl font-bold text-on-surface">Curriculum Repository</h2>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="text-xs text-on-surface-variant">Manage subjects, credit units, and classifications.</p>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-0.5 text-xs font-semibold text-on-surface-variant backdrop-blur">
+                <BookOpen size={10} className="text-primary" />
+                {total}
               </span>
+            </div>
+          </div>
+          {/* Monitoring */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm">
+              <NotificationButton
+                panelSize="lg"
+                items={visibleSubjectNotifications}
+                title="Subject Notifications"
+                emptyLabel="No subject issues"
+                buttonLabel="Issues"
+                onItemInlineSave={handleInlineSave}
+                onItemEdit={(item) => {
+                  const subj = item.subject || subjectNotifications.find(s => s.rowId === item.rowId)?.subject;
+                  const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                  if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+                }}
+                onItemJump={(item) => {
+                  const rowId = item.rowId || (typeof item.subject?.subject_id !== 'undefined' ? item.subject.subject_id : null);
+                  if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
+                }}
+                onItemResolve={(item) => handleResolveNotification(item)}
+                severityFilter={notifSeverityFilter}
+                onSeverityFilterChange={(v) => setNotifSeverityFilter(v)}
+                notificationSearch={notifSearch}
+                onNotificationSearchChange={(v) => setNotifSearch(v)}
+                notificationStats={subjectNotificationStats}
+                isRescanning={rescanning}
+              />
+              <div className="h-5 w-px bg-slate-200" />
+              <button
+                onClick={handleRescanNotifications}
+                disabled={rescanning}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
+                title="Re-detect all subject issues"
+                type="button"
+              >
+                <RotateCcw size={14} className={rescanning ? 'animate-spin' : ''} />
+                <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
+              </button>
+            </div>
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm">
+              <RoomConflictsPanel
+                items={subjectNotifications}
+                rooms={roomObjects}
+                entityType="subject"
+                onItemJump={(item) => {
+                  const rowId = item.rowId || item.entity_id || null;
+                  if (rowId) scrollToSubjectRowById(rowId, item.severity || null);
+                }}
+                onItemEdit={(item) => {
+                  const subj = item.subject || subjectNotifications.find((s) => s.rowId === item.rowId)?.subject;
+                  const missingFields = Array.isArray(item.missingFields) ? item.missingFields : [];
+                  if (subj) handleEditSubject(subj, { fromNotification: true, missingFields });
+                }}
+                onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search + Toolbar */}
+      <div className="glass-panel space-y-3 p-3">
+        {/* Search row — full width */}
+        <div className="flex gap-3">
+          <select
+            value={searchField}
+            onChange={(e) => { setSearchField(e.target.value); setPage(1); }}
+            className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white min-h-[44px]"
+          >
+            <option value="all">All Fields</option>
+            <option value="subject_code">Code</option>
+            <option value="subject_course_no">Course No</option>
+            <option value="subject_descriptive_title">Title</option>
+            <option value="curr_id">Curriculum ID</option>
+          </select>
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+            <input
+              type="text"
+              placeholder={`Search ${searchFieldLabel[searchField] ?? searchField.replace(/_/g, ' ')}...`}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearchNow(); }}
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg min-h-[44px]"
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                title="Clear search"
+                type="button"
+              >
+                <X size={18} />
+              </button>
             )}
+          </div>
+        </div>
+
+        {/* Action + Filter row */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => { setMthCard(emptyCardState('mth')); setTfsCard(emptyCardState('tfs')); setShowAddModal(true); }}
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px]"
+              type="button"
+              title="Add new subject"
+            >
+              <PlusCircle size={14} />
+              <span>Add</span>
+            </button>
             <button
               onClick={handleFetch}
               disabled={fetching || loading}
-              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
-              title="Sync subjects from course offerings then reload"
+              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] disabled:opacity-50"
+              title="Sync subjects from course offerings"
               type="button"
             >
               <RefreshCw size={14} className={fetching ? 'animate-spin' : ''} />
-              <span>{fetching ? 'Fetching' : 'Fetch'}</span>
+              <span>{fetching ? 'Fetching…' : 'Fetch'}</span>
             </button>
-            <span className="inline-flex items-center rounded-full border border-primary/20 bg-white px-3 py-1.5 text-sm font-semibold text-primary shadow-sm">
-              {total} subjects
-            </span>
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px]"
+              type="button"
+              title="Export visible subjects to CSV"
+            >
+              <Download size={14} />
+              <span>Export</span>
+            </button>
+            <div className="h-6 w-px bg-slate-200 mx-0.5" />
             <button
               onClick={() => loadSubjects()}
               disabled={loading}
-              className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px] disabled:opacity-50"
               title="Reload subjects"
               type="button"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              <span>{loading ? 'Reloading' : 'Reload'}</span>
+              <span>Reload</span>
+            </button>
+            <button
+              ref={colButtonRef}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px]"
+              onClick={() => setColMenuOpen((prev) => !prev)}
+              type="button"
+              title="Column visibility"
+            >
+              <Settings size={14} />
+              <span>Cols</span>
+            </button>
+            {colMenuOpen && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={colMenuRef}
+                style={{ position: 'fixed', top: `${colMenuPos.top}px`, left: `${colMenuPos.left}px`, zIndex: 9999 }}
+                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
+              >
+                {columns.map((col) => (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2 px-3 py-2.5 text-sm text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => toggleColumnVisibility(col.key)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>,
+              document.body
+            )}
+            <button
+              onClick={() => { setSearchInput(''); setSearch(''); setSearchField('all'); setStatusFilter(''); setPage(1); }}
+              className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50 min-h-[44px]"
+              type="button"
+            >
+              Reset
             </button>
           </div>
 
-          <button
-            ref={colButtonRef}
-            className="btn-primary inline-flex items-center gap-1.5 h-11 text-sm px-4 py-2"
-            onClick={() => setColMenuOpen((prev) => !prev)}
-            type="button"
-            title="Column visibility"
-          >
-            <Settings size={14} />
-            <span>Cols</span>
-          </button>
-          {colMenuOpen && typeof document !== 'undefined' && createPortal(
-            <div
-              ref={colMenuRef}
-              style={{
-                position: 'fixed',
-                top: `${colMenuPos.top}px`,
-                left: `${colMenuPos.left}px`,
-                zIndex: 9999,
-              }}
-              className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
-            >
-              {columns.map((col) => (
-                <label
-                  key={col.key}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns.has(col.key)}
-                    onChange={() => toggleColumnVisibility(col.key)}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/30"
-                  />
-                  {col.label}
-                </label>
-              ))}
-            </div>,
-            document.body
-          )}
-          <button
-            onClick={() => {
-              setMthCard(emptyCardState('mth'));
-              setTfsCard(emptyCardState('tfs'));
-              setShowAddModal(true);
-            }}
-            className="btn-primary inline-flex items-center gap-1.5 text-xs px-3 py-2 h-11 min-w-11"
-            type="button"
-          >
-            <PlusCircle size={14} />
-            <span>Add</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="glass-panel p-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex gap-2 flex-1 md:max-w-xl">
-            <select
-              value={searchField}
-              onChange={(e) => {
-                setSearchField(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-on-surface outline-none transition-all hover:border-primary focus:border-primary"
-            >
-              <option value="all">All Fields</option>
-              <option value="subject_code">Code</option>
-              <option value="subject_course_no">Course No</option>
-              <option value="subject_descriptive_title">Title</option>
-              <option value="curr_id">Curriculum ID</option>
-            </select>
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-              <input
-                type="text"
-                placeholder={`Search ${searchFieldLabel[searchField] ?? searchField.replace(/_/g, ' ')}...`}
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearchNow(); }}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-10 text-sm text-on-surface placeholder:text-on-surface-variant/60 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-              />
-              {searchInput && (
-                <button
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
-                  title="Clear search"
-                  type="button"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {['', 'active', 'inactive'].map((status) => (
               <button
                 key={status}
-                onClick={() => {
-                  setStatusFilter(status);
-                  setPage(1);
-                }}
+                onClick={() => { setStatusFilter(status); setPage(1); }}
                 type="button"
-                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] transition min-h-[36px] ${
                   statusFilter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
                     : 'border border-slate-200 bg-white text-on-surface-variant hover:bg-slate-50'
@@ -1197,29 +1262,35 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         </div>
 
         {updateError && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
             <AlertCircle size={16} />
             <span>{updateError}</span>
           </div>
         )}
       </div>
 
+      {/* Contextual selection bar — only rendered when rows are selected */}
       {selectedSubjects.size > 0 && (
-        <div className="glass-panel mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div className="font-semibold">{selectedSubjects.size} subject{selectedSubjects.size === 1 ? '' : 's'} selected</div>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 gap-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <Trash2 size={15} className="shrink-0" />
+            {selectedSubjects.size} subject{selectedSubjects.size > 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-slate-100"
+              onClick={() => setSelectedSubjects(new Set())}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors"
             >
-              Export selection
+              Clear
             </button>
             <button
               type="button"
               onClick={handleBulkDelete}
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 min-h-[36px]"
             >
-              Delete selection
+              <Trash2 size={13} />
+              Delete Selected
             </button>
           </div>
         </div>
@@ -1311,7 +1382,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                               </span>
                               {issueState.hasScheduleConflict && (
                                 <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                                  Conflict{issueState.conflictingCount > 1 ? ` (${issueState.conflictingCount})` : ''}
+                                  Conflict
                                 </span>
                               )}
                             </div>
@@ -1584,6 +1655,23 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                         placeholder="e.g., 1"
                       />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                        Department
+                      </label>
+                      <select
+                        value={newSubject.department_id ?? ''}
+                        onChange={(e) => setNewSubject({ ...newSubject, department_id: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                      >
+                        <option value="">Select department</option>
+                        {(departments || []).map((dept) => (
+                          <option key={dept.department_id} value={dept.department_id}>
+                            {dept.department_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="sm:col-span-2">
                       <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                         Descriptive Title
@@ -1837,6 +1925,25 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                  Department
+                </label>
+                <select
+                  value={editingData.department_id ?? ''}
+                  onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
+                  disabled={editingSubject?._fromNotification && !editingSubject?._missingFields?.includes('department_id')}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                >
+                  <option value="">Select department</option>
+                  {(departments || []).map((dept) => (
+                    <option key={dept.department_id} value={dept.department_id}>
+                      {dept.department_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                   Descriptive Title
                 </label>
                 <input
@@ -2050,5 +2157,15 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         </div>
       )}
     </div>
+    <AnimatePresence>
+      {successToast && (
+        <Toast
+          key={successToast}
+          message={successToast}
+          onClose={() => setSuccessToast(null)}
+        />
+      )}
+    </AnimatePresence>
+</>
   );
 }

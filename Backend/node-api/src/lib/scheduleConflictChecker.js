@@ -24,6 +24,11 @@ const DAY_ALIASES = new Map([
 // Sorted canonical day order (used to keep outputs deterministic).
 const DAY_ORDER = ['MON', 'TUE', 'THU', 'FRI', 'SAT'];
 
+// Saturday conflict window: only SAT schedule overlaps within 2:00–4:30 PM generate conflicts.
+// 2:00 PM = 840 min, 4:30 PM = 990 min. Covers both defined Saturday slots (2:00–3:30, 3:00–4:30).
+const SAT_CONFLICT_WINDOW_START = 14 * 60;      // 840
+const SAT_CONFLICT_WINDOW_END   = 16 * 60 + 30; // 990
+
 function normalizeUpper(value) {
   return String(value ?? '').trim().toUpperCase();
 }
@@ -76,7 +81,7 @@ function parseTimeBlock(blockStr, scheduleType) {
 
   if (days.size === 0) {
     if (scheduleType === 'mth') { days.add('MON'); days.add('THU'); }
-    else if (scheduleType === 'tfs') { days.add('TUE'); days.add('FRI'); days.add('SAT'); }
+    else if (scheduleType === 'tfs') { days.add('TUE'); days.add('FRI'); }
   }
 
   if (days.size === 0 || startMin === null || endMin === null) return null;
@@ -230,7 +235,22 @@ function isMergedSubject(entity, other) {
 
   if (mthRoomEntity && !sharesRoom(mthRoomEntity, mthRoomOther)) return false;
   if (tfsRoomEntity && !sharesRoom(tfsRoomEntity, tfsRoomOther)) return false;
-  return true;
+
+  // Same schedule + shared room is only a non-conflict if explicitly flagged merged
+  // OR if they share the same course_no AND same descriptive_title (mirrors Python
+  // merge_detector.py: title match is a required gating signal for any merge verdict).
+  // Two different courses in the same room at the same time is always a conflict.
+  const courseNo = entity.course_no || entity.subject_course_no;
+  const otherCourseNo = other.course_no || other.subject_course_no;
+  const title = entity.descriptive_title || entity.subject_descriptive_title;
+  const otherTitle = other.descriptive_title || other.subject_descriptive_title;
+
+  const sameCourse = courseNo && otherCourseNo &&
+    normalizeUpper(courseNo) === normalizeUpper(otherCourseNo);
+  const sameTitle = title && otherTitle &&
+    normalizeUpper(title) === normalizeUpper(otherTitle);
+  const explicitlyMerged = entity.merged === true || other.merged === true;
+  return explicitlyMerged || (sameCourse && sameTitle);
 }
 
 function isSameCourseSection(entity, other) {
@@ -277,6 +297,14 @@ export function findConflictingSchedules(entity, allEntities, isEntityGym, gymRo
           eRec.startMin < oRec.endMin &&
           oRec.startMin < eRec.endMin
         ) {
+          // SAT conflicts are only valid when the overlapping period starts within
+          // the defined Saturday window (2:00–4:30 PM). A bare TFS schedule without
+          // day prefix defaults to TUE+FRI only, so SAT is isolated to explicit S/Sat entries.
+          if (eRec.day === 'SAT') {
+            const overlapStart = Math.max(eRec.startMin, oRec.startMin);
+            const overlapEnd   = Math.min(eRec.endMin,   oRec.endMin);
+            if (overlapStart < SAT_CONFLICT_WINDOW_START || overlapEnd > SAT_CONFLICT_WINDOW_END) continue;
+          }
           conflictingDaysSet.add(eRec.day);
           conflictRoom = eRec.room;
         }

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
+import Toast from '../components/Toast';
 import {
   BookMarked,
   Layers,
@@ -36,7 +38,8 @@ import {
   fetchCourseOfferingPageNumber,
   checkDuplicateCode,
 } from '../services/courseOfferingsApi';
-import { fetchRooms } from '../services/roomsApi';
+import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
+import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
 import { fetchDepartments } from '../services/departmentsApi';
 import NotificationButton from '../components/NotificationButton';
 import { syncCourseOfferingNotifications } from '../services/notificationsApi';
@@ -67,6 +70,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [updateError, setUpdateError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [rooms, setRooms] = useState([]);
+  const [roomBookings, setRoomBookings] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState(null);
   const [importingCsv, setImportingCsv] = useState(false);
@@ -88,10 +92,14 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [colMenuPos, setColMenuPos] = useState({ top: 0, left: 0 });
   const colButtonRef = useRef(null);
+  const colMenuRef = useRef(null);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [importMenuPos, setImportMenuPos] = useState({ top: 0, left: 0 });
+  const importMenuButtonRef = useRef(null);
+  const importMenuRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [duplicateCodeSuggestions, setDuplicateCodeSuggestions] = useState([]);
   const [checkingDuplicateCode, setCheckingDuplicateCode] = useState(false);
-  const colMenuRef = useRef(null);
   const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'critical', 'medium', 'low'
   const [notificationSearch, setNotificationSearch] = useState('');
   const [compareIds, setCompareIds] = useState(null); // null | [id1, id2]
@@ -170,6 +178,39 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [colMenuOpen]);
+
+  // Handle import dropdown positioning and click outside
+  useEffect(() => {
+    if (!importMenuOpen) return;
+
+    const updatePosition = () => {
+      if (!importMenuButtonRef.current) return;
+      const rect = importMenuButtonRef.current.getBoundingClientRect();
+      setImportMenuPos({
+        top: rect.bottom + 8,
+        left: rect.left,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    const handleClickOutside = (e) => {
+      const isButtonClick = importMenuButtonRef.current && importMenuButtonRef.current.contains(e.target);
+      const isMenuClick = importMenuRef.current && importMenuRef.current.contains(e.target);
+      if (!isButtonClick && !isMenuClick) {
+        setImportMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [importMenuOpen]);
 
   const totalPages = useMemo(() => {
     if (!totalRows) return 1;
@@ -271,6 +312,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Load all room bookings from DB for conflict detection across all pages
+  useEffect(() => {
+    let active = true;
+    fetchRoomBookings()
+      .then((rows) => { if (active) setRoomBookings(rows); })
+      .catch((err) => console.error('Failed to load room bookings:', err));
+    return () => { active = false; };
   }, []);
 
   // Load departments data
@@ -714,6 +764,30 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       .filter((item) => item.issues.length > 0);
   }, [notifications]);
 
+  // Map of offeringId → conflict info, built from raw notifications (includes schedule_conflict).
+  // Also marks the peer offering — deduplicateConflictPairs absorbs one side of each pair into
+  // item.conflictPeer so the peer never appears as its own top-level notification item.
+  const conflictOfferingMap = useMemo(() => {
+    const map = new Map();
+    for (const item of notifications) {
+      const id = Number(item.entity_id || item.offeringId);
+      if (!id) continue;
+      const conflictIssues = (item.issues || []).filter(
+        (issue) => issue.field === 'schedule_conflict'
+      );
+      if (conflictIssues.length > 0) {
+        map.set(id, { hasScheduleConflict: true });
+        for (const issue of conflictIssues) {
+          const peerId = Number(issue.details?.conflicting_offering_id);
+          if (peerId && !Number.isNaN(peerId)) {
+            map.set(peerId, { hasScheduleConflict: true });
+          }
+        }
+      }
+    }
+    return map;
+  }, [notifications]);
+
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
     let filtered = notificationsNoConflicts;
@@ -1039,34 +1113,29 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     });
   };
 
-  // Returns true when two offerings occupy the exact same physical slot —
-  // identical schedule strings AND at least one shared room ID.
-  // Two offerings at the exact same time in the same room are the same physical
-  // class (merged/cross-listed), regardless of code, title, dept, or curriculum.
   const isMergedSubject = (offering, compareTo) => {
-    // Same course section: same curriculum + department + course_no → intentional room-share
-    // (staggered lab sections share rooms at different times — not a conflict)
+    const norm = (s) => String(s || '').trim().toUpperCase();
+
+    // Same course in same curriculum+department → intentional room-share (different sections)
     if (offering.curr_id && compareTo.curr_id &&
         String(offering.curr_id) === String(compareTo.curr_id) &&
         String(offering.department_id) === String(compareTo.department_id) &&
-        String(offering.course_no || '').trim().toUpperCase() === String(compareTo.course_no || '').trim().toUpperCase()) {
+        norm(offering.course_no || '') === norm(compareTo.course_no || '') &&
+        norm(offering.course_no || '') !== '') {
       return true;
     }
 
-    const norm = (s) => String(s || '').trim().toUpperCase();
+    // Explicitly flagged as merged
+    if (offering.merged === true || compareTo.merged === true) return true;
 
     const mthA = norm(offering.mth_schedule);
     const mthB = norm(compareTo.mth_schedule);
     const tfsA = norm(offering.tfs_schedule);
     const tfsB = norm(compareTo.tfs_schedule);
 
-    // Must have at least one schedule to compare
     if (!mthA && !tfsA) return false;
-
-    // Schedules must match exactly
     if (mthA !== mthB || tfsA !== tfsB) return false;
 
-    // Room overlap helper — handles slash-separated strings and arrays
     const toIds = (val) => {
       if (Array.isArray(val)) return val.map(String).filter(Boolean);
       return String(val || '').split('/').map((s) => s.trim()).filter(Boolean);
@@ -1082,12 +1151,16 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     const tfsRoomA = toIds(offering.tfs_room_id);
     const tfsRoomB = toIds(compareTo.tfs_room_id);
 
-    // If offering has an MTH room, compareTo must share at least one
     if (mthRoomA.length && !shareRoom(mthRoomA, mthRoomB)) return false;
-    // If offering has a TFS room, compareTo must share at least one
     if (tfsRoomA.length && !shareRoom(tfsRoomA, tfsRoomB)) return false;
 
-    return true;
+    // Same schedule + same room is a merge only if same course_no AND same descriptive_title.
+    // Mirrors Python merge_detector.py: title match is required to avoid flagging as a conflict.
+    const sameCourse = norm(offering.course_no || '') !== '' &&
+      norm(offering.course_no || '') === norm(compareTo.course_no || '');
+    const sameTitle = norm(offering.descriptive_title || '') !== '' &&
+      norm(offering.descriptive_title || '') === norm(compareTo.descriptive_title || '');
+    return sameCourse && sameTitle;
   };
 
   // Pre-computed room id→name map: avoids O(n) linear scan per getRoomName call
@@ -1102,26 +1175,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     return map;
   }, [rooms]);
 
-  // Pre-computed room→offerings map: avoids O(n) filter per room per render
-  const roomConflictMap = useMemo(() => {
-    const map = new Map();
-    for (const offering of offerings) {
-      for (const stype of ['mth', 'tfs']) {
-        const ids = resolveRoomIds(offering, stype);
-        for (const id of ids) {
-          const key = `${id}:${stype}`;
-          if (!map.has(key)) map.set(key, []);
-          map.get(key).push(offering);
-        }
-      }
-    }
-    return map;
-  }, [offerings]);
-
-  const getConflictingOfferings = (roomId, scheduleType) => {
-    if (!roomId) return [];
-    return roomConflictMap.get(`${roomId}:${scheduleType}`) || [];
-  };
+  // Full-DB room conflict map — uses all bookings fetched at mount, not just the current page
+  const { getConflictingOfferings } = useRoomConflictMap(roomBookings);
 
   const exportToCSV = async () => {
     if (offerings.length === 0) {
@@ -1214,17 +1269,25 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   };
 
   return (
+    <>
     <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
-      {/* Header with compact stats */}
+      {/* Header — identity + health monitoring only */}
       <div className="glass-panel p-3">
-        <div className="flex flex-row items-center justify-between gap-3 flex-nowrap">
-          <div className="space-y-1 flex-shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Identity */}
+          <div>
             <h2 className="text-2xl font-bold text-on-surface">Course Offerings</h2>
-            <p className="text-xs text-on-surface-variant">Manage offerings, schedules, and room assignments.</p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="text-xs text-on-surface-variant">Manage offerings, schedules, and room assignments.</p>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-0.5 text-xs font-semibold text-on-surface-variant backdrop-blur">
+                <BookMarked size={10} className="text-primary" />
+                {totalRows}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto pb-2">
-            {/* Notification + Rescan group */}
-            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+          {/* Monitoring */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm">
               <NotificationButton
                 title="Missing Data"
                 buttonLabel="Issues"
@@ -1240,23 +1303,22 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 notificationSearch={notificationSearch}
                 onNotificationSearchChange={setNotificationSearch}
                 notificationStats={notificationStats}
-                  isRescanning={rescanning}
+                isRescanning={rescanning}
                 totalEntityCount={totalRows}
               />
               <div className="h-5 w-px bg-slate-200" />
               <button
                 type="button"
-                  onClick={handleForceRescan}
-                  disabled={rescanning}
+                onClick={handleForceRescan}
+                disabled={rescanning}
                 title="Clear and re-detect all schedule conflicts and missing data"
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[40px] min-w-max"
               >
-                  <RefreshCw size={14} className={rescanning ? 'animate-spin' : ''} />
-                  <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
+                <RefreshCw size={14} className={rescanning ? 'animate-spin' : ''} />
+                <span>{rescanning ? 'Scanning' : 'Rescan'}</span>
               </button>
             </div>
-            {/* Room Conflicts panel */}
-            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
+            <div className="flex items-stretch gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm">
               <RoomConflictsPanel
                 items={notifications}
                 rooms={rooms}
@@ -1266,253 +1328,255 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                 onCompare={(primaryId, peerId) => setCompareIds([primaryId, peerId])}
               />
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
-              <BookMarked size={12} className="text-primary" />
-              {totalRows}
-            </span>
-            {selectedOfferings.size > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-primary/60 bg-primary/10 px-2 py-1.5 text-xs font-semibold text-primary backdrop-blur flex-shrink-0">
-                {selectedOfferings.size} sel
-              </span>
-            )}
-            {selectedOfferings.size > 0 && (
-              <button
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 font-semibold text-white text-sm min-h-[44px] min-w-max transition-colors hover:bg-red-700 flex-shrink-0"
-                onClick={handleBulkDelete}
-                type="button"
-              >
-                <Trash2 size={16} />
-                <span>Delete</span>
-              </button>
-            )}
-            {/* CSV Import group */}
-            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/80 p-1.5 backdrop-blur shadow-sm flex-shrink-0">
-              {/* File picker */}
-              <label
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors select-none min-h-[40px] ${
-                  selectedCsvFile
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-on-surface-variant hover:bg-slate-100'
-                }`}
-                title="Choose a CSV file to import"
-              >
-                <FileUp size={14} className={selectedCsvFile ? 'text-primary' : 'text-on-surface-variant'} />
-                <span className="max-w-[100px] truncate">
-                  {selectedCsvFile ? selectedCsvFile.name : 'Choose CSV'}
-                </span>
-                {selectedCsvFile && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="ml-0.5 rounded p-0.5 hover:bg-primary/20"
-                    title="Clear file"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setSelectedCsvFile(null);
-                      setImportError('');
-                      setImportSummary(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelectedCsvFile(null);
-                        setImportError('');
-                        setImportSummary(null);
-                      }
-                    }}
-                  >
-                    <X size={12} />
-                  </span>
-                )}
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    setSelectedCsvFile(file);
-                    setImportError('');
-                    setImportSummary(null);
-                  }}
-                />
-              </label>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-slate-200" />
-
-              {/* Replace mode toggle */}
-              <label
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium select-none transition-colors min-h-[40px] whitespace-nowrap ${
-                  replaceMode
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'text-on-surface-variant hover:bg-slate-100'
-                }`}
-                title="Replace Mode: clears ALL Course Offerings and Subjects before importing the new file. Rooms are not affected."
-              >
-                <input
-                  type="checkbox"
-                  checked={replaceMode}
-                  onChange={(e) => setReplaceMode(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-slate-300 accent-orange-500"
-                />
-                <span>Replace All</span>
-                {replaceMode && (
-                  <span className="rounded bg-orange-200 px-1 py-0.5 text-xs font-bold uppercase tracking-wide text-orange-800">
-                    New Sem
-                  </span>
-                )}
-              </label>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-slate-200" />
-
-              {/* Import button */}
-              <button
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50 min-h-[40px] min-w-max ${
-                  replaceMode
-                    ? 'bg-orange-500 hover:bg-orange-600'
-                    : 'bg-primary hover:bg-primary/90'
-                }`}
-                onClick={handleClickImport}
-                type="button"
-                disabled={importingCsv}
-                title={replaceMode ? 'Import and replace all existing data' : 'Import CSV — update or add rows'}
-              >
-                <Upload size={14} />
-                <span>{importingCsv ? 'Importing…' : 'Import'}</span>
-              </button>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-slate-200" />
-
-              {/* Export button */}
-              <button
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[40px] min-w-max"
-                onClick={exportToCSV}
-                type="button"
-                title="Export to CSV"
-              >
-                <Download size={14} />
-                <span>Export</span>
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Controls: Search / Filter / Sort */}
+      {/* Controls: Search + Toolbar */}
       <div className="glass-panel space-y-3 p-3">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          {/* Search Input */}
-          <div className="flex gap-3 flex-1 xl:max-w-sm">
-            <select
-              value={filterColumn}
-              onChange={(e) => setFilterColumn(e.target.value)}
-              aria-label="Search column"
-              className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white min-h-[44px]"
-            >
-              <option value="all">All cols</option>
-              {columns.map((c) => (
-                <option key={c.key} value={c.key}>{c.label}</option>
-              ))}
-            </select>
-            <div className="relative flex-1">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-              <input
-                type="text"
-                placeholder={`Search ${filterColumn === 'all' ? 'all columns' : columns.find(c => c.key === filterColumn)?.label || filterColumn}...`}
-                value={filterText}
-                onChange={(e) => {
-                  setFilterText(e.target.value);
-                }}
-                aria-label="Search course offerings"
-                className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg min-h-[44px]"
-              />
-              {filterText && (
-                <button
-                  onClick={() => setFilterText('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
-                  title="Clear search"
-                  aria-label="Clear search"
-                >
-                  <X size={18} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 xl:justify-end">
-            <button
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
-              onClick={loadInitialPage}
-              type="button"
-              title="Reload data"
-            >
-              <RefreshCw size={14} />
-              <span>Reload</span>
-            </button>
-            <button
-              ref={colButtonRef}
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
-              onClick={() => setColMenuOpen((prev) => !prev)}
-              type="button"
-              aria-label="Show/hide columns"
-              title="Column visibility"
-            >
-              <Settings size={14} />
-              <span>Cols</span>
-            </button>
-            {colMenuOpen && typeof document !== 'undefined' && createPortal(
-              <div
-                ref={colMenuRef}
-                style={{
-                  position: 'fixed',
-                  top: `${colMenuPos.top}px`,
-                  left: `${colMenuPos.left}px`,
-                  zIndex: 9999,
-                }}
-                className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
+        {/* Search row — full width */}
+        <div className="flex gap-3">
+          <select
+            value={filterColumn}
+            onChange={(e) => setFilterColumn(e.target.value)}
+            aria-label="Search column"
+            className="rounded-lg border border-white/30 bg-white/50 px-3 py-2 text-sm text-on-surface-variant outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white min-h-[44px]"
+          >
+            <option value="all">All cols</option>
+            {columns.map((c) => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+            <input
+              type="text"
+              placeholder={`Search ${filterColumn === 'all' ? 'all columns' : columns.find(c => c.key === filterColumn)?.label || filterColumn}...`}
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              aria-label="Search course offerings"
+              className="w-full rounded-lg border border-white/30 bg-white/50 py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/50 outline-none transition-all hover:bg-white/60 focus:border-primary focus:bg-white focus:shadow-lg min-h-[44px]"
+            />
+            {filterText && (
+              <button
+                onClick={() => setFilterText('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                title="Clear search"
+                aria-label="Clear search"
               >
-                {columns.map((col) => (
-                  <label
-                    key={col.key}
-                    className="flex items-center gap-2 px-3 py-2.5 text-sm text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.has(col.key)}
-                      onChange={() => toggleColumnVisibility(col.key)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
-                    />
-                    {col.label}
-                  </label>
-                ))}
-              </div>,
-              document.body
+                <X size={18} />
+              </button>
             )}
-            <button
-              className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px] min-w-[44px]"
-              onClick={() => {
-                setShowAddModal(true);
-                setEditingData({ mth_room_id: [], tfs_room_id: [] });
-                setMthCard(emptyCardState('mth'));
-                setTfsCard(emptyCardState('tfs'));
-                setOfferingError(null);
-              }}
-              type="button"
-              title="Add new course offering"
-            >
-              <PlusCircle size={14} />
-              <span>Add</span>
-            </button>
-            <button
-              onClick={() => { setFilterText(''); setFilterColumn('all'); setSortConfig({ key: 'code', direction: 'asc' }); }}
-              className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50 min-h-[44px]"
-            >
-              Reset
-            </button>
           </div>
+        </div>
+
+        {/* Action toolbar row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Primary: Add */}
+          <button
+            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 min-h-[44px]"
+            onClick={() => {
+              setShowAddModal(true);
+              setEditingData({ mth_room_id: [], tfs_room_id: [] });
+              setMthCard(emptyCardState('mth'));
+              setTfsCard(emptyCardState('tfs'));
+              setOfferingError(null);
+            }}
+            type="button"
+            title="Add new course offering"
+          >
+            <PlusCircle size={14} />
+            <span>Add</span>
+          </button>
+
+          {/* Import dropdown trigger */}
+          <button
+            ref={importMenuButtonRef}
+            type="button"
+            onClick={() => setImportMenuOpen((prev) => !prev)}
+            title="Import CSV"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-colors min-h-[44px] ${
+              replaceMode ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary/90'
+            }`}
+          >
+            <Upload size={14} />
+            <span>Import</span>
+            {selectedCsvFile && (
+              <span className="h-2 w-2 rounded-full bg-white/80" title={selectedCsvFile.name} />
+            )}
+          </button>
+
+          {/* Import dropdown portal */}
+          {importMenuOpen && typeof document !== 'undefined' && createPortal(
+            <div
+              ref={importMenuRef}
+              style={{ position: 'fixed', top: `${importMenuPos.top}px`, left: `${importMenuPos.left}px`, zIndex: 9999 }}
+              className="w-72 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+            >
+              {/* File picker */}
+              <div className="p-3">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">CSV File</p>
+                <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                  selectedCsvFile
+                    ? 'border-primary/40 bg-primary/5 text-primary'
+                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}>
+                  <FileUp size={15} className="shrink-0" />
+                  <span className="flex-1 truncate font-medium">
+                    {selectedCsvFile ? selectedCsvFile.name : 'Choose CSV file…'}
+                  </span>
+                  {selectedCsvFile && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="rounded p-0.5 hover:bg-primary/20"
+                      title="Clear file"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setSelectedCsvFile(null);
+                        setImportError('');
+                        setImportSummary(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedCsvFile(null);
+                          setImportError('');
+                          setImportSummary(null);
+                        }
+                      }}
+                    >
+                      <X size={13} />
+                    </span>
+                  )}
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setSelectedCsvFile(file);
+                      setImportError('');
+                      setImportSummary(null);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* Replace mode */}
+              <div className="p-3">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+                  replaceMode ? 'bg-orange-50' : 'hover:bg-slate-50'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={replaceMode}
+                    onChange={(e) => setReplaceMode(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-orange-500"
+                  />
+                  <div>
+                    <span className={`text-sm font-semibold ${replaceMode ? 'text-orange-700' : 'text-slate-700'}`}>
+                      Replace All
+                    </span>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Clears all offerings &amp; subjects, then rebuilds from CSV.
+                    </p>
+                    {replaceMode && (
+                      <span className="mt-1 inline-block rounded bg-orange-200 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-orange-800">
+                        New Semester
+                      </span>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* Import action */}
+              <div className="p-3">
+                <button
+                  className={`w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 min-h-[44px] ${
+                    replaceMode ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary/90'
+                  }`}
+                  onClick={() => { setImportMenuOpen(false); handleClickImport(); }}
+                  type="button"
+                  disabled={importingCsv || !selectedCsvFile}
+                  title={replaceMode ? 'Import and replace all existing data' : 'Import CSV — update or add rows'}
+                >
+                  <Upload size={15} />
+                  <span>{importingCsv ? 'Importing…' : replaceMode ? 'Replace & Import' : 'Import CSV'}</span>
+                </button>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Export */}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px]"
+            onClick={exportToCSV}
+            type="button"
+            title="Export to CSV"
+          >
+            <Download size={14} />
+            <span>Export</span>
+          </button>
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-slate-200 mx-0.5" />
+
+          {/* Utility: Reload, Cols, Reset */}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px]"
+            onClick={loadInitialPage}
+            type="button"
+            title="Reload data"
+          >
+            <RefreshCw size={14} />
+            <span>Reload</span>
+          </button>
+          <button
+            ref={colButtonRef}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-slate-50 min-h-[44px]"
+            onClick={() => setColMenuOpen((prev) => !prev)}
+            type="button"
+            aria-label="Show/hide columns"
+            title="Column visibility"
+          >
+            <Settings size={14} />
+            <span>Cols</span>
+          </button>
+          {colMenuOpen && typeof document !== 'undefined' && createPortal(
+            <div
+              ref={colMenuRef}
+              style={{ position: 'fixed', top: `${colMenuPos.top}px`, left: `${colMenuPos.left}px`, zIndex: 9999 }}
+              className="bg-white border border-slate-200 rounded-lg shadow-2xl p-2 min-w-max"
+            >
+              {columns.map((col) => (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm text-on-surface hover:bg-primary/5 rounded cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(col.key)}
+                    onChange={() => toggleColumnVisibility(col.key)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                  />
+                  {col.label}
+                </label>
+              ))}
+            </div>,
+            document.body
+          )}
+          <button
+            onClick={() => { setFilterText(''); setFilterColumn('all'); setSortConfig({ key: 'code', direction: 'asc' }); }}
+            className="rounded-lg border border-white/60 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition-all hover:bg-slate-50 min-h-[44px]"
+          >
+            Reset
+          </button>
         </div>
 
         {/* Error Messages */}
@@ -1560,13 +1624,34 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             )}
           </div>
         )}
-        {successMessage && (
-          <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700" role="alert">
-            <Check size={18} />
-            {successMessage}
-          </div>
-        )}
       </div>
+
+      {/* Contextual selection bar — only rendered when rows are selected */}
+      {selectedOfferings.size > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 gap-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <Trash2 size={15} className="shrink-0" />
+            {selectedOfferings.size} offering{selectedOfferings.size > 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedOfferings(new Set())}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 min-h-[36px]"
+            >
+              <Trash2 size={13} />
+              Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Compare Mode Banner */}
       {compareIds && (
@@ -1651,8 +1736,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {!loading && !error && displayedOfferings.map((offering, index) => {
                 const isSelected = selectedOfferings.has(offering.id);
+                const conflictState = conflictOfferingMap.get(offering.id);
+                const hasConflict = !!conflictState?.hasScheduleConflict;
                 return (
-                  <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected ? 'bg-white/6' : ''}`}>
+                  <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : hasConflict ? 'bg-red-50/70' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected && !hasConflict ? 'bg-white/6' : ''}`}>
                     <td className="px-3 py-3 text-center">
                       <input
                         type="checkbox"
@@ -1666,9 +1753,16 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     return (
                       <td key={col.key} className={`px-3 py-3 truncate ${col.key === 'code' || col.key === 'curr_id' ? 'text-center' : ''}`}>
                         {col.key === 'code' ? (
-                          <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-                            {renderCellValue(offering[col.key])}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-block rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                              {renderCellValue(offering[col.key])}
+                            </span>
+                            {hasConflict && (
+                              <span className="inline-block rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                Conflict
+                              </span>
+                            )}
+                          </div>
                         ) : col.key === 'course_no' ? (
                           <span className="text-xs font-medium text-on-surface">
                             {renderCellValue(offering[col.key])}
@@ -2083,95 +2177,193 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
             {editingId && (
               <div className="space-y-4">
-                {columnGroups.flatMap((group) =>
-                  group.title === 'Schedule'
-                    ? [
-                        <div key="schedule" className="space-y-3">
-                          {(() => {
-                            const mthLocked = editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id');
-                            const tfsLocked = editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id');
-                            const mthMissing = editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'));
-                            const tfsMissing = editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'));
-                            return (
-                              <>
-                                <ScheduleCardInput
-                                  slot="mth"
-                                  value={mthCard}
-                                  onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
-                                  onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
-                                  canDisable={tfsCard.enabled}
-                                  roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
-                                    arr[0] = id ? String(id) : '';
-                                    return { ...d, mth_room_id: arr };
-                                  })}
-                                  roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
-                                  onRoomChange2={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
-                                    if (arr.length < 2) arr.push('');
-                                    arr[1] = id ? String(id) : '';
-                                    return { ...d, mth_room_id: arr };
-                                  })}
-                                  rooms={rooms}
-                                  getConflictingOfferings={getConflictingOfferings}
-                                  editingId={editingId}
-                                  isMissing={mthMissing}
-                                  disabled={mthLocked}
-                                />
-                                <ScheduleCardInput
-                                  slot="tfs"
-                                  value={tfsCard}
-                                  onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
-                                  onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
-                                  canDisable={mthCard.enabled}
-                                  roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
-                                  onRoomChange={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
-                                    arr[0] = id ? String(id) : '';
-                                    return { ...d, tfs_room_id: arr };
-                                  })}
-                                  roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
-                                  onRoomChange2={(id) => setEditingData((d) => {
-                                    const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
-                                    if (arr.length < 2) arr.push('');
-                                    arr[1] = id ? String(id) : '';
-                                    return { ...d, tfs_room_id: arr };
-                                  })}
-                                  rooms={rooms}
-                                  getConflictingOfferings={getConflictingOfferings}
-                                  editingId={editingId}
-                                  isMissing={tfsMissing}
-                                  disabled={tfsLocked}
-                                />
-                              </>
-                            );
-                          })()}
-                        </div>,
-                      ]
-                    : group.columns.map((col) => {
-                        const isLocked = editableKeys !== null && !editableKeys.has(col.key);
-                        const isMissing = editableKeys !== null && editableKeys.has(col.key);
-                        return (
-                          <div key={col.key}>
-                            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-                              {col.label}
-                            </label>
-                            <input
-                              type={numericCols.has(col.key) ? 'number' : 'text'}
-                              value={editingData[col.key] ?? ''}
-                              onChange={(e) => setEditingData({ ...editingData, [col.key]: e.target.value })}
-                              disabled={isLocked}
-                              className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none transition-all focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
-                                isMissing
-                                  ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50'
-                                  : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'
-                              }`}
-                            />
-                          </div>
-                        );
-                      })
-                )}
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Course Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.code ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, code: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('code')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('code') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., BSCS-101-A"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Course Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.course_no ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, course_no: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('course_no')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('course_no') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., CMSC 11"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Section *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.section ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, section: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('section')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('section') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., A"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Department *
+                  </label>
+                  <select
+                    value={editingData.department_id ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, department_id: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('department_id')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('department_id') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                  >
+                    <option value="">Select department</option>
+                    {(departments || []).map((dept) => (
+                      <option key={dept.department_id} value={dept.department_id}>
+                        {dept.department_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Curriculum ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.curr_id ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, curr_id: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('curr_id')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('curr_id') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., 1"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Descriptive Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editingData.descriptive_title ?? ''}
+                    onChange={(e) => setEditingData({ ...editingData, descriptive_title: e.target.value })}
+                    disabled={editableKeys !== null && !editableKeys.has('descriptive_title')}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('descriptive_title') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                    placeholder="e.g., Introduction to Computer Science"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <ScheduleCardInput
+                    slot="mth"
+                    value={mthCard}
+                    onChange={(v) => { setMthCard(v); setMthCardModified(true); }}
+                    onToggle={() => { setMthCard((c) => ({ ...c, enabled: !c.enabled })); setMthCardModified(true); }}
+                    canDisable={tfsCard.enabled}
+                    roomId={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[0] || null) : (editingData.mth_room_id || null)}
+                    onRoomChange={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                      arr[0] = id ? String(id) : '';
+                      return { ...d, mth_room_id: arr };
+                    })}
+                    roomId2={Array.isArray(editingData.mth_room_id) ? (editingData.mth_room_id[1] || null) : null}
+                    onRoomChange2={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.mth_room_id) ? d.mth_room_id : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id ? String(id) : '';
+                      return { ...d, mth_room_id: arr };
+                    })}
+                    rooms={rooms}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={editingId}
+                    isMissing={editableKeys !== null && (editableKeys.has('mth_schedule') || editableKeys.has('mth_room_id'))}
+                    disabled={editableKeys !== null && !editableKeys.has('mth_schedule') && !editableKeys.has('mth_room_id')}
+                  />
+                  <ScheduleCardInput
+                    slot="tfs"
+                    value={tfsCard}
+                    onChange={(v) => { setTfsCard(v); setTfsCardModified(true); }}
+                    onToggle={() => { setTfsCard((c) => ({ ...c, enabled: !c.enabled })); setTfsCardModified(true); }}
+                    canDisable={mthCard.enabled}
+                    roomId={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[0] || null) : (editingData.tfs_room_id || null)}
+                    onRoomChange={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                      arr[0] = id ? String(id) : '';
+                      return { ...d, tfs_room_id: arr };
+                    })}
+                    roomId2={Array.isArray(editingData.tfs_room_id) ? (editingData.tfs_room_id[1] || null) : null}
+                    onRoomChange2={(id) => setEditingData((d) => {
+                      const arr = [...(Array.isArray(d.tfs_room_id) ? d.tfs_room_id : [''])];
+                      if (arr.length < 2) arr.push('');
+                      arr[1] = id ? String(id) : '';
+                      return { ...d, tfs_room_id: arr };
+                    })}
+                    rooms={rooms}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={editingId}
+                    isMissing={editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'))}
+                    disabled={editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id')}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Units
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.units ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, units: e.target.value })}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lec Hrs
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.lec_hrs ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, lec_hrs: e.target.value })}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('lec_hrs') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                      disabled={editableKeys !== null && !editableKeys.has('lec_hrs')}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                      Lab Hrs
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingData.lab_hrs ?? ''}
+                      step="0.5"
+                      onChange={(e) => setEditingData({ ...editingData, lab_hrs: e.target.value })}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${editableKeys !== null && editableKeys.has('lab_hrs') ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-400/30 focus:border-amber-500 focus:ring-amber-400/50' : 'border-slate-300 bg-white focus:border-primary focus:ring-primary/20'}`}
+                      disabled={editableKeys !== null && !editableKeys.has('lab_hrs')}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex gap-3 pt-6">
                   <button
                     onClick={() => {
@@ -2488,5 +2680,15 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         </div>
       )}
     </div>
+    <AnimatePresence>
+      {successMessage && (
+        <Toast
+          key={successMessage}
+          message={successMessage}
+          onClose={() => setSuccessMessage(null)}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 }
