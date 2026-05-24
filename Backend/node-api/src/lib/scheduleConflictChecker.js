@@ -230,7 +230,22 @@ function isMergedSubject(entity, other) {
 
   if (mthRoomEntity && !sharesRoom(mthRoomEntity, mthRoomOther)) return false;
   if (tfsRoomEntity && !sharesRoom(tfsRoomEntity, tfsRoomOther)) return false;
-  return true;
+
+  // Same schedule + shared room is only a non-conflict if explicitly flagged merged
+  // OR if they share the same course_no AND same descriptive_title (mirrors Python
+  // merge_detector.py: title match is a required gating signal for any merge verdict).
+  // Two different courses in the same room at the same time is always a conflict.
+  const courseNo = entity.course_no || entity.subject_course_no;
+  const otherCourseNo = other.course_no || other.subject_course_no;
+  const title = entity.descriptive_title || entity.subject_descriptive_title;
+  const otherTitle = other.descriptive_title || other.subject_descriptive_title;
+
+  const sameCourse = courseNo && otherCourseNo &&
+    normalizeUpper(courseNo) === normalizeUpper(otherCourseNo);
+  const sameTitle = title && otherTitle &&
+    normalizeUpper(title) === normalizeUpper(otherTitle);
+  const explicitlyMerged = entity.merged === true || other.merged === true;
+  return explicitlyMerged || (sameCourse && sameTitle);
 }
 
 function isSameCourseSection(entity, other) {
