@@ -660,7 +660,7 @@ router.get('/subjects/persisted', async (req, res) => {
     if (uniqueSubjectIds.length > 0) {
       const { data: subjects } = await supabaseAdmin
         .from('subjects')
-        .select('subject_id, subject_code, subject_descriptive_title, subject_units, subject_lec_hrs, subject_lab_hrs, mth_schedule, tfs_schedule, mth_room, tfs_room, subject_status, curr_id, department_id')
+        .select('subject_id, subject_code, subject_course_no, subject_descriptive_title, subject_units, subject_lec_hrs, subject_lab_hrs, mth_schedule, tfs_schedule, mth_room, tfs_room, subject_status, curr_id, department_id')
         .in('subject_id', uniqueSubjectIds);
       for (const s of (subjects || [])) {
         subjectById[s.subject_id] = s;
@@ -672,6 +672,7 @@ router.get('/subjects/persisted', async (req, res) => {
       ...r,
       subject: subjectById[r.entity_id] ?? null,
       subject_code: subjectById[r.entity_id]?.subject_code ?? null,
+      subject_course_no: subjectById[r.entity_id]?.subject_course_no ?? null,
       subject_descriptive_title: subjectById[r.entity_id]?.subject_descriptive_title ?? null,
     }));
 

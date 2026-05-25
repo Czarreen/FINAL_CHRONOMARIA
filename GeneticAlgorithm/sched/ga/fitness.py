@@ -20,12 +20,19 @@ def _slot_analysis(
     chromosome: List[Gene],
     subjects: List[Subject],
     rooms: List[Room],
+    pre_seeded_slots: dict = None,
+    pre_seeded_sec_slots: dict = None,
 ) -> Tuple[int, float]:
     """
     Slot-tracking pass over a chromosome.
     Returns (hard_violation_count, soft_penalty).
     Hard: room overlap (R-H1), section overlap (S-H11), time bounds (S-H4/S-H5), GYM-EX.
     Soft: room-type mismatch, time spread, section pattern balance, load near-overrun.
+
+    pre_seeded_slots: optional dict of already-occupied room slots from locked/original subjects,
+    keyed by "room_idx|DAY" with values [(start, end, -1)]. Prevents double-room booking.
+    pre_seeded_sec_slots: optional dict of already-occupied section slots, keyed by
+    "section_key|DAY" with values [(start, end, -1)]. Prevents double-schedule conflicts.
     """
     n = max(1, len(subjects))
     hard_subs: Set[int] = set()
@@ -33,8 +40,14 @@ def _slot_analysis(
     soft = 0.0
 
     room_day_slots: Dict[str, List[Tuple[int, int, int]]]         = {}
+    if pre_seeded_slots:
+        for k, slots in pre_seeded_slots.items():
+            room_day_slots[k] = list(slots)
     gym_room_day_slots: Dict[str, List[Tuple[int, int, int, str]]] = {}
     sec_day_slots: Dict[str, List[Tuple[int, int, int]]]          = {}
+    if pre_seeded_sec_slots:
+        for k, slots in pre_seeded_sec_slots.items():
+            sec_day_slots[k] = list(slots)
     sec_pattern_counts: Dict[str, Dict[int, int]]                 = {}
     room_usage: Dict[int, int]                                    = {}
     curr_day_count: Dict[str, int]                                = {}
@@ -121,8 +134,10 @@ def _slot_analysis(
         ss = sorted(slots, key=lambda x: x[0])
         for i in range(1, len(ss)):
             if ss[i][0] < ss[i - 1][1]:
-                hard_subs.add(ss[i][2])
-                hard_subs.add(ss[i - 1][2])
+                if ss[i][2] >= 0:
+                    hard_subs.add(ss[i][2])
+                if ss[i - 1][2] >= 0:
+                    hard_subs.add(ss[i - 1][2])
 
     for slots_4 in gym_room_day_slots.values():
         dept_map: Dict[str, List[Tuple[int, int, int]]] = {}
@@ -150,8 +165,10 @@ def _slot_analysis(
             ps, pe, _ = ss[i - 1]
             cs, ce, _ = ss[i]
             if cs < pe:
-                hard_subs.add(ss[i][2])
-                hard_subs.add(ss[i - 1][2])
+                if ss[i][2] >= 0:
+                    hard_subs.add(ss[i][2])
+                if ss[i - 1][2] >= 0:
+                    hard_subs.add(ss[i - 1][2])
                 run_e = max(run_e, ce)
             else:
                 if cs - pe < 30:
@@ -166,7 +183,7 @@ def _slot_analysis(
             soft += 1.0
 
     for slots in sec_day_slots.values():
-        total = sum(e - s_ for s_, e, _ in slots)
+        total = sum(e - s_ for s_, e, si_ in slots if si_ >= 0)
         if total > 600:
             section_day_overload += 1
         elif total > 480:
@@ -195,9 +212,11 @@ def count_hard_conflicts(
     chromosome: List[Gene],
     subjects: List[Subject],
     rooms: List[Room],
+    pre_seeded_slots: dict = None,
+    pre_seeded_sec_slots: dict = None,
 ) -> int:
     """Return number of subjects with any hard constraint violation."""
-    hard, _ = _slot_analysis(chromosome, subjects, rooms)
+    hard, _ = _slot_analysis(chromosome, subjects, rooms, pre_seeded_slots, pre_seeded_sec_slots)
     return hard
 
 
@@ -205,9 +224,11 @@ def soft_score(
     chromosome: List[Gene],
     subjects: List[Subject],
     rooms: List[Room],
+    pre_seeded_slots: dict = None,
+    pre_seeded_sec_slots: dict = None,
 ) -> float:
     """Return soft score (higher is better, lower soft penalty)."""
-    _, soft = _slot_analysis(chromosome, subjects, rooms)
+    _, soft = _slot_analysis(chromosome, subjects, rooms, pre_seeded_slots, pre_seeded_sec_slots)
     n = max(1, len(subjects))
     return max(0.0, 100.0 - soft / n * 5.0)
 
@@ -216,13 +237,15 @@ def evaluate(
     individual: List[Gene],
     subjects: List[Subject],
     rooms: List[Room],
+    pre_seeded_slots: dict = None,
+    pre_seeded_sec_slots: dict = None,
 ) -> Tuple[float]:
     """
     DEAP fitness function. Returns (fitness,) tuple.
     Hard conflicts → float('-inf').
     Clean solutions → soft_score value (0-100).
     """
-    hard, soft = _slot_analysis(individual, subjects, rooms)
+    hard, soft = _slot_analysis(individual, subjects, rooms, pre_seeded_slots, pre_seeded_sec_slots)
     if hard > 0:
         return (float('-inf'),)
     n = max(1, len(subjects))

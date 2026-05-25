@@ -107,12 +107,14 @@ export function transformCourseOfferingRows(rows) {
   (rows || []).forEach((row) => {
     const key = row.entity_id;
     if (!byOffering[key]) {
+      const _code = row.details?.code || '';
+      const _cno = row.details?.course_no || '';
       byOffering[key] = {
         id: row.entity_id,
         rowId: row.entity_id,
         offeringId: row.entity_id,
         entity_id: row.entity_id,
-        title: row.details?.code ? `${row.details.code}` : `Offering #${row.entity_id}`,
+        title: _code ? (_cno ? `${_code} ${_cno}` : _code) : `Offering #${row.entity_id}`,
         description: row.message,
         severity: normalizeNotificationSeverity(row.severity),
         issues: [],
@@ -147,16 +149,18 @@ export function transformSubjectRows(rows) {
     const dbSubject = row.subject || null;
 
     if (!bySubject[key]) {
+      const _sc = row.subject_code || dbSubject?.subject_code || '';
+      const _scn = row.subject_course_no || dbSubject?.subject_course_no || '';
       bySubject[key] = {
         id: row.entity_id,
         rowId: row.entity_id,
         offeringId: row.entity_id,
         entity_id: row.entity_id,
-        title:
+        title: _sc ? (_scn ? `${_sc} ${_scn}` : _sc) : `Subject #${row.entity_id}`,
+        description:
           row.subject_descriptive_title ||
           dbSubject?.subject_descriptive_title ||
-          `Subject #${row.entity_id}`,
-        description: row.subject_code || dbSubject?.subject_code || null,
+          null,
         severity: normalizeNotificationSeverity(row.severity),
         issues: [],
         missingFields: [],

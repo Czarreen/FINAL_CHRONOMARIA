@@ -92,11 +92,9 @@ class MergeDetectionResult:
 
 _SIGNAL_WEIGHTS = {
     'descriptive_title': 3,
-    'year_level':        2,
+    'course_no':         2,
+    'year_level':        1,
     'units':             1,
-    'lec_hrs':           1,
-    'lab_hrs':           1,
-    'course_no':         1,
 }
 
 MAX_SCORE: int = sum(_SIGNAL_WEIGHTS.values())  # 9
@@ -115,6 +113,11 @@ def _score_group(members: List[Subject]) -> ConfidenceBreakdown:
         matched_signals.append('descriptive_title')
         total_score += _SIGNAL_WEIGHTS['descriptive_title']
 
+    norm_course = [re.sub(r'\s+', '', (s.course_no or '')).upper() for s in members]
+    if _all_same(norm_course):
+        matched_signals.append('course_no')
+        total_score += _SIGNAL_WEIGHTS['course_no']
+
     if _all_same([extract_year_level(s.section or '') for s in members]):
         matched_signals.append('year_level')
         total_score += _SIGNAL_WEIGHTS['year_level']
@@ -122,19 +125,6 @@ def _score_group(members: List[Subject]) -> ConfidenceBreakdown:
     if _all_same([s.units for s in members]):
         matched_signals.append('units')
         total_score += _SIGNAL_WEIGHTS['units']
-
-    if _all_same([s.lec_hrs for s in members]):
-        matched_signals.append('lec_hrs')
-        total_score += _SIGNAL_WEIGHTS['lec_hrs']
-
-    if _all_same([s.lab_hrs for s in members]):
-        matched_signals.append('lab_hrs')
-        total_score += _SIGNAL_WEIGHTS['lab_hrs']
-
-    norm_course = [re.sub(r'\s+', '', (s.course_no or '')).upper() for s in members]
-    if _all_same(norm_course):
-        matched_signals.append('course_no')
-        total_score += _SIGNAL_WEIGHTS['course_no']
 
     verdict = _classify_verdict(total_score, matched_signals)
     return ConfidenceBreakdown(

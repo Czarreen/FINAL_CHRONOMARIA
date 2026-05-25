@@ -82,6 +82,7 @@ def run_intra_pool_ga(
         }
 
         subjects = [m for e in movable for m in e.members]
+        locked_subjects = [m for e in locked + pool.locked_entities for m in e.members]
 
         pool_rooms = [r for r in rooms if str(r.room_id) in pool.room_keys]
         if not pool_rooms:
@@ -99,7 +100,7 @@ def run_intra_pool_ga(
 
         optimized = run_ga_optimization(
             pending=subjects,
-            resolved=[],
+            resolved=locked_subjects,
             rooms=pool_rooms,
             constraints=pool_constraints,
         )
@@ -110,6 +111,13 @@ def run_intra_pool_ga(
                 if member.subject_id in subject_map:
                     entity.members[i] = subject_map[member.subject_id]
             entity.current_schedule_blocks = _parse_blocks_from_member(entity.members[0])
+            if entity.is_merge_group and len(entity.members) > 1:
+                ref = entity.members[0]
+                for m in entity.members[1:]:
+                    m.mth_schedule = ref.mth_schedule
+                    m.mth_room     = ref.mth_room
+                    m.tfs_schedule = ref.tfs_schedule
+                    m.tfs_room     = ref.tfs_room
 
         # Safety: flag any entity whose blocks actually changed.
         for entity in pool.entities:

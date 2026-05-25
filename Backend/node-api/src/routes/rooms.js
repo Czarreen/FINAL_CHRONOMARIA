@@ -287,11 +287,11 @@ router.get('/bookings', async (_req, res) => {
     const [{ data: cos, error: coError }, { data: subs, error: subError }] = await Promise.all([
       supabaseAdmin
         .from('course_offerings')
-        .select('id, code, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
+        .select('id, code, course_no, descriptive_title, merged, curr_id, department_id, mth_schedule, tfs_schedule, mth_room_id, tfs_room_id')
         .or('mth_room_id.not.is.null,tfs_room_id.not.is.null'),
       supabaseAdmin
         .from('subjects')
-        .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room')
+        .select('subject_id, subject_code, subject_course_no, subject_descriptive_title, mth_schedule, tfs_schedule, mth_room, tfs_room')
         .or('mth_room.not.is.null,tfs_room.not.is.null'),
     ]);
 
@@ -301,22 +301,31 @@ router.get('/bookings', async (_req, res) => {
     const rows = [];
 
     for (const co of cos ?? []) {
+      const coBase = {
+        id: co.id, code: co.code,
+        course_no: co.course_no, descriptive_title: co.descriptive_title,
+        merged: co.merged, curr_id: co.curr_id, department_id: co.department_id,
+      };
       for (const roomId of splitRoomIds(co.mth_room_id)) {
-        rows.push({ id: co.id, code: co.code, mth_schedule: co.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
+        rows.push({ ...coBase, mth_schedule: co.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
       }
       for (const roomId of splitRoomIds(co.tfs_room_id)) {
-        rows.push({ id: co.id, code: co.code, mth_schedule: null, tfs_schedule: co.tfs_schedule, room_id: roomId, slot: 'tfs' });
+        rows.push({ ...coBase, mth_schedule: null, tfs_schedule: co.tfs_schedule, room_id: roomId, slot: 'tfs' });
       }
     }
 
     for (const sub of subs ?? []) {
       const mthRoom = sub.mth_room || sub.mth_room_id;
       const tfsRoom = sub.tfs_room || sub.tfs_room_id;
+      const subBase = {
+        subject_id: sub.subject_id, subject_code: sub.subject_code,
+        subject_course_no: sub.subject_course_no, subject_descriptive_title: sub.subject_descriptive_title,
+      };
       for (const roomId of splitRoomIds(mthRoom)) {
-        rows.push({ subject_id: sub.subject_id, subject_code: sub.subject_code, mth_schedule: sub.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
+        rows.push({ ...subBase, mth_schedule: sub.mth_schedule, tfs_schedule: null, room_id: roomId, slot: 'mth' });
       }
       for (const roomId of splitRoomIds(tfsRoom)) {
-        rows.push({ subject_id: sub.subject_id, subject_code: sub.subject_code, mth_schedule: null, tfs_schedule: sub.tfs_schedule, room_id: roomId, slot: 'tfs' });
+        rows.push({ ...subBase, mth_schedule: null, tfs_schedule: sub.tfs_schedule, room_id: roomId, slot: 'tfs' });
       }
     }
 

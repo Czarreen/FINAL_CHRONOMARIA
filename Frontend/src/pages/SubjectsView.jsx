@@ -6,7 +6,7 @@ import { ArrowUpDown, BookOpen, PlusCircle, Edit2, Trash2, Search, ChevronLeft, 
 import { fetchSubjects, fetchSubjectPageNumber, fetchSubjectById, updateSubjectStatus, createSubject, updateSubject, deleteSubject } from '../services/subjectsApi';
 import { fetchDepartments } from '../services/departmentsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
-import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
+import { useRoomConflictMap, useConflictingIdSets } from '../hooks/useRoomConflictMap';
 import { syncSubjectsFromOfferings, applyGeneralTagsToSubjects } from '../services/courseOfferingsApi';
 import NotificationButton from '../components/NotificationButton';
 import RoomConflictsPanel from '../components/RoomConflictsPanel';
@@ -346,29 +346,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     return () => { active = false; };
   }, []);
 
-  // Conflict map derived from backend-persisted notifications (covers all pages, not just current).
-  // Also marks the peer subject — deduplicateConflictPairs absorbs one side of each pair into
-  // item.conflictPeer so the peer never appears as its own top-level notification item.
-  const conflictSubjectMap = useMemo(() => {
-    const map = new Map();
-    for (const item of subjectNotifications) {
-      const id = Number(item.entity_id || item.rowId);
-      if (!id) continue;
-      const conflictIssues = (item.issues || []).filter(
-        (issue) => issue.field === 'schedule_conflict' || issue.field_name === 'schedule_conflict'
-      );
-      if (conflictIssues.length > 0) {
-        map.set(id, { hasScheduleConflict: true });
-        for (const issue of conflictIssues) {
-          const peerId = Number(issue.details?.conflicting_subject_id);
-          if (peerId && !Number.isNaN(peerId)) {
-            map.set(peerId, { hasScheduleConflict: true });
-          }
-        }
-      }
-    }
-    return map;
-  }, [subjectNotifications]);
+  // Conflict set derived from full-DB room bookings — covers every page, not just the first 500 notifications.
+  const { conflictingSubjectIds } = useConflictingIdSets(roomBookings);
 
   // Auto-toggle subject_status based on open notification issues
   // Runs on initial load, refresh, and whenever notifications or subjects change.
@@ -1001,15 +980,13 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
   function getSubjectIssueState(subjectId) {
     const id = Number(subjectId);
     const hasNotificationIssues = notificationSubjectIds.has(id);
-    const conflictState = conflictSubjectMap.get(id);
-    const hasScheduleConflict = Boolean(conflictState?.hasScheduleConflict);
-    const conflictingCount = Number(conflictState?.conflictingCount || 0);
+    const hasScheduleConflict = conflictingSubjectIds.has(id);
 
     return {
       hasOpenIssues: hasNotificationIssues || hasScheduleConflict,
       hasNotificationIssues,
       hasScheduleConflict,
-      conflictingCount,
+      conflictingCount: 0,
     };
   }
 
