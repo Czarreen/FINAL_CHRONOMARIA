@@ -127,11 +127,24 @@ def main():
         late_conflict_pairs = detect_final_conflicts(all_placed)
         if late_conflict_pairs:
             _log_post_ga_conflicts(late_conflict_pairs)
-            late_conflicts = [loser for loser, _ in late_conflict_pairs]
-            placed_ids = {e.entity_id for e in late_conflicts}
+            late_conflicts = []
+            placed_ids = {loser.entity_id for loser, _ in late_conflict_pairs}
             all_placed = [e for e in all_placed if e.entity_id not in placed_ids]
-            for e in late_conflicts:
-                e.manual_review_reason = "post_optimization_conflict"
+            for loser, winner in late_conflict_pairs:
+                loser.manual_review_reason = "post_optimization_conflict"
+                if winner.members:
+                    m = winner.members[0]
+                    loser.conflict_partner_info = {
+                        "code": m.code,
+                        "course_no": m.course_no,
+                        "section": m.section,
+                        "descriptive_title": m.descriptive_title,
+                        "mth_schedule": m.mth_schedule,
+                        "mth_room": m.mth_room,
+                        "tfs_schedule": m.tfs_schedule,
+                        "tfs_room": m.tfs_room,
+                    }
+                late_conflicts.append(loser)
             manual_review = manual_review + late_conflicts
             diagnostics["warnings"].append(
                 f"post_ga_conflicts_detected: {len(late_conflicts)}"

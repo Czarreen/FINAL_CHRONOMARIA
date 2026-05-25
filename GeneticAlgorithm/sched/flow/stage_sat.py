@@ -95,7 +95,9 @@ def _format_sat_schedule(start_min: int, end_min: int) -> str:
     """Format a time range into a schedule string with Sat day override."""
     s_h, s_m = divmod(start_min, 60)
     e_h, e_m = divmod(end_min, 60)
-    return f"{s_h % 12 or 12}:{s_m:02d}-{e_h % 12 or 12}:{e_m:02d} Sat"
+    s_mer = "AM" if s_h < 12 else "PM"
+    e_mer = "AM" if e_h < 12 else "PM"
+    return f"{s_h % 12 or 12}:{s_m:02d} {s_mer}-{e_h % 12 or 12}:{e_m:02d} {e_mer} Sat"
 
 
 def _find_free_sat_slot(

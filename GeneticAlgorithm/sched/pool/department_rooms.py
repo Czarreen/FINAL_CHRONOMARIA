@@ -19,14 +19,14 @@ from typing import Dict, List
 # Maps department_id (numeric string from DB) to preferred building prefixes.
 # Primary building is index 0; subsequent entries are ordered fallbacks.
 _AFFINITY: Dict[str, List[str]] = {
-    "1":  ["D"],        # Architecture
-    "2":  ["RS", "S"],  # Civil Engineering
-    "3":  ["E", "S"],   # Computer Engineering
-    "4":  ["E", "S"],   # Electrical Engineering
-    "5":  ["E", "S"],   # Electronics Engineering
-    "6":  ["AP"],       # Information Technology
-    "7":  ["AP"],       # Library Information Science
-    "11": ["AP"],       # Computer Science
+    "1":  ["D", "S"],        # Architecture
+    "2":  ["RS", "S"],       # Civil Engineering
+    "3":  ["E", "S"],        # Computer Engineering
+    "4":  ["E", "S"],        # Electrical Engineering
+    "5":  ["E", "S"],        # Electronics Engineering
+    "6":  ["AP", "S"],       # Information Technology
+    "7":  ["AP", "S"],       # Library Information Science
+    "11": ["AP", "S"],       # Computer Science
     # Departments 8 (Mathematics) and 10 (ECE) are intentionally excluded.
 }
 

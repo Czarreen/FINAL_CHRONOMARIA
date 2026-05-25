@@ -37,6 +37,7 @@ class SchedulingEntity:
     has_dual_room: bool = False
     was_modified: bool = False
     manual_review_reason: Optional[str] = None
+    conflict_partner_info: Optional[dict] = None
 
     @property
     def subject_ids(self) -> List[int]:

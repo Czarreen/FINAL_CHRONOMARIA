@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Download,
   DoorOpen,
   Play,
@@ -31,6 +30,7 @@ import {
 import { getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils.js';
 
 const LAST_SCHEDULER_RUN_KEY = 'automaticSchedulerLastRun';
+const LAST_SCHEDULER_RESULT_KEY = 'automaticSchedulerLastResult';
 const COURSE_OFFERING_UPDATE_MODES = {
   BACKUP_THEN_UPDATE: 'BACKUP_THEN_UPDATE',
   UPDATE_NO_BACKUP: 'UPDATE_NO_BACKUP',
@@ -167,62 +167,6 @@ function normalizeUnresolvedIssues(result) {
   });
 }
 
-function issueCategories(issue) {
-  if (issue?.reason_type === 'unresolvable_conflict') return ['Needs manual review'];
-  if (issue?.conflict_type) {
-    if (issue.conflict_type === 'section') return ['Time conflict'];
-    if (issue.conflict_type === 'room') return ['Room conflict'];
-    if (issue.conflict_type === 'both') return ['Room conflict', 'Time conflict'];
-  }
-  const sourceText = [
-    ...(Array.isArray(issue?.reasons) ? issue.reasons : []),
-    issue?.reason,
-    issue?.problem,
-    issue?.suggestions?.room_conflict,
-    issue?.suggestions?.time_conflict,
-  ].filter(Boolean).join(' ').toLowerCase();
-  const categories = [];
-  if (sourceText.includes('room')) categories.push('Room conflict');
-  if (sourceText.includes('time') || sourceText.includes('slot') || sourceText.includes('schedule')) {
-    categories.push('Time conflict');
-  }
-  return categories.length > 0 ? categories : ['Manual review'];
-}
-
-function buildIssueRecommendations(issue, roomCount) {
-  const categories = issueCategories(issue);
-  const steps = [];
-  if (categories.includes('Room conflict')) {
-    if (issue?.rooms_exhausted) {
-      steps.push('Add more rooms in the Rooms page, then rerun the scheduler.');
-    } else if (Array.isArray(issue?.available_rooms) && issue.available_rooms.length > 0) {
-      steps.push('Assign this class to one of the available rooms shown above, then rerun the scheduler.');
-    } else if (issue?.suggestions?.room_conflict) {
-      steps.push(issue.suggestions.room_conflict);
-    } else {
-      steps.push(
-        roomCount > 0
-          ? 'Review the active rooms already loaded and try reassigning this class.'
-          : 'No active rooms are currently loaded. Add more rooms before rerunning the scheduler.'
-      );
-    }
-  }
-  if (categories.includes('Time conflict')) {
-    if (issue?.section_blocked) {
-      steps.push('Manually reschedule another class in this section to free a time slot, then rerun.');
-    } else if (Array.isArray(issue?.available_time_slots) && issue.available_time_slots.length > 0) {
-      steps.push('Try manually assigning this subject to one of the free time windows shown above.');
-    } else if (issue?.suggestions?.time_conflict) {
-      steps.push(issue.suggestions.time_conflict);
-    } else {
-      steps.push('Adjust the time schedule for this section, then rerun the scheduler.');
-    }
-  }
-  if (categories.includes('Manual review')) {
-    steps.push('Review subject data and room/schedule assignments, then rerun the scheduler.');
-  }
-  return steps;
-}
 
 const DEPT_ABBREV_OVERRIDE = {
   'ELECTRONICS ENGINEERING': 'ECE',
@@ -253,6 +197,238 @@ function isPathFitSubject(courseNo) {
 
 function isGymRoom(roomName) {
   return /gym/i.test(roomName || '');
+}
+
+const ISSUE_TAB_CONFIG = [
+  { key: 'partial_data', label: 'Partial Data' },
+  { key: 'mixed_type_dual_room', label: 'Mixed Type Dual Room' },
+  { key: 'post_optimization_conflict', label: 'Post-Opt Conflict' },
+  { key: 'saturday_explicit', label: 'Saturday' },
+];
+
+function IssueSubjectHeader({ issue }) {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {issue.code && (
+            <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary shrink-0">
+              {issue.code}
+            </span>
+          )}
+          {isPathFitSubject(issue.course_no) && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">PATH FIT</span>
+          )}
+          {issue.section && (
+            <span className="text-xs text-on-surface-variant font-medium">§ {issue.section}</span>
+          )}
+        </div>
+        {issue.descriptive_title && (
+          <p className="mt-1 text-sm font-semibold text-on-surface leading-tight">{issue.descriptive_title}</p>
+        )}
+        {issue.course_no && (
+          <p className="mt-0.5 text-xs text-on-surface-variant">{issue.course_no}</p>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        {Number(issue.lec_hrs) > 0 && (
+          <span className="text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded whitespace-nowrap">
+            {issue.lec_hrs}h Lec
+          </span>
+        )}
+        {Number(issue.lab_hrs) > 0 && (
+          <span className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded whitespace-nowrap">
+            {issue.lab_hrs}h Lab
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IssueScheduleLine({ label, schedule, room, missingColor = 'amber' }) {
+  const hasSchedule = Boolean(schedule);
+  const hasRoom = Boolean(room);
+  const missingCls = missingColor === 'rose'
+    ? 'bg-rose-100 text-rose-600 border-rose-200'
+    : 'bg-amber-100 text-amber-700 border-amber-200';
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <span className="font-bold text-slate-500 shrink-0 w-8 pt-0.5">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {hasSchedule ? (
+          <span className="font-medium text-on-surface">{formatScheduleDisplay(schedule)}</span>
+        ) : (
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${missingCls}`}>
+            <AlertTriangle size={9} /> No schedule
+          </span>
+        )}
+        {hasRoom ? (
+          <span className="inline-flex items-center gap-1 text-slate-500">
+            <DoorOpen size={9} />{room}
+            {isGymRoom(room) && <span className="px-1 rounded text-[9px] font-bold bg-purple-100 text-purple-700">GYM</span>}
+          </span>
+        ) : hasSchedule ? (
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${missingCls}`}>
+            <DoorOpen size={9} /> No room
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PartialDataCard({ issue }) {
+  return (
+    <div className="rounded-xl border border-amber-200/80 bg-white/85 p-4 space-y-3 shadow-sm">
+      <IssueSubjectHeader issue={issue} />
+      <div className="rounded-lg bg-amber-50/60 border border-amber-100 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700 mb-3">Schedule Data</p>
+        <div className="grid grid-cols-[2rem_1fr_1fr] gap-x-3 gap-y-0.5 mb-1">
+          <span />
+          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Schedule</span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Room</span>
+        </div>
+        <div className="grid grid-cols-[2rem_1fr_1fr] gap-x-3 gap-y-2 items-start">
+          <span className="text-xs font-bold text-slate-500 pt-0.5">MTH</span>
+          <div>
+            {issue.mth_schedule
+              ? <span className="text-xs font-medium text-on-surface">{formatScheduleDisplay(issue.mth_schedule)}</span>
+              : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-100 text-amber-700 border-amber-200"><AlertTriangle size={9} /> Missing</span>
+            }
+          </div>
+          <div>
+            {issue._mthRoom
+              ? <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant"><DoorOpen size={10} />{issue._mthRoom}</span>
+              : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-100 text-amber-700 border-amber-200"><DoorOpen size={9} /> Missing</span>
+            }
+          </div>
+          <span className="text-xs font-bold text-slate-500 pt-0.5">TFS</span>
+          <div>
+            {issue.tfs_schedule
+              ? <span className="text-xs font-medium text-on-surface">{formatScheduleDisplay(issue.tfs_schedule)}</span>
+              : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-100 text-amber-700 border-amber-200"><AlertTriangle size={9} /> Missing</span>
+            }
+          </div>
+          <div>
+            {issue._tfsRoom
+              ? <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant"><DoorOpen size={10} />{issue._tfsRoom}</span>
+              : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-100 text-amber-700 border-amber-200"><DoorOpen size={9} /> Missing</span>
+            }
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-amber-800">Complete the missing schedule or room data in the Subjects page, then rerun.</p>
+    </div>
+  );
+}
+
+function MixedTypeDualRoomCard({ issue }) {
+  return (
+    <div className="rounded-xl border border-purple-200/80 bg-white/85 p-4 space-y-3 shadow-sm">
+      <IssueSubjectHeader issue={issue} />
+      <div className="rounded-lg bg-purple-50/60 border border-purple-100 p-3 space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-purple-700 mb-2.5">Room Type Conflict</p>
+        {(issue.mth_schedule || issue._mthRoom) && (
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-bold text-slate-500 shrink-0 w-8">MTH</span>
+            {issue.mth_schedule && <span className="font-medium text-on-surface">{formatScheduleDisplay(issue.mth_schedule)}</span>}
+            {issue._mthRoom && (
+              <>
+                <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                  <DoorOpen size={9} />{issue._mthRoom}
+                  {isGymRoom(issue._mthRoom) && <span className="ml-1 text-purple-600">GYM</span>}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+        {(issue.tfs_schedule || issue._tfsRoom) && (
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-bold text-slate-500 shrink-0 w-8">TFS</span>
+            {issue.tfs_schedule && <span className="font-medium text-on-surface">{formatScheduleDisplay(issue.tfs_schedule)}</span>}
+            {issue._tfsRoom && (
+              <>
+                <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-200">
+                  <DoorOpen size={9} />{issue._tfsRoom}
+                  {isGymRoom(issue._tfsRoom) && <span className="ml-1 text-purple-600">GYM</span>}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-purple-800 pt-2 border-t border-purple-100">
+          One room is a laboratory and the other is a lecture room — both must be the same type for automatic scheduling.
+        </p>
+      </div>
+      <p className="text-xs text-purple-800">Assign matching room types in the Subjects page or adjust the room configuration, then rerun.</p>
+    </div>
+  );
+}
+
+function PostOptConflictCard({ issue }) {
+  const partner = issue.conflict_partner_info;
+  return (
+    <div className="rounded-xl border border-rose-200/80 bg-white/85 p-4 space-y-3 shadow-sm">
+      <IssueSubjectHeader issue={issue} />
+      <div className="rounded-lg bg-rose-50/60 border border-rose-100 p-3 space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-rose-700 mb-2">Conflicted Schedule</p>
+        <IssueScheduleLine label="MTH" schedule={issue.mth_schedule} room={issue._mthRoom} missingColor="rose" />
+        <IssueScheduleLine label="TFS" schedule={issue.tfs_schedule} room={issue._tfsRoom} missingColor="rose" />
+      </div>
+      {partner ? (
+        <div className="rounded-lg bg-slate-50/80 border border-slate-200 p-3 space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">Conflicts With</p>
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            {partner.code && (
+              <span className="inline-block rounded-md bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">{partner.code}</span>
+            )}
+            {partner.section && (
+              <span className="text-xs text-on-surface-variant font-medium">§ {partner.section}</span>
+            )}
+            {partner.descriptive_title && (
+              <span className="text-xs font-medium text-on-surface">{partner.descriptive_title}</span>
+            )}
+          </div>
+          <IssueScheduleLine label="MTH" schedule={partner.mth_schedule} room={partner.mth_room} missingColor="rose" />
+          <IssueScheduleLine label="TFS" schedule={partner.tfs_schedule} room={partner.tfs_room} missingColor="rose" />
+        </div>
+      ) : (
+        <p className="text-xs text-rose-700 bg-rose-50/50 border border-rose-100 rounded-lg px-3 py-2">
+          This subject conflicted with another placed class on the same room and time slot. Reassign its schedule or room manually.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SaturdayCard({ issue }) {
+  const satSchedule = issue.mth_schedule || issue.tfs_schedule || null;
+  const satRoom = issue._mthRoom || issue._tfsRoom || null;
+  return (
+    <div className="rounded-xl border border-indigo-200/80 bg-white/85 p-4 space-y-3 shadow-sm">
+      <IssueSubjectHeader issue={issue} />
+      <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 p-3 space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-indigo-700 mb-2">Saturday Schedule</p>
+        {satSchedule ? (
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-medium text-on-surface">{formatScheduleDisplay(satSchedule)}</span>
+            {satRoom && (
+              <span className="inline-flex items-center gap-1 text-slate-500">
+                <DoorOpen size={9} />{satRoom}
+                {isGymRoom(satRoom) && <span className="px-1 rounded text-[9px] font-bold bg-purple-100 text-purple-700">GYM</span>}
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-on-surface-variant">No schedule assigned yet.</p>
+        )}
+      </div>
+      <p className="text-xs text-indigo-800">Saturday-only classes are excluded from automatic scheduling. Assign time and room manually in the Subjects page.</p>
+    </div>
+  );
 }
 
 function ScheduleTable({ rows, loading, onExportClick, onUpdateClick, isDryRunRows }) {
@@ -846,6 +1022,7 @@ export default function ScheduleView({ onNavigate }) {
   const [showGaConflicts, setShowGaConflicts] = useState(true);
   const [showPreflightIssues, setShowPreflightIssues] = useState(true);
   const [loadingPhraseIdx, setLoadingPhraseIdx] = useState(0);
+  const [activeIssueTab, setActiveIssueTab] = useState('partial_data');
 
   async function loadPreflight() {
     try {
@@ -884,6 +1061,10 @@ export default function ScheduleView({ onNavigate }) {
     if (raw) {
       try { setLastRunSummary(JSON.parse(raw)); } catch { setLastRunSummary(null); }
     }
+    const rawResult = localStorage.getItem(LAST_SCHEDULER_RESULT_KEY);
+    if (rawResult) {
+      try { setResult(JSON.parse(rawResult)); } catch { /* ignore corrupt data */ }
+    }
   }, []);
 
   useEffect(() => {
@@ -909,6 +1090,7 @@ export default function ScheduleView({ onNavigate }) {
       setPostUpdateNav(false);
       const response = await runAutomaticScheduler({ dryRun });
       setResult(response);
+      if (!dryRun) localStorage.setItem(LAST_SCHEDULER_RESULT_KEY, JSON.stringify(response));
 
       const fitness = Number(response?.fitness_overall || 0);
       const unresolvedIssues = normalizeUnresolvedIssues(response);
@@ -1014,14 +1196,36 @@ export default function ScheduleView({ onNavigate }) {
   const isFixed = Boolean(result) && fitnessScore === 100 && unresolvedCount === 0 && gaConflicts.length === 0;
   const needsManualResolution = Boolean(result) && !isFixed;
 
-  const unresolvedCards = useMemo(
-    () => unresolvedList.map((issue) => ({
-      ...issue,
-      categories: issueCategories(issue),
-      recommendations: buildIssueRecommendations(issue, roomCount),
-    })),
-    [unresolvedList, roomCount]
-  );
+  const issuesByType = useMemo(() => {
+    const grouped = {
+      partial_data: [],
+      mixed_type_dual_room: [],
+      post_optimization_conflict: [],
+      saturday_explicit: [],
+    };
+    for (const issue of unresolvedList) {
+      const type = issue.manual_review_reason;
+      if (type && Object.prototype.hasOwnProperty.call(grouped, type)) {
+        grouped[type].push({
+          ...issue,
+          _mthRoom: issue.mth_room_name || issue.mth_room || null,
+          _tfsRoom: issue.tfs_room_name || issue.tfs_room || null,
+        });
+      }
+    }
+    grouped.saturday_explicit = Array.isArray(result?.assignments)
+      ? result.assignments
+          .filter((r) => r.preflight_tag === 'saturday')
+          .map((r) => ({
+            ...r,
+            _mthRoom: r.mth_room_name || r.mth_room || null,
+            _tfsRoom: r.tfs_room_name || r.tfs_room || null,
+          }))
+      : [];
+    return grouped;
+  }, [unresolvedList, result]);
+
+  const totalIssueCount = ISSUE_TAB_CONFIG.reduce((sum, t) => sum + (issuesByType[t.key]?.length || 0), 0);
 
   const groupedIssues = useMemo(
     () => issues.reduce((acc, issue) => {
@@ -1177,8 +1381,8 @@ export default function ScheduleView({ onNavigate }) {
         </div>
       </div>
 
-      {/* Unresolved Issues — collapsible */}
-      {unresolvedCards.length > 0 && (
+      {/* Unresolved Issues — tabbed collapsible */}
+      {totalIssueCount > 0 && (
         <div className="glass-panel rounded-2xl overflow-hidden">
           <button
             type="button"
@@ -1187,13 +1391,14 @@ export default function ScheduleView({ onNavigate }) {
           >
             <span className="flex items-center gap-2">
               <AlertTriangle size={14} className="text-amber-600" />
-              Unresolved Issues ({unresolvedCards.length})
+              Unresolved Issues ({totalIssueCount})
             </span>
             <ChevronDown size={14} className={`text-amber-600 transition-transform duration-200 ${showUnresolved ? 'rotate-180' : ''}`} />
           </button>
           {showUnresolved && (
-            <div className="p-4 space-y-4">
-              <div className="flex flex-wrap gap-2">
+            <>
+              {/* Quick actions */}
+              <div className="flex flex-wrap gap-2 px-4 pt-3">
                 <button onClick={() => onNavigate?.('subjects')} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100">
                   <BookOpen size={13} /> Review Subjects
                 </button>
@@ -1201,91 +1406,57 @@ export default function ScheduleView({ onNavigate }) {
                   <DoorOpen size={13} /> Review Rooms
                 </button>
               </div>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {unresolvedCards.map((issue, idx) => (
-                  <div key={`${issue.subject_id || issue.code || 'issue'}-${idx}`} className="rounded-2xl border border-amber-200/80 bg-white/75 p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold text-sm text-on-surface">{issue.descriptive_title || issue.course_no || issue.code || 'Subject needs manual review'}</h4>
-                        <p className="mt-0.5 text-xs text-on-surface-variant">
-                          {[issue.code, issue.course_no, issue.section].filter(Boolean).join(' • ') || 'Unassigned subject'}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-1.5">
-                        {issue.categories.map((cat) => (
-                          <span key={cat} className="rounded-full border border-amber-200 bg-amber-100/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">
-                            {cat}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-3 rounded-xl bg-amber-50/80 p-3 text-xs text-amber-900">
-                      <div className="font-semibold">Persistent issue</div>
-                      <div className="mt-1 leading-5">
-                        {Array.isArray(issue.reasons) && issue.reasons.length > 0
-                          ? issue.reasons.join('; ')
-                          : issue.reason || issue.problem || 'No detailed reason returned by the GA.'}
-                      </div>
-                    </div>
-                    {Array.isArray(issue.available_rooms) && issue.available_rooms.length > 0 ? (
-                      <div className="mt-3">
-                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Available Rooms ({issue.available_rooms.length})</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {issue.available_rooms.map((room) => (
-                            <span key={room.room_id} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">
-                              <DoorOpen size={10} />{room.room_name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : issue.rooms_exhausted === true ? (
-                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-error/20 bg-error-container/20 p-3 text-xs text-error">
-                        <DoorOpen size={13} className="flex-shrink-0" />
-                        <span>No available rooms — add more rooms to the system before rerunning.</span>
-                      </div>
-                    ) : null}
-                    {Array.isArray(issue.available_time_slots) && issue.available_time_slots.length > 0 ? (
-                      <div className="mt-3">
-                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Free Time Windows</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {issue.available_time_slots.map((slot) => (
-                            <span key={slot.label} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
-                              <Clock3 size={10} />{slot.label}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : issue.section_blocked === true ? (
-                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900">
-                        <Clock3 size={13} className="flex-shrink-0" />
-                        <span>Section is fully booked — manually reschedule another class in this section to free a slot.</span>
-                      </div>
-                    ) : null}
-                    {issue.recommendations.length > 0 && (
-                      <div className="mt-3 space-y-1.5">
-                        {issue.recommendations.map((rec) => (
-                          <div key={rec} className="flex items-start gap-2 rounded-xl bg-slate-50/80 p-2.5 text-xs text-on-surface-variant">
-                            {rec.toLowerCase().includes('room') ? (
-                              <DoorOpen size={13} className="mt-0.5 flex-shrink-0 text-slate-500" />
-                            ) : rec.toLowerCase().includes('time') || rec.toLowerCase().includes('slot') || rec.toLowerCase().includes('reschedule') ? (
-                              <Clock3 size={13} className="mt-0.5 flex-shrink-0 text-slate-500" />
-                            ) : (
-                              <AlertCircle size={13} className="mt-0.5 flex-shrink-0 text-slate-500" />
-                            )}
-                            <span>{rec}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+
+              {/* Browser-style tab bar */}
+              <div className="flex items-end gap-0.5 px-4 pt-3 border-b border-amber-200 overflow-x-auto">
+                {ISSUE_TAB_CONFIG.map((tab) => {
+                  const count = issuesByType[tab.key]?.length || 0;
+                  const isActive = activeIssueTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActiveIssueTab(tab.key)}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border border-b-0 -mb-px whitespace-nowrap transition-colors shrink-0 ${
+                        isActive
+                          ? 'bg-white border-amber-200 text-on-surface relative z-10'
+                          : 'bg-amber-50/50 border-transparent text-on-surface-variant hover:bg-white/60 hover:text-on-surface'
+                      }`}
+                    >
+                      {tab.label}
+                      <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
+                        count > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+
+              {/* Tab content */}
+              <div className="p-4">
+                {(issuesByType[activeIssueTab]?.length || 0) === 0 ? (
+                  <p className="text-xs text-center text-on-surface-variant py-8">No issues of this type.</p>
+                ) : (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {issuesByType[activeIssueTab].map((issue, idx) => {
+                      const key = issue.subject_id || issue.source_subject_id || issue.code || idx;
+                      if (activeIssueTab === 'partial_data') return <PartialDataCard key={key} issue={issue} />;
+                      if (activeIssueTab === 'mixed_type_dual_room') return <MixedTypeDualRoomCard key={key} issue={issue} />;
+                      if (activeIssueTab === 'post_optimization_conflict') return <PostOptConflictCard key={key} issue={issue} />;
+                      if (activeIssueTab === 'saturday_explicit') return <SaturdayCard key={key} issue={issue} />;
+                      return null;
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
 
-      {needsManualResolution && unresolvedCards.length === 0 && (
+      {needsManualResolution && totalIssueCount === 0 && (
         <div className="glass-panel border border-amber-200 bg-amber-50/40 rounded-2xl px-4 py-3 text-xs text-amber-900">
           The fitness score is below 100 but the GA returned no explicit unresolved items. Review subject times and room allocation manually, then rerun.
         </div>

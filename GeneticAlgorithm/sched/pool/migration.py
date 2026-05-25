@@ -112,7 +112,9 @@ def _make_single_day_blocks(start: int, duration: int, day: Day) -> List[TimeBlo
 def _schedule_str(start: int, duration: int) -> str:
     s_h, s_m = divmod(start, 60)
     e_h, e_m = divmod(start + duration, 60)
-    return f"{s_h % 12 or 12}:{s_m:02d}-{e_h % 12 or 12}:{e_m:02d}"
+    s_mer = "AM" if s_h < 12 else "PM"
+    e_mer = "AM" if e_h < 12 else "PM"
+    return f"{s_h % 12 or 12}:{s_m:02d} {s_mer}-{e_h % 12 or 12}:{e_m:02d} {e_mer}"
 
 
 def _effective_duration(entity: SchedulingEntity) -> int:
