@@ -44,6 +44,16 @@ function isBookingMerged(a, b) {
     return sameCourse && sameTitle;
   }
 
+  // Cross-type: one CO booking, one Subject booking — treat as same entity when
+  // course_no and descriptive_title match (subjects are synced from their source CO).
+  const co = a.id != null ? a : b.id != null ? b : null;
+  const sub = a.subject_id != null ? a : b.subject_id != null ? b : null;
+  if (co && sub) {
+    const sameCourse = norm(co.course_no) !== '' && norm(co.course_no) === norm(sub.subject_course_no);
+    const sameTitle = norm(co.descriptive_title) !== '' && norm(co.descriptive_title) === norm(sub.subject_descriptive_title);
+    return sameCourse && sameTitle;
+  }
+
   return false;
 }
 

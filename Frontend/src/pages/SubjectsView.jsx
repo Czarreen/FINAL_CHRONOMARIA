@@ -629,11 +629,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     setEditError(null);
   }
 
-  async function handleSaveEdit() {
-    if (!editingSubject || !editingData.subject_code) {
-      setEditError('Subject code is required');
-      return;
-    }
+  async function performSaveEdit() {
     try {
       setSavingEdit(true);
       setEditError(null);
@@ -653,7 +649,6 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         tfs_room: tfsCard.enabled ? buildCombinedRoomId(editingData.tfs_room) : '',
       };
       const updated = await updateSubject(editingSubject.subject_id, payload);
-      // Update local state
       setSubjects(subjects.map(s => s.subject_id === editingSubject.subject_id ? updated : s));
       if ((previousStatus === 'active') !== (updated.subject_status === 'active')) {
         setActiveCount((currentCount) => currentCount + (updated.subject_status === 'active' ? 1 : -1));
@@ -679,7 +674,23 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
       setEditError(err.message || 'Failed to save subject');
     } finally {
       setSavingEdit(false);
+      setConfirmDialog(null);
     }
+  }
+
+  function handleSaveEdit() {
+    if (!editingSubject || !editingData.subject_code) {
+      setEditError('Subject code is required');
+      return;
+    }
+    setConfirmDialog({
+      title: 'Save changes?',
+      message: 'This will update the subject with your current edits.',
+      confirmLabel: 'Save Changes',
+      cancelLabel: 'Keep Editing',
+      tone: 'primary',
+      onConfirm: performSaveEdit,
+    });
   }
 
   function handleDeleteSubject(subject) {
