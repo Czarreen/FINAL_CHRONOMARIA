@@ -7,8 +7,7 @@ Pipeline (Steps 0-8):
   3    Intra-pool conflict resolution (deterministic, priority-based)
   4    Migration cascade: move conflicted entities to other pools
   5    Empty-field placement (lab entities first, then lecture entities)
-  6+7  GA optimization (intra-pool soft objectives, time-permitting)
-  8    Output assembly
+  8    Output assembly (with final conflict safety-net scan)
 
 Reads JSON from stdin, writes JSON to stdout.
 """
@@ -18,6 +17,37 @@ import sys
 import time
 import traceback
 import uuid
+
+
+def _fmt_mins(m: int) -> str:
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def _fmt_entity(entity) -> str:
+    members_str = "  |  ".join(
+        f"{(m.code or m.course_no):<10} {m.department_id}/{m.section}  \"{m.descriptive_title}\""
+        for m in entity.members
+    )
+    room_str = ", ".join(sorted(entity.current_room_keys)) if entity.current_room_keys else "no room"
+    sched_str = (
+        "  ".join(
+            f"{b.day.value} {_fmt_mins(b.start_minutes)}-{_fmt_mins(b.end_minutes)}"
+            for b in entity.current_schedule_blocks
+        )
+        if entity.current_schedule_blocks else "no schedule"
+    )
+    return f"{members_str}  [{sched_str}  {room_str}]"
+
+
+def _log_post_ga_conflicts(pairs) -> None:
+    print(
+        f"\n[SCHEDULER] POST-OPTIMIZATION CONFLICTS DETECTED: {len(pairs)}",
+        file=sys.stderr,
+    )
+    for i, (loser, winner) in enumerate(pairs, 1):
+        print(f"  [{i}] FLAGGED : {_fmt_entity(loser)}", file=sys.stderr)
+        print(f"      KEPT    : {_fmt_entity(winner)}", file=sys.stderr)
+    print("", file=sys.stderr)
 
 
 def main():
@@ -30,7 +60,7 @@ def main():
         from sched.pool.conflict_resolver import resolve_pool_conflicts
         from sched.pool.migration import migrate_conflicted_entities
         from sched.pool.empty_placement import place_empty_entities
-        from sched.pool.ga_optimizer import run_intra_pool_ga, run_global_ga
+        from sched.pool.conflict_resolver import detect_final_conflicts
 
         raw = json.load(sys.stdin)
         subjects, rooms, constraints = parse_input(raw)
@@ -90,17 +120,23 @@ def main():
         )
         manual_review = migration_manual_review + still_empty
 
-        # Steps 6+7: GA optimization (time-permitting)
-        for pool in pools:
-            elapsed = time.perf_counter() - global_start
-            if elapsed > global_budget_s - 15.0:
-                break
-            run_intra_pool_ga(pool, rooms, constraints, global_start, global_budget_s)
-
-        run_global_ga(pools, rooms, constraints, global_start, global_budget_s)
-
         # Step 8: output assembly
         all_placed = [e for pool in pools for e in pool.entities]
+
+        # Step 8a: final conflict scan (catches any conflicts introduced by Steps 5-7)
+        late_conflict_pairs = detect_final_conflicts(all_placed)
+        if late_conflict_pairs:
+            _log_post_ga_conflicts(late_conflict_pairs)
+            late_conflicts = [loser for loser, _ in late_conflict_pairs]
+            placed_ids = {e.entity_id for e in late_conflicts}
+            all_placed = [e for e in all_placed if e.entity_id not in placed_ids]
+            for e in late_conflicts:
+                e.manual_review_reason = "post_optimization_conflict"
+            manual_review = manual_review + late_conflicts
+            diagnostics["warnings"].append(
+                f"post_ga_conflicts_detected: {len(late_conflicts)}"
+            )
+
         assert_entity_invariant(subjects, all_placed, manual_review, "post-pipeline")
 
         stats = {

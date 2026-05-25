@@ -2967,7 +2967,10 @@ function spawnOptimizerSched(payload, timeoutMs = 120000) {
     }, timeoutMs);
 
     child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      process.stderr.write(chunk);
+    });
 
     child.on('close', () => {
       clearTimeout(timer);
