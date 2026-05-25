@@ -60,6 +60,8 @@ def format_output(
             row['tag'] = tag
             if entity.manual_review_reason:
                 row['manual_review_reason'] = entity.manual_review_reason
+            if entity.conflict_partner_info:
+                row['conflict_partner_info'] = entity.conflict_partner_info
             rows.append(row)
             if member.mth_schedule or member.tfs_schedule:
                 if entity.requires_lab_room:

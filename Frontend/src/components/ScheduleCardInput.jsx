@@ -1,4 +1,4 @@
-import { Lock, Plus } from 'lucide-react';
+import { Lock, Plus, AlertTriangle, CheckCircle } from 'lucide-react';
 import { PAIR_DAY_NAMES, buildScheduleString, getScheduleTimeRange, timesOverlap } from '../utils/scheduleUtils';
 
 const MODES = {
@@ -108,6 +108,31 @@ export default function ScheduleCardInput({
       : null;
   const timeIsSet2 = currentStart2 !== null && currentEnd2 !== null && currentEnd2 > currentStart2;
 
+  const TIMELINE_SPAN = LATEST_END - EARLIEST_START;
+  const tPct = (min) => Math.max(0, Math.min(100, ((min - EARLIEST_START) / TIMELINE_SPAN) * 100));
+
+  const minToTimeStr = (min) => {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    const ampm = h < 12 ? 'AM' : 'PM';
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+
+  const getBusyRanges = (rid) => {
+    if (!rid || !getConflictingOfferings) return [];
+    return getConflictingOfferings(String(rid), slot)
+      .filter((o) => {
+        const eid = o.id ?? o.subject_id;
+        return editingId == null || eid == null || String(eid) !== String(editingId);
+      })
+      .flatMap((o) => {
+        const schedField = slot === 'mth' ? o.mth_schedule : o.tfs_schedule;
+        const range = getScheduleTimeRange(schedField);
+        return range ? [{ start: range.start, end: range.end, label: o.code || o.subject_code || '' }] : [];
+      });
+  };
+
   const getRoomConflictInfo = (rid) => {
     if (!getConflictingOfferings || !timeIsSet) return { hasConflict: false, codes: [] };
     const conflicting = getConflictingOfferings(String(rid), slot);
@@ -159,6 +184,16 @@ export default function ScheduleCardInput({
     : null;
 
   const slotLabel = SLOT_LABELS[slot] || slot.toUpperCase();
+
+  const busyR1 = getBusyRanges(roomId);
+  const busyR2 = (roomId2 && String(roomId2) !== String(roomId || ''))
+    ? getBusyRanges(roomId2) : [];
+  const selConflict1 = timeIsSet
+    && busyR1.some((r) => timesOverlap(currentStart, currentEnd, r.start, r.end));
+  const selConflict2 = hasSec && timeIsSet2
+    && busyR2.some((r) => timesOverlap(currentStart2, currentEnd2, r.start, r.end));
+  const showTimeline = !!getConflictingOfferings
+    && (!!roomId || !!(roomId2 && String(roomId2) !== String(roomId || '')));
 
   const cardBorder = isMissing
     ? 'border-amber-300 ring-2 ring-amber-400/40'
@@ -240,6 +275,71 @@ export default function ScheduleCardInput({
       })()}
     </div>
   );
+
+  const renderTimelineBar = (busy, selStart, selEnd, hasConf, barLabel) => (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-semibold text-slate-500 truncate">{barLabel}</p>
+      <div className="relative h-6 w-full overflow-hidden rounded bg-slate-100">
+        {busy.map((r, i) => (
+          <div
+            key={i}
+            title={r.label
+              ? `${r.label} · ${minToTimeStr(r.start)} – ${minToTimeStr(r.end)}`
+              : `Booked: ${minToTimeStr(r.start)} – ${minToTimeStr(r.end)}`}
+            className="absolute top-0 h-full bg-rose-300"
+            style={{ left: `${tPct(r.start)}%`, width: `${Math.max(0.5, tPct(r.end) - tPct(r.start))}%` }}
+          />
+        ))}
+        {selStart != null && selEnd != null && (
+          <div
+            title={`Your selection: ${minToTimeStr(selStart)} – ${minToTimeStr(selEnd)}${hasConf ? ' (CONFLICT)' : ''}`}
+            className={`absolute top-0 h-full ${hasConf ? 'bg-red-600/80' : 'bg-primary/70'}`}
+            style={{ left: `${tPct(selStart)}%`, width: `${Math.max(0.5, tPct(selEnd) - tPct(selStart))}%` }}
+          />
+        )}
+      </div>
+      <div className="flex justify-between px-0.5 text-[9px] text-slate-400">
+        {[6, 8, 10, 12, 14, 16, 18, 20].map((h) => (
+          <span key={h}>{h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`}</span>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 text-[9px] text-slate-400">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-rose-300" />
+          Booked
+        </span>
+        <span className="flex items-center gap-1">
+          <span className={`inline-block h-2 w-3 rounded-sm ${hasConf ? 'bg-red-600/80' : 'bg-primary/70'}`} />
+          {hasConf ? 'Your time (conflict!)' : 'Your time'}
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderConflictStatus = (rid, getConflict, timeReady) => {
+    if (!rid || !timeReady || !getConflictingOfferings) return null;
+    const { hasConflict, codes } = getConflict(rid);
+    return (
+      <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+        hasConflict ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+      }`}>
+        {hasConflict ? (
+          <>
+            <AlertTriangle size={11} className="flex-shrink-0" />
+            <span>
+              Conflicts with:{' '}
+              {codes.slice(0, 3).join(', ')}{codes.length > 3 ? ` +${codes.length - 3} more` : ''}
+            </span>
+          </>
+        ) : (
+          <>
+            <CheckCircle size={11} className="flex-shrink-0" />
+            <span>Time slot is available</span>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const renderTypeButtons = ({ field, currentType, isDisabled }) => (
     <div className="space-y-1">
@@ -395,6 +495,9 @@ export default function ScheduleCardInput({
             </div>
           </div>
 
+          {/* Block 1 — Conflict status */}
+          {renderConflictStatus(roomId, getRoomConflictInfo, timeIsSet)}
+
           {/* Block 1 — Type */}
           {renderTypeButtons({ field: 'type', currentType: value.type || 'lec', isDisabled: disabled })}
 
@@ -492,6 +595,13 @@ export default function ScheduleCardInput({
             </div>
           </div>
 
+          {/* Block 2 — Conflict status */}
+          {hasSec && renderConflictStatus(
+            roomId2 || roomId,
+            hasSec ? getRoomConflictInfo2 : getRoomConflictInfo,
+            timeIsSet2
+          )}
+
           {/* Block 2 — Type (disabled when !hasSec) */}
           {renderTypeButtons({ field: 'type2', currentType: value.type2 || 'lec', isDisabled: disabled || !hasSec })}
 
@@ -506,6 +616,28 @@ export default function ScheduleCardInput({
         </div>
 
       </div>
+
+      {/* Room Availability Timeline */}
+      {showTimeline && enabled && (
+        <div className="rounded-lg border border-slate-100 bg-slate-50/40 px-3 py-2.5 space-y-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Room Schedule</p>
+          {roomId && renderTimelineBar(
+            busyR1,
+            timeIsSet ? currentStart : null,
+            timeIsSet ? currentEnd : null,
+            selConflict1,
+            rooms.find((r) => String(r.room_id ?? r.id ?? '') === String(roomId))?.room_name || `Room ${roomId}`,
+          )}
+          {roomId2 && String(roomId2) !== String(roomId || '') && renderTimelineBar(
+            busyR2,
+            hasSec && timeIsSet2 ? currentStart2 : null,
+            hasSec && timeIsSet2 ? currentEnd2 : null,
+            selConflict2,
+            rooms.find((r) => String(r.room_id ?? r.id ?? '') === String(roomId2))?.room_name || `Room ${roomId2}`,
+          )}
+        </div>
+      )}
+
     </div>
   );
 }

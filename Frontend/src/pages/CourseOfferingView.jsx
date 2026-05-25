@@ -39,7 +39,7 @@ import {
   checkDuplicateCode,
 } from '../services/courseOfferingsApi';
 import { fetchRooms, fetchRoomBookings } from '../services/roomsApi';
-import { useRoomConflictMap } from '../hooks/useRoomConflictMap';
+import { useRoomConflictMap, useConflictingIdSets } from '../hooks/useRoomConflictMap';
 import { fetchDepartments } from '../services/departmentsApi';
 import NotificationButton from '../components/NotificationButton';
 import { syncCourseOfferingNotifications } from '../services/notificationsApi';
@@ -764,29 +764,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       .filter((item) => item.issues.length > 0);
   }, [notifications]);
 
-  // Map of offeringId → conflict info, built from raw notifications (includes schedule_conflict).
-  // Also marks the peer offering — deduplicateConflictPairs absorbs one side of each pair into
-  // item.conflictPeer so the peer never appears as its own top-level notification item.
-  const conflictOfferingMap = useMemo(() => {
-    const map = new Map();
-    for (const item of notifications) {
-      const id = Number(item.entity_id || item.offeringId);
-      if (!id) continue;
-      const conflictIssues = (item.issues || []).filter(
-        (issue) => issue.field === 'schedule_conflict'
-      );
-      if (conflictIssues.length > 0) {
-        map.set(id, { hasScheduleConflict: true });
-        for (const issue of conflictIssues) {
-          const peerId = Number(issue.details?.conflicting_offering_id);
-          if (peerId && !Number.isNaN(peerId)) {
-            map.set(peerId, { hasScheduleConflict: true });
-          }
-        }
-      }
-    }
-    return map;
-  }, [notifications]);
+  // Conflict set derived from full-DB room bookings — covers every page, not just the first 500 notifications.
+  const { conflictingOfferingIds } = useConflictingIdSets(roomBookings);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {
@@ -1175,7 +1154,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     return map;
   }, [rooms]);
 
-  // Full-DB room conflict map — uses all bookings fetched at mount, not just the current page
+  // Full-DB room conflict map — used for the room picker conflict warnings
   const { getConflictingOfferings } = useRoomConflictMap(roomBookings);
 
   const exportToCSV = async () => {
@@ -1736,8 +1715,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
               {!loading && !error && displayedOfferings.map((offering, index) => {
                 const isSelected = selectedOfferings.has(offering.id);
-                const conflictState = conflictOfferingMap.get(offering.id);
-                const hasConflict = !!conflictState?.hasScheduleConflict;
+                const hasConflict = conflictingOfferingIds.has(offering.id);
                 return (
                   <tr id={`offering-row-${offering.id}`} key={offering.id} className={`transition-colors ${isSelected ? 'bg-primary/10' : hasConflict ? 'bg-red-50/70' : 'hover:bg-white/40'} ${index % 2 === 0 && !isSelected && !hasConflict ? 'bg-white/6' : ''}`}>
                     <td className="px-3 py-3 text-center">

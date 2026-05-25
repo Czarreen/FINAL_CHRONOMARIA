@@ -5,6 +5,7 @@ Chromosome: List[Gene] where Gene = (pattern_idx, start_min, day1_room_idx, day2
 LOCKED subjects are not in the chromosome. Resolved baseline is a read-only constraint.
 """
 
+import re
 import random
 import time
 import functools
@@ -20,6 +21,46 @@ from sched.ga.fitness import evaluate
 from sched.ga.operators import crossover_two_point_grouped, mutate_reschedule
 from sched.ga.repair import repair
 
+_TIME_RANGE_RE = re.compile(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})')
+
+
+def _build_pre_seeded_slots(
+    resolved_subjects: List[Subject], rooms: List[Room]
+) -> tuple:
+    """Convert resolved/locked subjects' fixed schedules into pre-occupied slot dicts.
+
+    Returns (pre_room, pre_sec):
+      pre_room keyed "room_idx|DAY" → [(start, end, -1)]  — prevents double-room booking
+      pre_sec  keyed "section_key|DAY" → [(start, end, -1)] — prevents double-schedule
+    The -1 sentinel marks a locked slot; any chromosome gene overlapping it is a hard violation.
+    """
+    room_id_to_idx = {str(r.room_id): i for i, r in enumerate(rooms)}
+    pre_room: dict = {}
+    pre_sec:  dict = {}
+    for s in resolved_subjects:
+        sec = section_key(s)
+        for sched_str, room_str, days in (
+            (s.mth_schedule, s.mth_room, ["MON", "THU"]),
+            (s.tfs_schedule, s.tfs_room, ["TUE", "FRI"]),
+        ):
+            if not sched_str or not room_str:
+                continue
+            m = _TIME_RANGE_RE.search(sched_str)
+            if not m:
+                continue
+            start = int(m.group(1)) * 60 + int(m.group(2))
+            end   = int(m.group(3)) * 60 + int(m.group(4))
+            if end <= start:
+                end += 720
+            for room_key in room_str.split("/"):
+                r_idx = room_id_to_idx.get(room_key.strip())
+                if r_idx is not None:
+                    for day in days:
+                        pre_room.setdefault(f"{r_idx}|{day}", []).append((start, end, -1))
+            for day in days:
+                pre_sec.setdefault(f"{sec}|{day}", []).append((start, end, -1))
+    return pre_room, pre_sec
+
 # Guard against re-creation on repeated imports (DEAP uses global state)
 if not hasattr(creator, 'FitnessMax'):
     creator.create('FitnessMax', base.Fitness, weights=(1.0,))
@@ -31,6 +72,8 @@ def build_toolbox(
     subjects: List[Subject],
     rooms: List[Room],
     rng: random.Random,
+    pre_seeded_slots: dict = None,
+    pre_seeded_sec_slots: dict = None,
 ) -> base.Toolbox:
     """Build a DEAP toolbox with evaluate/mate/mutate/select registered."""
     toolbox = base.Toolbox()
@@ -42,7 +85,9 @@ def build_toolbox(
         lambda: random_chromosome(subjects, rooms, rng),
     )
     toolbox.register('population', tools.initRepeat, list, toolbox.individual)
-    toolbox.register('evaluate', evaluate, subjects=subjects, rooms=rooms)
+    toolbox.register('evaluate', evaluate, subjects=subjects, rooms=rooms,
+                     pre_seeded_slots=pre_seeded_slots or {},
+                     pre_seeded_sec_slots=pre_seeded_sec_slots or {})
     toolbox.register(
         'mate',
         lambda a, b: crossover_two_point_grouped(a, b, subjects=subjects, rng=rng),
@@ -87,17 +132,23 @@ def run_ga_optimization(
     for i, s in enumerate(pending):
         sec_indices.setdefault(section_key(s), []).append(i)
 
+    pre_seeded, pre_seeded_sec = _build_pre_seeded_slots(resolved, rooms)
+
     # Warm-start population
     population: List[List[Gene]] = seeded_population(pending, rooms, rng, pop_size)
     population = [list(c) for c in population]
 
     best     = population[0]
-    best_fit = evaluate(best, subjects=pending, rooms=rooms)[0]
+    best_fit = evaluate(best, subjects=pending, rooms=rooms,
+                        pre_seeded_slots=pre_seeded,
+                        pre_seeded_sec_slots=pre_seeded_sec)[0]
     stagnation = 0
 
     while (time.perf_counter() - started) < max_secs:
         scored = [
-            (evaluate(c, subjects=pending, rooms=rooms)[0], c)
+            (evaluate(c, subjects=pending, rooms=rooms,
+                      pre_seeded_slots=pre_seeded,
+                      pre_seeded_sec_slots=pre_seeded_sec)[0], c)
             for c in population
         ]
         scored.sort(key=lambda x: (x[0] != float('-inf'), x[0]), reverse=True)
@@ -135,7 +186,9 @@ def run_ga_optimization(
         repair_budget = min(time_remaining - 1.0, 12.0)
         repaired = repair(best, subjects=pending, rooms=rooms, rng=rng,
                           max_passes=5, time_limit_s=repair_budget)
-        rep_fit = evaluate(repaired, subjects=pending, rooms=rooms)[0]
+        rep_fit = evaluate(repaired, subjects=pending, rooms=rooms,
+                           pre_seeded_slots=pre_seeded,
+                           pre_seeded_sec_slots=pre_seeded_sec)[0]
         if rep_fit > best_fit or best_fit == float('-inf'):
             best = repaired
 

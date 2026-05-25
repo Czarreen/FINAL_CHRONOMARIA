@@ -109,6 +109,7 @@ export function buildOfferingNotificationRows(offering, allOfferings = [], gymRo
     details: {
       offering_id: offering.id,
       code: offering.code || null,
+      course_no: offering.course_no || null,
       conflicting_offering_id: issue.conflicting_offering_id || null,
       conflicting_code: issue.conflicting_code || null,
       conflict_room_id: issue.conflict_room_id || null,
