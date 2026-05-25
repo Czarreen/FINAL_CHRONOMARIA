@@ -48,6 +48,24 @@ def normalize_title(raw: str) -> str:
     return s.lower()
 
 
+_GENERAL_COURSE_RE = re.compile(
+    r'^(PATH\s*FIT|NSTP|PE(\s|$)|ADV\s*ORAL|FOR\s*LANG)',
+    re.IGNORECASE,
+)
+
+
+def _is_general_course(course_no: Optional[str]) -> bool:
+    if not course_no:
+        return False
+    return bool(_GENERAL_COURSE_RE.match(course_no.strip()))
+
+
+def _course_family(course_no: str) -> str:
+    """'PATH FIT 2' -> 'PATH FIT', 'NSTP 1' -> 'NSTP'"""
+    s = re.sub(r'\s*\d+\s*$', '', course_no.strip())
+    return re.sub(r'\s+', ' ', s).upper()
+
+
 def extract_year_level(section: str) -> str:
     """
     Extract leading digits from a section string.
@@ -91,13 +109,14 @@ class MergeDetectionResult:
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 _SIGNAL_WEIGHTS = {
-    'descriptive_title': 3,
-    'course_no':         2,
-    'year_level':        1,
-    'units':             1,
+    'descriptive_title':     3,
+    'course_no':             2,
+    'year_level':            1,
+    'units':                 1,
+    'general_course_family': 4,  # all-general courses sharing same course prefix
 }
 
-MAX_SCORE: int = sum(_SIGNAL_WEIGHTS.values())  # 9
+MAX_SCORE: int = sum(_SIGNAL_WEIGHTS.values())  # 11
 
 
 def _score_group(members: List[Subject]) -> ConfidenceBreakdown:
@@ -126,6 +145,13 @@ def _score_group(members: List[Subject]) -> ConfidenceBreakdown:
         matched_signals.append('units')
         total_score += _SIGNAL_WEIGHTS['units']
 
+    all_general = all(_is_general_course(s.course_no) for s in members)
+    if all_general:
+        families = [_course_family(s.course_no or '') for s in members]
+        if len(set(families)) == 1 and families[0]:
+            matched_signals.append('general_course_family')
+            total_score += _SIGNAL_WEIGHTS['general_course_family']
+
     verdict = _classify_verdict(total_score, matched_signals)
     return ConfidenceBreakdown(
         group_id='',  # assigned after validation
@@ -138,10 +164,14 @@ def _score_group(members: List[Subject]) -> ConfidenceBreakdown:
 
 def _classify_verdict(total_score: int, matched_signals: List[str]) -> str:
     """
-    Title match is required for any merge verdict.
-    Without it the group is always a ROOM_CONFLICT.
+    A primary match signal (descriptive_title or general_course_family) is
+    required for any merge verdict. Without one the group is a ROOM_CONFLICT.
     """
-    if 'descriptive_title' not in matched_signals:
+    has_primary = (
+        'descriptive_title' in matched_signals
+        or 'general_course_family' in matched_signals
+    )
+    if not has_primary:
         return 'ROOM_CONFLICT'
     if total_score >= 5:
         return 'CONFIRMED'
