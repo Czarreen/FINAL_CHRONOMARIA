@@ -737,6 +737,25 @@ export default function FacultyLoadingView() {
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
                       <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100))}%` }} />
                     </div>
+                    <div className="mt-2 text-sm">
+                      {/* Prep units and remaining prep capacity */}
+                      {(() => {
+                        const prepUnits = toNumber(row.prep_units) || 0;
+                        const total = toNumber(row.total_units) || 0;
+                        const max = toNumber(row.max_units);
+                        const remainingPrep = typeof max === 'number' && max > 0 ? Math.max(0, Math.round((max - total - prepUnits) * 100) / 100) : null;
+                        return (
+                          <p className="mt-2 text-xs text-on-surface-variant">
+                            Prep: <span className="font-semibold text-on-surface">{prepUnits}</span> units
+                            {remainingPrep !== null ? (
+                              <span className="ml-2">• remaining prep capacity: <span className="font-semibold text-on-surface">{remainingPrep}</span> units</span>
+                            ) : (
+                              <span className="ml-2">• remaining prep capacity: —</span>
+                            )}
+                          </p>
+                        );
+                      })()}
+                    </div>
                   </div>
                 ))}
               </div>

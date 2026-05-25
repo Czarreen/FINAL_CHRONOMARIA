@@ -166,6 +166,63 @@ export async function deleteFacultySubjectPreference(facultyId, subjectTag) {
   }
 }
 
+export async function fetchFacultyPreferenceRecords(facultyId, { limit = 20, offset = 0 } = {}) {
+  try {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/faculty/${facultyId}/preference-records?${params.toString()}`
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    const payload = await response.json();
+    return {
+      records: Array.isArray(payload.records) ? payload.records : [],
+      count: Number(payload.count ?? 0),
+      facultyId: Number(payload.facultyId ?? facultyId),
+      limit: Number(payload.limit ?? limit),
+      offset: Number(payload.offset ?? offset),
+      hasMore: Boolean(payload.hasMore),
+    };
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(
+        `Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${facultyId}/preference-records`
+      );
+    }
+    throw err;
+  }
+}
+
+export async function deleteFacultyPreferenceRecord(facultyId, recordId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/faculty/${facultyId}/preference-records/${recordId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    const payload = await response.json();
+    return payload.deleted || null;
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(
+        `Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${facultyId}/preference-records/${recordId}`
+      );
+    }
+    throw err;
+  }
+}
+
 /**
  * Auto-generate subject preferences from faculty specialization
  * @param {number} facultyId - Faculty ID
@@ -192,11 +249,50 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
     return {
       generated: Array.isArray(payload.generated) ? payload.generated : [],
       count: Number(payload.count ?? 0),
+      saved: typeof payload.saved === 'string' ? payload.saved : null,
+      saveError: typeof payload.saveError === 'string' ? payload.saveError : null,
     };
   } catch (err) {
     if (err instanceof TypeError && err.message.includes('fetch')) {
       throw new Error(
         `Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences/auto-generate`
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Auto-generate specialization keywords from faculty's selected subject preferences
+ * @param {number} facultyId
+ * @returns {Promise<Object>} { generated: Array<string>, count: number }
+ */
+export async function autoGenerateSpecializationFromPreferences(facultyId) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/faculty/${facultyId}/specialization/auto-generate`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error (${response.status}): ${body}`);
+    }
+
+    const payload = await response.json();
+    return {
+      generated: Array.isArray(payload.generated) ? payload.generated : [],
+      count: Number(payload.count ?? 0),
+    };
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error(
+        `Network error: Unable to reach API at ${API_BASE_URL}/api/faculty/${facultyId}/specialization/auto-generate`
       );
     }
     throw err;

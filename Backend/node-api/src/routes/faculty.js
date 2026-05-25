@@ -11,7 +11,6 @@ router.get('/', async (req, res) => {
     const to = from + limit - 1;
     const search = req.query.search?.trim() || '';
     const status = req.query.status || '';
-
     let query = supabaseAdmin
       .from('faculty')
       .select(
