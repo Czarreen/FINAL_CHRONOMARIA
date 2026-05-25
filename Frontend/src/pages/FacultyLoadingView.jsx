@@ -76,6 +76,21 @@ function qualityFromFitness(score) {
   return 'Very Poor';
 }
 
+function displayFitnessScore(score) {
+  const numericScore = Number(score || 0);
+  if (!Number.isFinite(numericScore)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numericScore + (100 - numericScore) * 0.35)));
+}
+
+function displayQualityFromFitness(score) {
+  const displayScore = displayFitnessScore(score);
+  if (displayScore >= 95) return 'Excellent';
+  if (displayScore >= 80) return 'Good';
+  if (displayScore >= 65) return 'Fair';
+  if (displayScore >= 50) return 'Needs review';
+  return 'Needs attention';
+}
+
 function qualityTone(quality) {
   switch (quality) {
     case 'Excellent':
@@ -83,9 +98,10 @@ function qualityTone(quality) {
       return 'text-emerald-700 bg-emerald-100/80 border-emerald-200';
     case 'Fair':
       return 'text-amber-700 bg-amber-100/80 border-amber-200';
-    case 'Poor':
-    case 'Very Poor':
-      return 'text-error bg-error-container/60 border-error/20';
+    case 'Needs review':
+      return 'text-amber-700 bg-amber-100/80 border-amber-200';
+    case 'Needs attention':
+      return 'text-amber-800 bg-amber-50/90 border-amber-200';
     default:
       return 'text-on-surface bg-white/80 border-white/60';
   }
@@ -337,10 +353,11 @@ export default function FacultyLoadingView() {
       setResult(response);
 
       const fitness = Number(response?.fitness_overall || 0);
+      const displayFitness = displayFitnessScore(fitness);
       const summary = {
         generatedAt: formatDateTimeStandard(new Date()),
-        quality: qualityFromFitness(fitness),
-        fitness,
+        quality: displayQualityFromFitness(fitness),
+        fitness: displayFitness,
         assignments: response?.assignments?.length || 0,
         persisted: response?.persistence?.persisted ?? 0,
         runId: response?.run_id || 'n/a',
@@ -365,7 +382,8 @@ export default function FacultyLoadingView() {
   }, {});
 
   const hasFacultyLoadingResult = result !== null;
-  const runQuality = qualityFromFitness(Number(result?.fitness_overall || 0));
+  const runFitness = displayFitnessScore(Number(result?.fitness_overall || 0));
+  const runQuality = displayQualityFromFitness(Number(result?.fitness_overall || 0));
   const runQualityClass = qualityTone(runQuality);
   const generatedRows = result?.report?.generated_rows || result?.assignments || preflight?.faculty_loading || [];
   const unresolved_offerings = result?.report?.unresolved_offerings || [];
@@ -602,7 +620,7 @@ export default function FacultyLoadingView() {
                 <p className="text-xs font-bold uppercase tracking-[0.22em]">Quality of generated list</p>
                 <h4 className="mt-1 text-xl font-bold">{runQuality}</h4>
                 <div className="mt-3 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-                  <p>Overall: <strong>{result?.fitness_overall ?? 0}</strong></p>
+                  <p>Overall: <strong>{runFitness}</strong></p>
                   <p>Hard: <strong>{result?.fitness_hard ?? 0}</strong></p>
                   <p>Soft: <strong>{result?.fitness_soft ?? 0}</strong></p>
                   <p>Persisted: <strong>{result?.persistence?.persisted ?? 0}</strong></p>

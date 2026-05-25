@@ -99,7 +99,7 @@ export function parseScheduleString(str, slot = null) {
 
   const normPm = (h) => {
     const n = parseInt(h, 10);
-    if (n >= 1 && n <= 5) return n + 12;
+    if (n >= 1 && n <= 6) return n + 12;  // 6:00 = 6 PM — no 6 AM slots exist
     return n;
   };
 
@@ -301,7 +301,7 @@ export function getScheduleAmPm(scheduleStr) {
   if (!hourMatch) return null;
   const hour = Number(hourMatch[1]);
   if (hour >= 12) return 'PM';
-  if (hour >= 1 && hour <= 5) return 'PM';
+  if (hour >= 1 && hour <= 6) return 'PM';  // 6:00 = 6 PM — no 6 AM slots exist
   return 'AM';
 }
 
@@ -333,8 +333,8 @@ export function getScheduleTimeRange(scheduleStr) {
   if (!match) return null;
   let startH = Number(match[1]);
   let endH   = Number(match[3]);
-  if (startH >= 1 && startH <= 5) startH += 12;
-  if (endH   >= 1 && endH   <= 5) endH   += 12;
+  if (startH >= 1 && startH <= 6) startH += 12;  // 6:00 = 6 PM — no 6 AM slots exist
+  if (endH   >= 1 && endH   <= 6) endH   += 12;
   const start = startH * 60 + Number(match[2]);
   const end   = endH   * 60 + Number(match[4]);
   if (end <= start) return null;

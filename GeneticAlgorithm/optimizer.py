@@ -68,16 +68,15 @@ SPECIALIZATION_STOP_WORDS = {
     'TECHNOLOGIES',
     'METHOD',
     'METHODS',
-    'PROJECT',
-    'PROJECTS',
-    'RESEARCH',
+    # PROJECT / PROJECTS / CAPSTONE / RESEARCH intentionally NOT listed —
+    # keeping them as searchable words allows capstone and research subjects
+    # to produce non-empty normalized phrases and be matched by specialization.
     'STUDY',
     'STUDIES',
     'INTRODUCTION',
     'INTRODUCTORY',
     'FUNDAMENTAL',
     'FUNDAMENTALS',
-    'CAPSTONE',
     'PRACTICE',
     'APPLICATION',
     'APPLICATIONS',
@@ -119,14 +118,33 @@ def split_tokens(value: Any) -> List[str]:
     return [t.strip() for t in re.split(r"[,;/|]+", normalize_text(value)) if t.strip()]
 
 
+@functools.lru_cache(maxsize=4096)
+def _normalize_specialization_phrase(value: str) -> str:
+    # Cached — same offering title is normalized identically for every faculty in the loop.
+    parts: List[str] = []
+    for token in re.split(r"\s+", normalize_text(value).replace("&", " ")):
+        clean = re.sub(r"[^A-Za-z0-9]", "", token).upper()
+        if len(clean) < 2:
+            continue
+        clean = SPECIALIZATION_SYNONYMS.get(clean, clean)
+        if clean in SPECIALIZATION_STOP_WORDS:
+            continue
+        parts.append(clean)
+    return " ".join(parts)
+
+
 def extract_keywords(value: Any) -> Set[str]:
+    """Return exact specialization phrase keys from comma-separated titles.
+
+    Historical name retained for compatibility with the rest of the module.
+    Matching is intentionally phrase-based so embedded words inside a longer
+    title do not produce false positives.
+    """
     out: Set[str] = set()
     for token in split_tokens(value):
-        for part in re.split(r"\s+", token.replace('&', ' ')):
-            clean = re.sub(r"[^A-Za-z0-9]", "", part).upper()
-            if len(clean) < 2 or clean in SPECIALIZATION_STOP_WORDS:
-                continue
-            out.add(SPECIALIZATION_SYNONYMS.get(clean, clean))
+        key = _normalize_specialization_phrase(token)
+        if key:
+            out.add(key)
     return out
 
 
@@ -297,15 +315,21 @@ def normalize_role(role: Any) -> str:
 
 
 def prep_limit_for_faculty(faculty: Dict[str, Any]) -> int:
-    """Dynamic F-H8 cap based on faculty_max_units, bounded by the policy max of 4.
+    """Dynamic F-H8 cap based on faculty_max_units and role.
 
-    Rule: cap = min(4, floor(max_units / 3)), with a minimum of 1 for active faculty.
-    Examples: 21u -> 4, 15u -> 4, 12u -> 4, 9u -> 3, 6u -> 2.
+    FT / Department Head: cap = min(6, floor(max_units / 3)), minimum 1.
+    PT / Guest / others:  cap = min(4, floor(max_units / 3)), minimum 1.
+
+    FT examples:  24u -> 6, 21u -> 6, 15u -> 5, 12u -> 4, 9u -> 3.
+    PT examples:  12u -> 4, 9u -> 3, 6u -> 2.
     """
     max_units = max(0.0, to_number(faculty.get("faculty_max_units")) or 0.0)
+    role = normalize_role(faculty.get("faculty_role"))
+    is_ft = role == "FT" or role.startswith("DEPARTMENT")
+    policy_max = 6 if is_ft else 4
     if max_units <= 0:
-        return 4
-    return max(1, min(4, int(math.floor(max_units / 3.0))))
+        return policy_max
+    return max(1, min(policy_max, int(math.floor(max_units / 3.0))))
 
 
 def faculty_usage_ratio(faculty: Dict[str, Any], current_load: float) -> float:
@@ -429,30 +453,41 @@ def match_specialization_score(faculty: Dict[str, Any], offering: Dict[str, Any]
                 elif priority_level == 3:
                     return 15.0
     
-    # Fall back to keyword matching if no explicit preference
+    # Fall back to exact phrase matching if no explicit preference.
     spec_raw = normalize_upper(faculty.get("faculty_specialization"))
     if not spec_raw:
         return 0.0
-    src = spec_raw
-    tgt = " ".join(
-        filter(
-            None,
+    src_phrases = extract_keywords(spec_raw)
+    if not src_phrases:
+        return 0.0
+
+    score = 0.0
+    target_fields = [
+        (normalize_upper(offering.get("descriptive_title")), 24.0),
+        (normalize_upper(offering.get("code")), 16.0),
+        (normalize_upper(offering.get("course_no")), 14.0),
+    ]
+    if matched_subject:
+        target_fields.extend(
             [
-                normalize_upper(offering.get("code")),
-                normalize_upper(offering.get("course_no")),
-                normalize_upper(offering.get("descriptive_title")),
-                normalize_upper(matched_subject.get("subject_descriptive_title")) if matched_subject else "",
-                normalize_upper(matched_subject.get("subject_code")) if matched_subject else "",
-            ],
+                (normalize_upper(matched_subject.get("subject_descriptive_title")), 24.0),
+                (normalize_upper(matched_subject.get("subject_code")), 16.0),
+            ]
         )
-    )
-    score = float(len(extract_keywords(src).intersection(extract_keywords(tgt))) * 10)
-    if normalize_upper(offering.get("descriptive_title")) and normalize_upper(offering.get("descriptive_title")) in src:
-        score += 24.0
-    if normalize_upper(offering.get("code")) and normalize_upper(offering.get("code")) in src:
-        score += 16.0
-    if normalize_upper(offering.get("course_no")) and normalize_upper(offering.get("course_no")) in src:
-        score += 14.0
+
+    for target_text, weight in target_fields:
+        if not target_text:
+            continue
+        target_phrase = _normalize_specialization_phrase(target_text)
+        if not target_phrase:
+            continue
+        # Bidirectional substring: faculty spec phrase may be shorter than the subject
+        # title (e.g. "ELECTRONICS CIRCUITS" should match "ELECTRONICS CIRCUITS DEVICES"),
+        # or the title may be a suffix of a longer spec phrase (e.g. "DEFORMABLE BODIES"
+        # matching "MECHANICS DEFORMABLE BODIES"). Exact equality is checked implicitly
+        # because every string is a substring of itself.
+        if any(src_p in target_phrase or target_phrase in src_p for src_p in src_phrases):
+            score += weight
     return score
 
 
@@ -503,7 +538,12 @@ def is_cross_department_no_spec_allowed(
     faculty_department_id: Optional[float],
     department_faculty_counts: Dict[int, int],
 ) -> bool:
-    """Cross-department without specialization is allowed only for the IT->CS zero-faculty exception."""
+    """Cross-department without specialization is allowed only for the IT->CS zero-faculty exception.
+
+    Cross-department assignments for all other cases must go through explicit Faculty Subject
+    Preferences (P1/P2/P3 tags) or specialization keyword matching (Pass A), which already
+    surfaces cross-dept candidates when a spec score > 0 exists.
+    """
     off_dept = int(offering_department_id or 0)
     fac_dept = int(faculty_department_id or 0)
     if off_dept == fac_dept:
@@ -526,15 +566,16 @@ def _rejection_reason(fi_: int, faculties, loads, blocks, preps_keys, preps_unit
     for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT"):
         if consecutive_minutes_for_day(blocks[fi_] + off_blocks, d) > 240.0:
             return f"consecutive_hours_exceeded_on_{d}"
-    # Enforce unit-based prep capacity relative to remaining units
-    prep_units_have = float(preps_units.get(fi_, 0.0))
-    remaining_capacity = max_u - loads[fi_]
-    if max_u > 0 and (prep_units_have + units) > remaining_capacity:
-        return f"prep_units_exceeded (has {prep_units_have:.1f}, adding {units}, remaining {remaining_capacity:.1f})"
-    # Fallback: if faculty has no max_units set, fall back to count-based prep cap
-    prep_limit = prep_limit_for_faculty(fac_)
-    if len(set(preps_keys[fi_]) | {prep_key_cand}) > prep_limit:
-        return f"prep_limit_exceeded (has {len(preps_keys[fi_])}, cap {prep_limit}: {sorted(preps_keys[fi_])})"
+    # Count-based prep cap — always enforced, only for new prep keys.
+    # After the P2/P3 reservation fix, preps_units == loads, so the old
+    # "prep_units + units > remaining_capacity" formula became equivalent to
+    # "2*loads + units > max_units" and incorrectly rejected any faculty above
+    # 50% load. That check is removed; the loads+units > max_u check above is
+    # the correct unit-capacity gate. Prep count is the remaining constraint.
+    if prep_key_cand not in preps_keys[fi_]:
+        prep_limit = prep_limit_for_faculty(fac_)
+        if len(preps_keys[fi_]) >= prep_limit:
+            return f"prep_limit_exceeded (has {len(preps_keys[fi_])}, cap {prep_limit}: {sorted(preps_keys[fi_])})"
     return "ineligible_unknown"
 
 
@@ -616,15 +657,15 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                              for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                         rej = "consecutive_hours_exceeded"
                     else:
-                        # unit-based prep reservation check (fallback to count-based prep limit)
-                        prep_units_have_cand = float(preps_units.get(fi_cand, 0.0))
-                        remaining_cap_cand = max_u - loads[fi_cand]
-                        if max_u > 0 and (prep_units_have_cand + units) > remaining_cap_cand:
-                            rej = f"prep_units_exceeded (has {prep_units_have_cand:.1f}, adding {units}, remaining {remaining_cap_cand:.1f})"
-                        else:
-                            prep_cap = prep_limit_for_faculty(faculties[fi_cand])
-                            if len(set(preps_keys[fi_cand]) | {prep_key_cand}) > prep_cap:
-                                rej = f"prep_limit_exceeded (has {len(preps_keys[fi_cand])}, cap {prep_cap}: {sorted(preps_keys[fi_cand])})"
+                        # Count-based prep cap — mirrors _hard_eligible exactly.
+                        # The old "prep_units + units > remaining_capacity" check was removed
+                        # because after the P2/P3 reservation fix preps_units == loads, making
+                        # it equivalent to "2*loads + units > max_units" — a false gate that
+                        # blocked faculty above 50% load. The loads+units > max_u check above
+                        # is the correct and sufficient unit-capacity guard.
+                        prep_cap = prep_limit_for_faculty(faculties[fi_cand])
+                        if len(set(preps_keys[fi_cand]) | {prep_key_cand}) > prep_cap:
+                            rej = f"prep_limit_exceeded (has {len(preps_keys[fi_cand])}, cap {prep_cap}: {sorted(preps_keys[fi_cand])})"
                     fac_dept_id = int(to_number(faculties[fi_cand].get("department_id")) or 0)
                     same_dept = int(fac_dept_id == off_dept_id)
                     is_ft = normalize_role(faculties[fi_cand].get("faculty_role")) == "FT"
@@ -722,11 +763,14 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             for code_tag, priority in tag_map.items():
                 if priority not in (2, 3):
                     continue
-                # Reserve prep slots by *units* rather than simple counts.
-                # Determine remaining capacity for this faculty.
+                # Reserve prep slots by count only (preps_keys), NOT by units.
+                # Adding to preps_units here caused false prep_units_exceeded rejections
+                # in the main loop for faculty who had many P2/P3 tags but ample actual
+                # unit capacity — the reservations inflated preps_units before any real
+                # assignment occurred. Unit capacity is already enforced by max_units checks.
                 fac = faculties[fi_res]
                 max_u = max(0.0, to_number(fac.get('faculty_max_units')) or 0.0)
-                remaining_capacity = max_u - loads[fi_res] - preps_units[fi_res]
+                remaining_capacity = max_u - loads[fi_res]
                 if max_u > 0 and remaining_capacity <= 0:
                     break
                 norm_code = normalize_upper(code_tag)
@@ -746,7 +790,9 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                         if max_u > 0 and cand_units > remaining_capacity:
                             break
                         preps_keys[fi_res].add(prep_key)
-                        preps_units[fi_res] += float(cand_units)
+                        # preps_units is NOT updated here — reservations must not inflate
+                        # the unit burden used in _hard_eligible. Only actual assignments
+                        # (P1 pre-assignment and main loop) update preps_units.
                         if trace is not None:
                             fac_r = faculties[fi_res]
                             trace["p2p3_reservations"].append({
@@ -757,7 +803,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                                 "subject_code": norm_code,
                                 "prep_key_reserved": prep_key,
                                 "preps_keys_after": sorted(list(preps_keys[fi_res])),
-                                "preps_units_after": round(preps_units[fi_res], 2),
+                                "preps_units_after": round(preps_units[fi_res], 2),  # reflects actual P1 units only
                             })
                         break  # one reservation per subject code is enough
 
@@ -800,14 +846,18 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                    for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                 return False
             prep_key_ = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
-            # Unit-based prep capacity check
-            pref_units_have = float(preps_units.get(fi_, 0.0))
-            remaining_capacity_ = max_u - loads[fi_]
-            if max_u > 0 and (pref_units_have + units) > remaining_capacity_:
-                return False
-            # Fallback: count-based cap if no max_units defined
-            if max_u <= 0 and len(set(preps_keys[fi_]) | {prep_key_}) > prep_limit_for_faculty(faculties[fi_]):
-                return False
+            # Count-based prep cap — always enforced.
+            # Only block when the prep key is genuinely new: already-reserved keys
+            # (from P2/P3 reservations) don't increase the prep count, so those
+            # subjects bypass this gate and honour the reservation "promise".
+            # Note: the old "prep_units + units > remaining_capacity" check is
+            # removed. Since preps_units == loads after the P2/P3 reservation fix,
+            # that formula collapsed to "2*loads + units > max_units" — a false gate
+            # that blocked every faculty above 50% load. The loads+units > max_u
+            # check on line 840 is the correct and sufficient unit-capacity guard.
+            if prep_key_ not in preps_keys[fi_]:
+                if len(preps_keys[fi_]) >= prep_limit_for_faculty(faculties[fi_]):
+                    return False
             return True
 
         def _score(fi_: int, spec_: float, dept_match_: bool) -> float:
@@ -840,20 +890,34 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         # Track per-faculty rejection reasons for trace
         rejection_map: Dict[int, str] = {}  # fi -> reason string
 
-        # Pass A — specialization match, any department
+        # Pass A — specialization match, but prioritize same-department faculty first.
+        # Explicit faculty preferences still apply through match_specialization_score,
+        # but they no longer let a cross-department faculty outrank a same-department
+        # specialization match.
+        same_dept_spec_candidates: List[Tuple[float, float, int]] = []
+        cross_dept_spec_candidates: List[Tuple[float, float, int]] = []
+        offering_dept_id = to_number(offering.get("department_id"))
         for fi, faculty in enumerate(faculties):
-            fid_str_a = str(int(to_number(faculty.get("faculty_id")) or 0))
             if not _hard_eligible(fi):
                 rejection_map[fi] = _rejection_reason(fi, faculties, loads, blocks, preps_keys, preps_units, units, off_blocks, prep_key_main)
                 continue
             spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
-            if spec > 0.0:
-                dept_match = to_number(faculty.get("department_id")) == to_number(offering.get("department_id"))
-                has_explicit_pref = faculty_preferences is not None and offering_code in faculty_preferences.get(fid_str_a, {})
-                effective_dept_match = dept_match or has_explicit_pref
-                candidates.append((_score(fi, spec, effective_dept_match), _explicit_pref_usage_ratio(fi), fi))
-            else:
+            if spec <= 0.0:
                 rejection_map.setdefault(fi, "spec_score_zero_pass_a")
+                continue
+            dept_match = to_number(faculty.get("department_id")) == offering_dept_id
+            scored = (_score(fi, spec, dept_match), _explicit_pref_usage_ratio(fi), fi)
+            if dept_match:
+                same_dept_spec_candidates.append(scored)
+            else:
+                cross_dept_spec_candidates.append(scored)
+
+        if same_dept_spec_candidates:
+            candidates.extend(same_dept_spec_candidates)
+        else:
+            candidates.extend(cross_dept_spec_candidates)
+
+        pass_used = "A" if candidates else None
 
         # Pass B — same department, no specialization needed
         if not candidates:
@@ -865,6 +929,8 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     continue
                 spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
                 candidates.append((_score(fi, spec, True), _explicit_pref_usage_ratio(fi), fi))
+            if candidates:
+                pass_used = "B"
 
         # Pass C — cross-department no-spec fallback (IT->CS zero-faculty only)
         if not candidates:
@@ -882,6 +948,11 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     continue
                 spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
                 candidates.append((_score(fi, spec, False), _explicit_pref_usage_ratio(fi), fi))
+            if candidates and pass_used is None:
+                pass_used = "C"
+
+        if pass_used is None:
+            pass_used = "NONE"  # no candidates found in any pass
 
         sorted_cands = sorted(candidates, key=lambda x: (-x[0], x[1], x[2]))
         fi = sorted_cands[0][2] if sorted_cands else -1
@@ -925,7 +996,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     tagged_detail.append({"faculty_id": tfid, "priority": tprio, "status": "NOT_IN_GA_POOL"})
                 else:
                     rej = rejection_map.get(tfi)
-                    in_cands = any(c[1] == tfi for c in candidates)
+                    in_cands = any(c[2] == tfi for c in candidates)
                     tagged_detail.append({
                         "faculty_id": tfid,
                         "name": faculties[tfi].get("faculty_name"),
@@ -945,7 +1016,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 "descriptive_title": offering.get("descriptive_title"),
                 "dept_id": int(to_number(offering.get("department_id")) or 0),
                 "units": units,
-                "pass_used": "A" if sorted_cands else ("B" if not candidates else "C"),
+                "pass_used": pass_used,
                 "candidate_count": len(candidates),
                 "result": "ASSIGNED" if fi >= 0 else "UNASSIGNED",
                 "winner": winner_info,

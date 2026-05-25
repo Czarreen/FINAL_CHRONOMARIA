@@ -1079,7 +1079,8 @@ function buildRunId(snapshot, constraints) {
 
 async function callPythonOptimizer(payload) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), env.gaRequestTimeoutMs);
+  const timeoutMs = Math.max(env.gaRequestTimeoutMs || 180000, 300000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${env.pythonServiceUrl}/generate`, {
@@ -1271,10 +1272,10 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   }
 
   const normalizedConstraints = {
-    population_size: Number(constraints.population_size || 72),
+    population_size: Number(constraints.population_size || 120),
     max_generations: Number(constraints.max_generations || 120),
-    mutation_rate: Number(constraints.mutation_rate || 0.12),
-    max_runtime_seconds: Number(constraints.max_runtime_seconds || 60),
+    mutation_rate: Number(constraints.mutation_rate || 0.07),
+    max_runtime_seconds: Number(constraints.max_runtime_seconds || 120),
     random_seed: Number.isFinite(Number(constraints.random_seed)) ? Number(constraints.random_seed) : 123,
     dry_run: Boolean(dryRun || constraints.dry_run),
   };
@@ -1515,6 +1516,10 @@ export async function postRunFacultyLoading(req, res) {
       preflight: result.preflight,
     });
   } catch (error) {
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'GA run timed out while waiting for the Python optimizer.' });
+    }
+
     if (error.statusCode === 400 && error.preFlight) {
       return res.status(400).json({ error: error.message, ...error.preFlight });
     }
