@@ -579,12 +579,49 @@ def _rejection_reason(fi_: int, faculties, loads, blocks, preps_keys, preps_unit
     return "ineligible_unknown"
 
 
-def build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences=None, trace=None):
+def build_initial_candidate(faculties, offerings, subject_index, rng, department_faculty_counts, faculty_preferences=None, trace=None, locked_assignments=None):
     loads = {i: 0.0 for i in range(len(faculties))}
     blocks = {i: [] for i in range(len(faculties))}
     preps_keys = {i: set() for i in range(len(faculties))}
     preps_units = {i: 0.0 for i in range(len(faculties))}
     chosen: Dict[int, int] = {}
+    # Room occupancy tracker: "{day}|{room_id}" → list of {start, end}
+    # Used in _hard_eligible() to prevent room double-bookings at construction time.
+    room_blocks: Dict[str, List[Dict[str, Any]]] = {}
+
+    # ── Locked-assignment pre-seeding ─────────────────────────────────────────
+    # Force-assign all locked offerings to their designated faculty before any
+    # phase runs.  Bypasses all eligibility checks — the assignment is
+    # user-verified.  The existing `if oi not in chosen` / `if oi in chosen`
+    # guards in Phases 1-3 will automatically skip these offerings.
+    if locked_assignments:
+        for _lo_idx, _lfi in locked_assignments.items():
+            if _lo_idx >= len(offerings):
+                continue
+            _lo = offerings[_lo_idx]
+            _off_blocks = build_schedule_blocks(_lo)
+            _units = (
+                to_number(_lo.get("units"))
+                or (to_number(_lo.get("lec_hrs")) or 0.0) + (to_number(_lo.get("lab_hrs")) or 0.0)
+                or 0.0
+            )
+            chosen[_lo_idx] = _lfi
+            loads[_lfi] += _units
+            blocks[_lfi].extend(_off_blocks)
+            for _blk in _off_blocks:
+                _rid = int(to_number(_blk.get("room_id")) or 0)
+                if _rid == 0:
+                    continue
+                for _day in _blk.get("days", []):
+                    room_blocks.setdefault(f"{_day}|{_rid}", []).append(
+                        {"start": _blk["start"], "end": _blk["end"]}
+                    )
+            _prep_key = f"{normalize_upper(_lo.get('code'))}|{normalize_upper(_lo.get('course_no'))}"
+            if _prep_key not in preps_keys[_lfi]:
+                preps_keys[_lfi].add(_prep_key)
+                preps_units[_lfi] += float(_units)
+            print(f"[GA] Locked pre-seed: offering idx={_lo_idx} code={_lo.get('code')} → faculty_idx={_lfi}", flush=True)
+
     if trace is not None:
         trace.setdefault("p1_preassignments", [])
         trace.setdefault("p2p3_reservations", [])
@@ -656,6 +693,16 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                     elif any(consecutive_minutes_for_day(blocks[fi_cand] + off_blocks, d) > 240.0
                              for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                         rej = "consecutive_hours_exceeded"
+                    elif any(
+                        overlaps(ex, blk)
+                        for blk in off_blocks
+                        for _day in blk.get("days", [])
+                        for ex in room_blocks.get(
+                            f"{_day}|{int(to_number(blk.get('room_id')) or 0)}", []
+                        )
+                        if int(to_number(blk.get("room_id")) or 0) != 0
+                    ):
+                        rej = "room_conflict"
                     else:
                         # Count-based prep cap — mirrors _hard_eligible exactly.
                         # The old "prep_units + units > remaining_capacity" check was removed
@@ -729,6 +776,16 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 chosen[oi] = best_fi
                 loads[best_fi] += units
                 blocks[best_fi].extend(off_blocks)
+                # Track room occupancy so subsequent P1/main-loop assignments
+                # cannot double-book the same room at the same time.
+                for _blk in off_blocks:
+                    _rid = int(to_number(_blk.get("room_id")) or 0)
+                    if _rid == 0:
+                        continue
+                    for _day in _blk.get("days", []):
+                        room_blocks.setdefault(f"{_day}|{_rid}", []).append(
+                            {"start": _blk["start"], "end": _blk["end"]}
+                        )
                 # Add prep key and increment prep-units if new
                 if prep_key_cand not in preps_keys[best_fi]:
                     preps_keys[best_fi].add(prep_key_cand)
@@ -845,6 +902,16 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             if any(consecutive_minutes_for_day(blocks[fi_] + off_blocks, d) > 240.0
                    for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                 return False
+            # Room double-booking guard: reject if any off_block would collide
+            # with an already-occupied room slot (room_blocks is in closure scope).
+            for _blk in off_blocks:
+                _rid = int(to_number(_blk.get("room_id")) or 0)
+                if _rid == 0:
+                    continue
+                for _day in _blk.get("days", []):
+                    for _ex in room_blocks.get(f"{_day}|{_rid}", []):
+                        if overlaps(_ex, _blk):
+                            return False
             prep_key_ = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
             # Count-based prep cap — always enforced.
             # Only block when the prep key is genuinely new: already-reserved keys
@@ -864,7 +931,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             role_ = normalize_role(faculties[fi_].get("faculty_role"))
             s = spec_ * (1.0 if dept_match_ else 0.65)
             s += 120.0 if role_ == "FT" else 45.0 if role_ == "PT" else 0.0
-            s -= faculty_usage_ratio(faculties[fi_], loads[fi_]) * 80.0
+            s -= faculty_usage_ratio(faculties[fi_], loads[fi_]) * 150.0
             return s + rng.random() * 0.001
 
         candidates: List[Tuple[float, int]] = []
@@ -890,10 +957,11 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         # Track per-faculty rejection reasons for trace
         rejection_map: Dict[int, str] = {}  # fi -> reason string
 
-        # Pass A — specialization match, but prioritize same-department faculty first.
-        # Explicit faculty preferences still apply through match_specialization_score,
-        # but they no longer let a cross-department faculty outrank a same-department
-        # specialization match.
+        # Pass A — specialization match, prioritize same-department faculty first.
+        # Same-dept spec candidates are always included. Cross-dept candidates are
+        # also included if they carry an explicit Priority 1 preference (score >= 100),
+        # so a lower-loaded P1 expert from another dept can still compete. Within the
+        # merged pool, _score()'s 0.65 cross-dept multiplier keeps same-dept favoured.
         same_dept_spec_candidates: List[Tuple[float, float, int]] = []
         cross_dept_spec_candidates: List[Tuple[float, float, int]] = []
         offering_dept_id = to_number(offering.get("department_id"))
@@ -914,6 +982,19 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
 
         if same_dept_spec_candidates:
             candidates.extend(same_dept_spec_candidates)
+            # Allow cross-dept faculty with explicit Priority 1 preference (score >= 100)
+            # to compete even when same-dept spec candidates exist. This ensures a
+            # lower-loaded P1 expert from another dept isn't silently excluded in favour
+            # of a heavily-loaded same-dept P3 match.
+            # _score()'s 0.65 cross-dept multiplier still biases toward same-dept, so
+            # same-dept faculty retain their natural advantage within the merged pool.
+            cross_dept_p1 = [
+                c for c in cross_dept_spec_candidates
+                if match_specialization_score(
+                    faculties[c[2]], offering, subject, faculty_preferences
+                ) >= 100.0
+            ]
+            candidates.extend(cross_dept_p1)
         else:
             candidates.extend(cross_dept_spec_candidates)
 
@@ -1030,6 +1111,15 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         chosen[oi] = fi
         loads[fi] += units
         blocks[fi].extend(off_blocks)
+        # Track room occupancy so later offerings cannot double-book the same room.
+        for _blk in off_blocks:
+            _rid = int(to_number(_blk.get("room_id")) or 0)
+            if _rid == 0:
+                continue
+            for _day in _blk.get("days", []):
+                room_blocks.setdefault(f"{_day}|{_rid}", []).append(
+                    {"start": _blk["start"], "end": _blk["end"]}
+                )
         prep_key_now = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
         if prep_key_now not in preps_keys[fi]:
             preps_keys[fi].add(prep_key_now)
@@ -1068,7 +1158,7 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
     return [chosen.get(i, -1) for i in range(len(offerings))]
 
 
-def summarize_candidate(candidate, faculties, offerings, subject_index, department_faculty_counts, department_available_faculty_counts, faculty_preferences=None):
+def summarize_candidate(candidate, faculties, offerings, subject_index, department_faculty_counts, department_available_faculty_counts, faculty_preferences=None, locked_set=None):
     assignments = []
     loads = {}
     faculty_assignments = {}
@@ -1140,7 +1230,13 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
         )
         fid = int(to_number(faculty.get("faculty_id")) or 0)
 
-        item = {"faculty": faculty, "offering": offering, "matched_subject": subject_index.get(build_offering_key(offering)), "schedule_blocks": b}
+        item = {
+            "faculty": faculty,
+            "offering": offering,
+            "matched_subject": subject_index.get(build_offering_key(offering)),
+            "schedule_blocks": b,
+            "status": "Locked" if (locked_set and oi in locked_set) else None,
+        }
         assignments.append(item)
         loads[fid] = loads.get(fid, 0.0) + units
         faculty_assignments.setdefault(fid, []).append(item)
@@ -1158,8 +1254,11 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
     soft_bonus = 0.0
     avg_units = sum(loads.values()) / max(1, len(faculties))
 
-    if unassigned:
-        hard_penalty += 180.0 * len(unassigned)
+    # NOTE: unassigned offerings are now captured via coverage_score (computed
+    # after the faculty loop), NOT as a flat per-offering penalty.  The old
+    # 180×N formula collapsed hard→0 for any N≥1, making all solutions with
+    # at least one unassigned offering score identically (fitness≈28) and
+    # preventing the GA from differentiating better from worse solutions.
 
     load_rows = []
     free_rows = []
@@ -1173,7 +1272,7 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
         role = normalize_role(faculty.get("faculty_role"))
 
         if max_units > 0 and total > max_units:
-            hard_penalty += (total - max_units) * 120.0
+            hard_penalty += (total - max_units) * 12.0  # scaled to coverage range (was 120)
             conflicts.append({"type": "overload", "faculty_id": fid, "problem": "Exceeded max units"})
 
         # Compute prep units (sum of unique subject units among assigned offerings)
@@ -1214,13 +1313,13 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             day_blocks = sorted([x for x in blks if day in set(x.get("days", []))], key=lambda x: x["start"])
             for i in range(1, len(day_blocks)):
                 if overlaps(day_blocks[i - 1], day_blocks[i]):
-                    hard_penalty += 90.0
+                    hard_penalty += 9.0  # scaled to coverage range (was 90)
                     conflicts.append({"type": "time_conflict", "faculty_id": fid, "problem": f"Overlap on {day}"})
             if consecutive_minutes_for_day(day_blocks, day) > 240.0:
-                hard_penalty += 70.0
+                hard_penalty += 7.0  # scaled to coverage range (was 70)
                 conflicts.append({"type": "consecutive_limit", "faculty_id": fid, "problem": f">4h consecutive on {day}"})
 
-        soft_penalty += (total - avg_units) ** 2 * 0.35
+        soft_penalty += (total - avg_units) ** 2 * 1.5  # stronger imbalance pressure (was 0.35)
         free = max(0.0, max_units - total)
         row = {
             "faculty_id": fid,
@@ -1240,7 +1339,36 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
         if free > 0:
             free_rows.append(row)
 
-    hard = max(0.0, 100.0 - hard_penalty)
+    # ── Room double-booking detection ────────────────────────────────────────
+    # room_day_blocks was populated above (one entry per assigned block).
+    # Iterate here to find any two offerings sharing the same room on the same
+    # day with overlapping times and apply a hard penalty for each collision.
+    for _rkey, _rblks in room_day_blocks.items():
+        _sorted_rb = sorted(_rblks, key=lambda x: x["start"])
+        for _ri in range(1, len(_sorted_rb)):
+            if overlaps(_sorted_rb[_ri - 1], _sorted_rb[_ri]):
+                hard_penalty += 9.0  # same scale as other violations
+                _day_str, _room_str = _rkey.split("|", 1)
+                conflicts.append({
+                    "type": "room_conflict",
+                    "room_id": _room_str,
+                    "problem": f"Room double-booking on {_day_str}",
+                })
+
+    # ── Coverage-based hard score ─────────────────────────────────────────────
+    # Replaces the old "100 - hard_penalty" formula which collapsed to 0
+    # whenever ≥1 offering was unassigned (180×N penalty >> 100), making
+    # all solutions with any unassigned offerings score identically (≈28)
+    # and preventing the GA from improving across generations.
+    #
+    # Now: hard = (% assigned) − violation_penalty
+    #   • 100% assigned, 0 violations → hard = 100
+    #   • 93% assigned, 0 violations → hard ≈ 93   (typical partial-assign run)
+    #   • Each additional assignment raises hard by ~0.5 → GA can climb
+    #   • Each hard violation still costs 7-12 points → still penalised
+    _n_total = len(assignments) + len(unassigned)
+    coverage_score = 100.0 * len(assignments) / max(1, _n_total)
+    hard = max(0.0, coverage_score - hard_penalty)
     soft = max(0.0, min(100.0, 100.0 - soft_penalty + soft_bonus))
     overall = max(0.0, min(100.0, hard * 0.72 + soft * 0.28))
 
@@ -1255,7 +1383,7 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             "faculty_free_units": free_rows,
             "unassigned_subjects": [f"{normalize_text(o.get('code'))}-{normalize_text(o.get('course_no'))}-Sec{normalize_text(o.get('section'))}" for o in unassigned],
             "unresolved_offerings": unresolved_details,
-            "hard_violations": [c for c in conflicts if c["type"] in {"time_conflict", "overload", "department_mismatch", "consecutive_limit", "forbidden_cross_department"}],
+            "hard_violations": [c for c in conflicts if c["type"] in {"time_conflict", "overload", "department_mismatch", "consecutive_limit", "forbidden_cross_department", "room_conflict"}],
             "soft_penalties": [],
             "schedule_fragmentation": {"faculty_with_scattered_schedule": [r["faculty_id"] for r in load_rows if r["class_count"] >= 3 and r["imbalance_score"] > 2]},
             "explainability": [f"{a['faculty'].get('faculty_name')}: {normalize_text(a['offering'].get('code'))} {normalize_text(a['offering'].get('descriptive_title'))}" for a in assignments[:16]],
@@ -1264,16 +1392,24 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
     }
 
 
-def mutate(candidate: Sequence[int], faculty_count: int, rng: random.Random, mutation_rate: float) -> List[int]:
+def mutate(candidate: Sequence[int], faculty_count: int, rng: random.Random, mutation_rate: float, locked_set=None) -> List[int]:
     out = list(candidate)
     for i in range(len(out)):
+        if locked_set and i in locked_set:
+            continue  # never mutate a locked locus
         if rng.random() < mutation_rate:
             out[i] = rng.randrange(-1, max(1, faculty_count))
     return out
 
 
-def crossover(a: Sequence[int], b: Sequence[int], rng: random.Random) -> List[int]:
-    return [a[i] if rng.random() < 0.5 else b[i] for i in range(len(a))]
+def crossover(a: Sequence[int], b: Sequence[int], rng: random.Random, locked_set=None) -> List[int]:
+    result = []
+    for i in range(len(a)):
+        if locked_set and i in locked_set:
+            result.append(a[i])  # always preserve the locked gene (identical in both parents)
+        else:
+            result.append(a[i] if rng.random() < 0.5 else b[i])
+    return result
 
 
 def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1330,6 +1466,43 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
     sat_only_offerings = [o for o in offerings if is_sat_only_offering(o)]
     wed_only_offerings = [o for o in offerings if is_wed_only_offering(o)]
 
+    # ── Locked-assignment resolution ──────────────────────────────────────────
+    # Build faculty_id → index map for the current GA faculty pool.
+    fid_to_fi_run: Dict[str, int] = {
+        str(int(to_number(f.get("faculty_id")) or 0)): i
+        for i, f in enumerate(faculties)
+    }
+
+    # Collect locked offerings from the FULL offerings list (pre-SAT/WED split).
+    _locked_raw: Dict[int, int] = {}
+    for _oi, _offering in enumerate(offerings):
+        if not _offering.get("locked"):
+            continue
+        _existing_fid = _offering.get("existing_faculty_id")
+        if _existing_fid is None:
+            print(f"[GA] Locked warning: idx={_oi} code={_offering.get('code')} has no existing_faculty_id — treated as unlocked", flush=True)
+            continue
+        _fid_str = str(int(to_number(_existing_fid) or 0))
+        _fi = fid_to_fi_run.get(_fid_str)
+        if _fi is None:
+            print(f"[GA] Locked warning: idx={_oi} code={_offering.get('code')} faculty_id={_fid_str} not found in faculty list — treated as unlocked", flush=True)
+            continue
+        _locked_raw[_oi] = _fi
+
+    # Re-index to ga_offerings positions (chromosome loci index into ga_offerings,
+    # not the full offerings list).  SAT/WED-only locked offerings are excluded
+    # from the GA entirely — no action needed for them.
+    _ga_offering_id_map: Dict[int, int] = {id(o): gi for gi, o in enumerate(ga_offerings)}
+    locked_assignments_ga: Dict[int, int] = {}
+    for _oi, _fi in _locked_raw.items():
+        _ga_idx = _ga_offering_id_map.get(id(offerings[_oi]))
+        if _ga_idx is not None:
+            locked_assignments_ga[_ga_idx] = _fi
+    locked_set: Set[int] = set(locked_assignments_ga.keys())
+
+    if locked_set:
+        print(f"[GA] {len(locked_set)} locked offering(s) will be pre-seeded and frozen throughout the GA run.", flush=True)
+
     if not faculties or not ga_offerings:
         return {
             "assignments": [],
@@ -1365,10 +1538,10 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
             "tagged_faculty_count": len(faculty_preferences) if faculty_preferences else 0,
         },
     }
-    population = [build_initial_candidate(faculties, ga_offerings, subject_index, rng, department_faculty_counts, faculty_preferences, trace=_trace)]
+    population = [build_initial_candidate(faculties, ga_offerings, subject_index, rng, department_faculty_counts, faculty_preferences, trace=_trace, locked_assignments=locked_assignments_ga)]
     while len(population) < population_size:
-        base = build_initial_candidate(faculties, ga_offerings, subject_index, rng, department_faculty_counts, faculty_preferences)
-        population.append(mutate(base, len(faculties), rng, min(0.35, mutation_rate * 1.6)))
+        base = build_initial_candidate(faculties, ga_offerings, subject_index, rng, department_faculty_counts, faculty_preferences, locked_assignments=locked_assignments_ga)
+        population.append(mutate(base, len(faculties), rng, min(0.35, mutation_rate * 1.6), locked_set=locked_set))
 
     best = population[0]
     best_summary = summarize_candidate(
@@ -1379,6 +1552,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         department_faculty_counts,
         department_available_faculty_counts,
         faculty_preferences,
+        locked_set=locked_set,
     )
     best_score = best_summary["fitness_overall"]
     generation = 0
@@ -1395,6 +1569,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
                 department_faculty_counts,
                 department_available_faculty_counts,
                 faculty_preferences,
+                locked_set=locked_set,
             )
             scored.append((summary["fitness_overall"], list(cand), summary))
         scored.sort(key=lambda x: (-x[0], x[1]))
@@ -1415,8 +1590,8 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         while len(next_pop) < population_size:
             pa = rng.choice(elites)
             pb = rng.choice(elites)
-            child = crossover(pa, pb, rng)
-            child = mutate(child, len(faculties), rng, mutation_rate)
+            child = crossover(pa, pb, rng, locked_set=locked_set)
+            child = mutate(child, len(faculties), rng, mutation_rate, locked_set=locked_set)
             next_pop.append(child)
 
         population = next_pop
@@ -1430,6 +1605,7 @@ def run_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
         department_faculty_counts,
         department_available_faculty_counts,
         faculty_preferences,
+        locked_set=locked_set,
     )
     result["generations"] = generation + 1
     result["runtime_ms"] = int((time.perf_counter() - started) * 1000)

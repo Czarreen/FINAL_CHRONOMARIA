@@ -96,6 +96,29 @@ export async function updateFacultyStatus(id, status) {
   return updateFaculty(id, { faculty_status: status });
 }
 
+export async function fetchFacultyLoading(facultyId) {
+  const response = await fetch(`${API_BASE_URL}/api/faculty/${facultyId}/loading`);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload.rows) ? payload.rows : [];
+}
+
+export async function updateFacultyLoadingLock(facloadingId, locked) {
+  const response = await fetch(`${API_BASE_URL}/api/faculty/loading/${facloadingId}/lock`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locked }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API error (${response.status}): ${body}`);
+  }
+  return response.json();
+}
+
 export async function deleteFaculty(id) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/faculty/${id}`, {

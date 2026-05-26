@@ -244,6 +244,91 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// GET /api/faculty/:id/loading — fetch all faculty_loading rows for a faculty member
+router.get('/:id/loading', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First, fetch the loading rows
+    const { data, error } = await supabaseAdmin
+      .from('faculty_loading')
+      .select(
+        'facloading_id, faculty_id, code, course_no, descriptive_title, section, units, lec_hrs, lab_hrs, mth_schedule, tfs_schedule, locked, mth_room_id, tfs_room_id'
+      )
+      .eq('faculty_id', id)
+      .order('facloading_id', { ascending: true });
+
+    if (error) {
+      console.error('Faculty loading query error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    if (!data || data.length === 0) {
+      return res.json({ rows: [] });
+    }
+
+    // Resolve room names in a second query
+    const roomIds = new Set();
+    data.forEach((row) => {
+      if (row.mth_room_id) roomIds.add(Number(row.mth_room_id));
+      if (row.tfs_room_id) roomIds.add(Number(row.tfs_room_id));
+    });
+
+    let roomMap = {};
+    if (roomIds.size > 0) {
+      const { data: rooms, error: roomError } = await supabaseAdmin
+        .from('rooms')
+        .select('room_id, room_name')
+        .in('room_id', Array.from(roomIds));
+
+      if (!roomError && rooms) {
+        rooms.forEach((r) => { roomMap[r.room_id] = r.room_name; });
+      }
+    }
+
+    const rows = data.map((row) => ({
+      ...row,
+      locked: Boolean(row.locked),
+      mth_room_name: row.mth_room_id ? (roomMap[Number(row.mth_room_id)] ?? null) : null,
+      tfs_room_name: row.tfs_room_id ? (roomMap[Number(row.tfs_room_id)] ?? null) : null,
+    }));
+
+    return res.json({ rows });
+  } catch (err) {
+    console.error('Faculty loading route error:', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+// PATCH /api/faculty/loading/:facloadingId/lock — toggle locked field
+router.patch('/loading/:facloadingId/lock', async (req, res) => {
+  try {
+    const { facloadingId } = req.params;
+    const { locked } = req.body;
+
+    if (typeof locked !== 'boolean') {
+      return res.status(400).json({ error: '`locked` must be a boolean' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('faculty_loading')
+      .update({ locked })
+      .eq('facloading_id', facloadingId)
+      .select('facloading_id, locked')
+      .single();
+
+    if (error) {
+      console.error('Faculty loading lock update error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.json({ facloading_id: data.facloading_id, locked: Boolean(data.locked) });
+  } catch (err) {
+    console.error('Faculty loading lock route error:', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;

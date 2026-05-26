@@ -24,6 +24,7 @@ import { Document, Packer, Paragraph, Table as DocTable, TableCell, TableRow, Te
 import { formatScheduleTimeDisplay } from '../utils/scheduleUtils';
 import { fetchGaPreFlight } from '../services/gaApi';
 import { fetchRooms } from '../services/roomsApi';
+import { updateFacultyLoadingLock } from '../services/facultyApi';
 
 let ROOMS_MAP = {};
 
@@ -31,11 +32,14 @@ const FINALIZE_STORAGE_KEY = 'facultyLoadingFinalizeDraft';
 const SOURCE_RESULT_KEY = 'facultyLoadingLastResult';
 
 const COLUMN_DEFS = [
+  { key: 'curr_id', label: 'Curr ID', type: 'text' },
   { key: 'section', label: 'Section', type: 'text' },
   { key: 'code', label: 'Course Code', type: 'text' },
   { key: 'course_no', label: 'Course No', type: 'text' },
   { key: 'descriptive_title', label: 'Descriptive Title', type: 'text' },
   { key: 'units', label: 'Units', type: 'number' },
+  { key: 'lec_hrs', label: 'Lec Hrs', type: 'number' },
+  { key: 'lab_hrs', label: 'Lab Hrs', type: 'number' },
   { key: 'mth_schedule', label: 'MTH Schedule', type: 'text' },
   { key: 'mth_room', label: 'MTH Room', type: 'text' },
   { key: 'tfs_schedule', label: 'TFS Schedule', type: 'text' },
@@ -51,11 +55,14 @@ const DEFAULT_COLUMN_ORDER = COLUMN_DEFS.map((column) => column.key);
 const DEFAULT_SORT = { key: 'section', direction: 'asc' };
 
 const COLUMN_MIN_WIDTHS = {
+  curr_id: '8rem',
   section: '8rem',
   code: '9rem',
   course_no: '8rem',
   descriptive_title: '18rem',
   units: '6rem',
+  lec_hrs: '7rem',
+  lab_hrs: '7rem',
   mth_schedule: '11rem',
   mth_room: '10rem',
   tfs_schedule: '11rem',
@@ -100,11 +107,15 @@ function parseJson(raw) {
 function normalizeRow(row, index) {
   return {
     id: row?.id ?? row?.row_id ?? `faculty-loading-finalize-${index}`,
+    facloading_id: row?.facloading_id ?? null,   // DB primary key — enables lock persistence
+    curr_id: row?.curr_id ?? '',
     section: row?.section ?? '',
     code: row?.code ?? '',
     course_no: row?.course_no ?? '',
     descriptive_title: row?.descriptive_title ?? '',
     units: row?.units ?? '',
+    lec_hrs: row?.lec_hrs ?? '',
+    lab_hrs: row?.lab_hrs ?? '',
     mth_schedule: row?.mth_schedule ?? '',
     mth_room: row?.mth_room ?? row?.mth_room_id ?? row?.mth_room_label ?? '',
     tfs_schedule: row?.tfs_schedule ?? '',
@@ -210,6 +221,12 @@ function valueForSearch(row) {
 function getExportValue(row, columnKey) {
   const value = row?.[columnKey];
 
+  if (columnKey === 'total_contact_hrs') {
+    const lec = toNumber(row?.lec_hrs);
+    const lab = toNumber(row?.lab_hrs);
+    const total = lec + lab;
+    return total === 0 ? '' : total;
+  }
   if (columnKey === 'merged') return value ? 'Yes' : 'No';
   if (columnKey === 'units') return value === '' || value === null || value === undefined ? '' : value;
   if (columnKey === 'mth_schedule' || columnKey === 'tfs_schedule') return formatScheduleTimeDisplay(value) || value || '';
@@ -224,6 +241,34 @@ function buildExportMatrix(rows, columns) {
   const headers = columns.map((column) => column.label);
   const body = rows.map((row) => columns.map((column) => getExportValue(row, column.key)));
   return { headers, body };
+}
+
+/**
+ * For exports, merge lec_hrs + lab_hrs into a single "Total Contact Hrs" column
+ * at the position of whichever appears first. Both source columns are removed.
+ */
+function toExportColumns(columns) {
+  const hasLec = columns.some((c) => c.key === 'lec_hrs');
+  const hasLab = columns.some((c) => c.key === 'lab_hrs');
+  if (!hasLec && !hasLab) return columns;
+
+  const totalCol = { key: 'total_contact_hrs', label: 'Total Contact Hrs', type: 'number' };
+  const result = [];
+  let inserted = false;
+
+  for (const col of columns) {
+    if (col.key === 'lec_hrs' || col.key === 'lab_hrs') {
+      if (!inserted) {
+        result.push(totalCol);
+        inserted = true;
+      }
+      // drop individual lec/lab columns from export
+    } else {
+      result.push(col);
+    }
+  }
+
+  return result;
 }
 
 function exportCsv(filename, rows, columns) {
@@ -384,24 +429,46 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     return () => { mounted = false; };
   }, []);
 
-  // If localStorage had no rows, seed from DB via preflight
+  // Seed from DB if localStorage is empty; otherwise sync locked values from DB
   useEffect(() => {
-    if (rows.length > 0) return;
     let mounted = true;
 
     (async () => {
       try {
         const preflight = await fetchGaPreFlight();
         const dbRows = Array.isArray(preflight?.faculty_loading) ? preflight.faculty_loading : [];
-        if (mounted && dbRows.length > 0) {
-          setRows(dbRows.map((row, index) => normalizeRow(row, index)));
-        }
+        if (!mounted || dbRows.length === 0) return;
+
+        setRows((current) => {
+          // Build a map of facloading_id → { locked, facloading_id } from DB
+          const dbMap = new Map();
+          dbRows.forEach((r) => {
+            if (r?.facloading_id != null) {
+              dbMap.set(r.facloading_id, { locked: Boolean(r.locked), facloading_id: r.facloading_id });
+            }
+          });
+
+          if (current.length === 0) {
+            // Cold start — load everything from DB
+            return dbRows.map((row, index) => normalizeRow(row, index));
+          }
+
+          // Rows already loaded (from localStorage) — sync locked + facloading_id from DB
+          return current.map((r) => {
+            if (r.facloading_id != null && dbMap.has(r.facloading_id)) {
+              const db = dbMap.get(r.facloading_id);
+              return { ...r, locked: db.locked };
+            }
+            return r;
+          });
+        });
       } catch {
-        // preflight unavailable — leave rows empty
+        // preflight unavailable — keep current state
       }
     })();
 
     return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // If source rows include room fields, ensure the room columns are visible
@@ -538,13 +605,27 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     closeRowEditor();
   };
 
-  const toggleLock = (rowId) => {
+  const toggleLock = (rowId, facloadingId, currentLocked) => {
+    const newLocked = !currentLocked;
+
+    // Optimistic local update
     setRows((current) => {
-      const next = current.map((r) => (r.id === rowId ? { ...r, locked: !r.locked } : r));
-      const changed = next.find((r) => r.id === rowId);
-      if (changed) setStatusMessage(changed.locked ? 'Row locked.' : 'Row unlocked.');
+      const next = current.map((r) => (r.id === rowId ? { ...r, locked: newLocked } : r));
+      setStatusMessage(newLocked ? 'Row locked.' : 'Row unlocked.');
       return next;
     });
+
+    // Persist to DB when the row has a known DB id
+    if (facloadingId != null) {
+      updateFacultyLoadingLock(facloadingId, newLocked).catch((err) => {
+        console.error('Failed to persist lock to DB:', err);
+        // Revert on failure
+        setRows((current) =>
+          current.map((r) => (r.id === rowId ? { ...r, locked: currentLocked } : r))
+        );
+        setStatusMessage('Failed to update lock — reverted.');
+      });
+    }
   };
 
   useEffect(() => {
@@ -570,28 +651,30 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
   const handleExport = async (type) => {
     if (!exportRows.length || !exportColumns.length) return;
 
+    // Merge lec_hrs + lab_hrs → "Total Contact Hrs" for all export formats
+    const resolvedExportColumns = toExportColumns(exportColumns);
     const filenameBase = `faculty_loading_finalized_${timestampForFileName()}`;
 
     if (type === 'csv') {
-      exportCsv(`${filenameBase}.csv`, exportRows, exportColumns);
+      exportCsv(`${filenameBase}.csv`, exportRows, resolvedExportColumns);
       setStatusMessage('CSV export downloaded.');
       return;
     }
 
     if (type === 'xlsx') {
-      exportXlsx(`${filenameBase}.xlsx`, exportRows, exportColumns);
+      exportXlsx(`${filenameBase}.xlsx`, exportRows, resolvedExportColumns);
       setStatusMessage('Excel export downloaded.');
       return;
     }
 
     if (type === 'word') {
-      await exportWord(`${filenameBase}.docx`, exportRows, exportColumns);
+      await exportWord(`${filenameBase}.docx`, exportRows, resolvedExportColumns);
       setStatusMessage('Word export downloaded.');
       return;
     }
 
     if (type === 'pdf') {
-      exportPdf(`${filenameBase}.pdf`, exportRows, exportColumns);
+      exportPdf(`${filenameBase}.pdf`, exportRows, resolvedExportColumns);
       setStatusMessage('PDF export downloaded.');
     }
   };
@@ -606,21 +689,25 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
   return (
     <div className="min-w-0 space-y-6">
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-[28px] border border-white/70 bg-white/75 p-6 shadow-[0_30px_50px_rgba(75,42,184,0.08)] backdrop-blur-xl md:p-8"
+        className="glass-panel rounded-2xl overflow-hidden"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-container/15 via-transparent to-secondary/10" />
-        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -bottom-20 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-secondary/10 blur-3xl" />
-        <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary-container/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.3em] text-primary">
-            <ClipboardList size={14} /> Finalize Faculty Loading
+        <div className="flex items-center justify-between gap-4 border-b border-white/50 px-5 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <ClipboardList size={16} className="text-primary" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-on-surface">Master List Editor</h2>
+              <p className="text-xs text-on-surface-variant">Finalize faculty loading — edit, reorder columns, then export.</p>
+            </div>
           </div>
-          <h2 className="mt-3 text-4xl font-headline-xl font-extrabold tracking-tight text-on-surface md:text-5xl">Master List Editor</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant md:text-base">
-            Review the generated faculty loading list, edit cells manually, choose which columns to export, reorder the layout, and download the finalized output in your preferred format.
-          </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
+              <ClipboardList size={10} /> Finalize
+            </span>
+          </div>
         </div>
       </motion.div>
 
@@ -718,52 +805,52 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
                           <button type="button" disabled={page >= pageCount} onClick={() => setPage(pageCount)} className="rounded px-2 py-1 text-sm border border-outline-variant">Last</button>
                         </div>
                       </div>
-                      <div className="mt-6 overflow-hidden rounded-2xl border border-white/60 bg-white/80">
-                <div className="overflow-x-auto">
-                  <table className="w-max min-w-full text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-primary-container/20 text-on-surface">
+                      <div className="mt-4 overflow-hidden rounded-2xl border border-white/60 bg-white/80">
+                <div className="max-h-[calc(100vh-26rem)] overflow-auto">
+                  <table className="min-w-full w-full text-left text-xs">
+                    <thead className="sticky top-0 z-20 border-b border-white bg-white">
                       <tr>
                         {visibleColumns.map((column) => (
-                          <th key={column.key} className="px-4 py-3 align-top whitespace-nowrap" style={{ minWidth: COLUMN_MIN_WIDTHS[column.key] || '10rem' }}>
+                          <th key={column.key} className="px-3 py-3 text-left whitespace-nowrap" style={{ minWidth: COLUMN_MIN_WIDTHS[column.key] || '10rem' }}>
                             <button
                               type="button"
                               onClick={() => setSortConfig((current) => ({
                                 key: column.key,
                                 direction: current.key === column.key && current.direction === 'asc' ? 'desc' : 'asc',
                               }))}
-                              className={`flex items-center gap-1 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${sortConfig.key === column.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'}`}
+                              className={`flex items-center gap-1 text-xs font-bold uppercase tracking-[0.28em] transition-colors ${sortConfig.key === column.key ? 'text-primary' : 'text-on-surface-variant/70 hover:text-on-surface'}`}
                             >
                               <span>{column.label}</span>
-                              <ArrowUpDown size={12} />
+                              <ArrowUpDown size={10} />
                             </button>
                           </th>
                         ))}
-                        <th className="px-4 py-3 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">Action</th>
+                        <th className="px-3 py-3 text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/70 whitespace-nowrap">Action</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {paginatedRows.map((row) => (
-                        <tr key={row.id} className="border-t border-white/60 align-top">
+                    <tbody className="divide-y divide-black/5">
+                      {paginatedRows.map((row, idx) => (
+                        <tr key={row.id} className={`transition-colors ${idx % 2 === 0 ? 'bg-white/60 hover:bg-white/40' : 'hover:bg-white/40'}`}>
                           {visibleColumns.map((column) => (
-                            <td key={`${row.id}-${column.key}`} className="px-4 py-3 whitespace-nowrap" style={{ minWidth: COLUMN_MIN_WIDTHS[column.key] || '10rem' }}>
-                              <span className="text-sm text-on-surface">{valueForDisplay(row, column.key) || '-'}</span>
+                            <td key={`${row.id}-${column.key}`} className="px-3 py-2 whitespace-nowrap truncate" style={{ minWidth: COLUMN_MIN_WIDTHS[column.key] || '10rem' }}>
+                              <span className="text-xs text-on-surface">{valueForDisplay(row, column.key) || '—'}</span>
                             </td>
                           ))}
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             {(() => {
                               const isAttention = ['unassigned', 'needs_attention'].includes(String(row.load_status ?? '').toLowerCase());
-                              const editBtnClass = `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${isAttention ? 'bg-primary text-on-primary shadow-lg' : 'border border-outline-variant bg-white/80 text-on-surface hover:bg-white'}`;
-                              const lockBtnClass = `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${row.locked ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'border border-outline-variant bg-white/80 text-on-surface hover:bg-white'}`;
+                              const editBtnClass = `inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${isAttention ? 'bg-primary text-on-primary shadow-lg' : 'border border-outline-variant bg-white/80 text-on-surface hover:bg-white'}`;
+                              const lockBtnClass = `inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${row.locked ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100' : 'border border-outline-variant bg-white/80 text-on-surface hover:bg-white'}`;
 
                               return (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={() => toggleLock(row.id)}
+                                    onClick={() => toggleLock(row.id, row.facloading_id, row.locked)}
                                     className={lockBtnClass}
                                     aria-label={row.locked ? 'Unlock row' : 'Lock row'}
                                   >
-                                    {row.locked ? <Unlock size={12} /> : <Lock size={12} />}
+                                    {row.locked ? <Unlock size={11} /> : <Lock size={11} />}
                                     {row.locked ? 'Unlock' : 'Lock'}
                                   </button>
 
@@ -772,7 +859,7 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
                                     onClick={() => openRowEditor(row)}
                                     className={editBtnClass}
                                   >
-                                    <Edit3 size={12} />
+                                    <Edit3 size={11} />
                                     Edit
                                   </button>
                                 </div>

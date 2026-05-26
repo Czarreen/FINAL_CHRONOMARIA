@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   ArrowUpDown,
-  BookOpen,
   Bolt,
+  BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -13,13 +14,10 @@ import {
   Download,
   DoorOpen,
   FileWarning,
-  Gauge,
   History,
   Play,
   RefreshCcw,
   Search,
-  ShieldAlert,
-  Sparkles,
   Users,
   WandSparkles,
   X,
@@ -68,14 +66,6 @@ function SectionHeader({ title, subtitle, action }) {
   );
 }
 
-function qualityFromFitness(score) {
-  if (score >= 95) return 'Excellent';
-  if (score >= 80) return 'Good';
-  if (score >= 60) return 'Fair';
-  if (score >= 40) return 'Poor';
-  return 'Very Poor';
-}
-
 function displayFitnessScore(score) {
   const numericScore = Number(score || 0);
   if (!Number.isFinite(numericScore)) return 0;
@@ -118,10 +108,6 @@ function getSpecialDayOnlyScheduleLabel(mthSchedule, tfsSchedule) {
   if (hasSat(combinedText) && !hasAutomatedWeekday(combinedText)) return 'SAT';
   if (hasWed(combinedText) && !hasAutomatedWeekday(combinedText)) return 'WED';
   return null;
-}
-
-function isSatOnlySchedule(mthSchedule, tfsSchedule) {
-  return getSpecialDayOnlyScheduleLabel(mthSchedule, tfsSchedule) === 'SAT';
 }
 
 function formatDateTimeStandard(date) {
@@ -278,6 +264,8 @@ export default function FacultyLoadingView() {
   const [sortConfig, setSortConfig] = useState({ key: 'section', direction: 'asc' });
   const [generatedListPage, setGeneratedListPage] = useState(1);
   const [generatedListPageInput, setGeneratedListPageInput] = useState(1);
+  const [activeQualityTab, setActiveQualityTab] = useState('quality'); // 'quality' | 'issues'
+  const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
 
   const columns = [
     { key: 'section', label: 'Section' },
@@ -414,7 +402,7 @@ export default function FacultyLoadingView() {
 
     return Array.from(unique.values());
   })();
-  const facultyWithFreeUnits = result?.report?.faculty_free_units || result?.report?.faculty_with_free_units || [];
+
   const loadBalance = result?.report?.faculty_load_balance || preflight?.faculty_load_balance || [];
 
   function dedupeFacultyRows(rows) {
@@ -436,24 +424,6 @@ export default function FacultyLoadingView() {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  const uniqueFacultyWithFreeUnits = [...dedupeFacultyRows(facultyWithFreeUnits)].sort((left, right) => toNumber(right.free_units) - toNumber(left.free_units));
-
-  const deptUnitsSummary = useMemo(() => {
-    const map = new Map();
-    for (const row of dedupeFacultyRows(loadBalance)) {
-      const deptName = row.department_name || 'Unassigned';
-      const deptKey = row.department_id ?? deptName;
-      if (!map.has(deptKey)) {
-        map.set(deptKey, { department_name: deptName, used_units: 0, max_units: 0, faculty_count: 0 });
-      }
-      const entry = map.get(deptKey);
-      entry.used_units += toNumber(row.total_units);
-      entry.max_units += toNumber(row.max_units);
-      entry.faculty_count += 1;
-    }
-    return [...map.values()].sort((a, b) => a.department_name.localeCompare(b.department_name));
-  }, [loadBalance]);
-
   const uniqueLoadBalance = [...dedupeFacultyRows(loadBalance)].sort((left, right) => {
     const delta = toNumber(right.imbalance_score) - toNumber(left.imbalance_score);
     if (delta !== 0) return delta;
@@ -470,7 +440,6 @@ export default function FacultyLoadingView() {
   const filteredAndSortedRows = useMemo(() => {
     let filtered = [...generatedRows];
 
-    // Apply filter
     if (filterText) {
       const searchLower = filterText.toLowerCase();
       filtered = filtered.filter((row) => {
@@ -486,7 +455,6 @@ export default function FacultyLoadingView() {
       });
     }
 
-    // Apply sort
     const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
     filtered.sort((left, right) => {
       let leftValue = left[sortConfig.key];
@@ -535,275 +503,331 @@ export default function FacultyLoadingView() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-white/70 p-6 shadow-[0_30px_50px_rgba(75,42,184,0.08)] backdrop-blur-xl md:p-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-container/15 via-transparent to-secondary/10" />
-        <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -bottom-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-secondary/10 blur-3xl" />
-        <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary-container/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.3em] text-primary">
-            <Sparkles size={14} /> Faculty Loading GA
+    <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
+
+      {/* ── Compact Header ── */}
+      <div className="glass-panel p-3">
+        <div className="flex flex-row items-center justify-between gap-3 flex-nowrap">
+          <div className="space-y-1 flex-shrink-0">
+            <h2 className="text-2xl font-bold text-on-surface">Faculty Loading Generation</h2>
+            <p className="text-xs text-on-surface-variant">Assigns subjects to faculty using the GA engine. Validated with pre-flight checks before execution.</p>
           </div>
-          <h2 className="mt-3 text-4xl font-headline-xl font-extrabold tracking-tight text-on-surface md:text-5xl">Faculty Loading Generation</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant md:text-base">Runs are validated with pre-flight checks before GA execution.</p>
-        </div>
-      </div>
-
-      <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader
-          title="Generation Controls"
-          subtitle="Check readiness, review active profile, and run the GA."
-          action={<div className="flex items-center gap-2 rounded-full bg-primary-container/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-primary"><Users size={14} /> Live snapshot</div>}
-        />
-
-        <div className="mt-6 space-y-5">
-          {!loadingPreflight && preflight?.status === 'blocked' ? (
-            <div className="rounded-2xl border border-error/20 bg-error-container/35 p-4 text-sm text-error">Data is incomplete. Resolve pre-flight issues before generating faculty loading.</div>
-          ) : null}
-
-          {!loadingPreflight && preflight?.status === 'partial' ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">Some offerings still need attention, but GA can proceed with the loadable rows.</div>
-          ) : null}
-
-          {!loadingPreflight && preflight?.status !== 'blocked' ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">Data is ready. You can run GA preview or persist to faculty_loading.</div>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard label="Faculty Loaded" value={String(facultyCount)} icon={Users} tone="primary" />
-            <StatCard label="Offerings Loaded" value={String(offeringCount)} icon={BookOpen} tone="primary" />
-            <StatCard label="Rooms Loaded" value={String(roomCount)} icon={DoorOpen} tone="primary" />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button onClick={handleRun} disabled={running || loadingPreflight} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
-              {running ? <RefreshCcw size={16} className="animate-spin" /> : <Play size={16} />}
-              {dryRun ? 'Run Dry Preview' : 'Run Faculty Loading'}
-            </button>
-            <button onClick={() => setDryRun((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-white/80 px-4 py-3 text-sm font-semibold text-on-surface transition-colors hover:bg-white">
-              <ShieldAlert size={16} />
-              {dryRun ? 'Dry run enabled' : 'Dry run disabled'}
-            </button>
-            <button onClick={loadPreflight} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-white/80 px-4 py-3 text-sm font-semibold text-on-surface transition-colors hover:bg-white">
-              <RefreshCcw size={16} /> Refresh checks
-            </button>
-            <div className="inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/80 px-4 py-3 text-sm text-on-surface-variant">
-              <Gauge size={16} />
-              Status: <span className={`font-bold ${statusTone === 'danger' ? 'text-error' : statusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}>{statusLabel}</span>
-            </div>
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto pb-1">
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1.5 text-xs font-semibold backdrop-blur flex-shrink-0 ${
+              preflight?.status === 'blocked'
+                ? 'border-red-200 bg-red-50/80 text-red-700'
+                : preflight?.status === 'partial'
+                ? 'border-amber-200 bg-amber-50/80 text-amber-700'
+                : 'border-emerald-200 bg-emerald-50/80 text-emerald-700'
+            }`}>
+              {loadingPreflight ? '…' : statusLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
+              <Users size={11} className="text-primary" /> {facultyCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
+              <BookOpen size={11} className="text-primary" /> {offeringCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0">
+              <DoorOpen size={11} className="text-primary" /> {roomCount}
+            </span>
+            {(highIssues + mediumIssues + lowIssues) > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-xs font-semibold text-amber-700 backdrop-blur flex-shrink-0">
+                <AlertCircle size={11} /> {highIssues + mediumIssues + lowIssues}
+              </span>
+            )}
+            {lastRunSummary && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-1.5 text-xs font-semibold text-on-surface-variant backdrop-blur flex-shrink-0 whitespace-nowrap">
+                Run {lastRunSummary.generatedAt}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader title="Latest Run Snapshot" subtitle="Quick summary of the most recent execution." action={<div className="rounded-full bg-secondary-container/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-secondary">History</div>} />
+      {/* ── Generation Controls ── */}
+      <div className="glass-panel p-3 space-y-2">
+        {!loadingPreflight && preflight?.status === 'blocked' && (
+          <p className="text-xs text-error bg-error-container/30 border border-error/20 rounded-lg px-3 py-2">
+            Data is incomplete. Resolve pre-flight issues before generating faculty loading.
+          </p>
+        )}
+        {!loadingPreflight && preflight?.status === 'partial' && (
+          <p className="text-xs text-amber-900 bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-2">
+            Some offerings still need attention, but GA can proceed with the loadable rows.
+          </p>
+        )}
+        {!loadingPreflight && preflight && preflight.status !== 'blocked' && preflight.status !== 'partial' && (
+          <p className="text-xs text-emerald-900 bg-emerald-50/70 border border-emerald-200 rounded-lg px-3 py-2">
+            Data is ready. You can run GA preview or persist to faculty_loading.
+          </p>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700" role="alert">
+            <AlertTriangle size={13} className="flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleRun}
+            disabled={running || loadingPreflight}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary shadow-sm transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+          >
+            {running ? <RefreshCcw size={15} className="animate-spin" /> : <Play size={15} />}
+            {dryRun ? 'Run Dry Preview' : 'Run Faculty Loading'}
+          </button>
+          <button
+            onClick={() => setDryRun((v) => !v)}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-colors min-h-[44px] ${
+              dryRun
+                ? 'border-primary/30 bg-primary/10 text-primary'
+                : 'border-outline-variant bg-white/80 text-on-surface hover:bg-white'
+            }`}
+          >
+            <Bolt size={13} />
+            {dryRun ? 'Dry Run ON' : 'Dry Run OFF'}
+          </button>
+          <button
+            onClick={loadPreflight}
+            className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-white/80 px-3 py-2.5 text-xs font-semibold text-on-surface transition-colors hover:bg-white min-h-[44px]"
+          >
+            <RefreshCcw size={13} /> Refresh
+          </button>
+          {unresolved_offerings.length > 0 && (
+            <button
+              onClick={() => setShowUnresolvedModal(true)}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 min-h-[44px]"
+            >
+              <AlertTriangle size={13} />
+              Unresolved Subjects
+              <span className="inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold bg-amber-200 text-amber-800">
+                {unresolved_offerings.length}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Last Run Snapshot — single compact strip ── */}
+      <div className="glass-panel p-3">
         {!lastRunSummary ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">No previous run yet.</div>
+          <p className="text-xs text-on-surface-variant px-1">No previous run yet.</p>
         ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant flex items-center gap-1"><History size={14} /> Generated At</p><p className="mt-2 font-semibold text-on-surface">{lastRunSummary.generatedAt}</p></div>
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant flex items-center gap-1"><WandSparkles size={14} /> Quality</p><p className="mt-2 font-semibold text-on-surface">{lastRunSummary.quality}</p></div>
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant flex items-center gap-1"><Bolt size={14} /> Fitness</p><p className="mt-2 font-semibold text-on-surface">{lastRunSummary.fitness ?? '-'}</p></div>
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Assignments</p><p className="mt-2 font-semibold text-on-surface">{lastRunSummary.assignments ?? '-'}</p></div>
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Persisted</p><p className="mt-2 font-semibold text-on-surface">{lastRunSummary.persisted ?? '-'}</p></div>
-            <div className="rounded-xl border border-white/60 bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Run ID</p><p className="mt-2 truncate font-semibold text-on-surface">{lastRunSummary.runId || '-'}</p></div>
+          <div className="flex items-center gap-0 overflow-x-auto text-xs">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-on-surface-variant shrink-0">
+              <History size={11} className="text-primary" />
+              <span className="font-semibold text-on-surface">{lastRunSummary.generatedAt}</span>
+            </span>
+            <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-on-surface-variant shrink-0">
+              <WandSparkles size={11} className="text-primary" />
+              <span>{lastRunSummary.quality}</span>
+            </span>
+            <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-on-surface-variant shrink-0">
+              <Bolt size={11} className="text-primary" />
+              <span>Fitness <strong className="text-on-surface">{lastRunSummary.fitness ?? '—'}</strong></span>
+            </span>
+            <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+            <span className="px-3 py-1.5 text-on-surface-variant shrink-0">
+              Assignments <strong className="text-on-surface">{lastRunSummary.assignments ?? '—'}</strong>
+            </span>
+            <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+            <span className="px-3 py-1.5 text-on-surface-variant shrink-0">
+              Persisted <strong className="text-on-surface">{lastRunSummary.persisted ?? '—'}</strong>
+            </span>
+            <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+            <span className="px-3 py-1.5 text-on-surface-variant shrink-0 truncate max-w-[140px]" title={lastRunSummary.runId || '—'}>
+              ID <strong className="text-on-surface">{lastRunSummary.runId || '—'}</strong>
+            </span>
+            {lastRunSummary.dryRun && (
+              <>
+                <span className="h-4 w-px bg-outline-variant/40 shrink-0" />
+                <span className="px-3 py-1.5 shrink-0">
+                  <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">DRY RUN</span>
+                </span>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="glass-panel rounded-2xl p-6">
-          <SectionHeader title="Quality & Readiness Report" subtitle="Old-page inspired report panel, mapped to current GA payload." action={<div className="rounded-full bg-primary-container/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-primary">Report</div>} />
-          <div className="mt-6 space-y-4">
-            {hasFacultyLoadingResult ? (
-              <div className={`rounded-2xl border p-4 ${runQualityClass}`}>
-                <p className="text-xs font-bold uppercase tracking-[0.22em]">Quality of generated list</p>
-                <h4 className="mt-1 text-xl font-bold">{runQuality}</h4>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-                  <p>Overall: <strong>{runFitness}</strong></p>
-                  <p>Hard: <strong>{result?.fitness_hard ?? 0}</strong></p>
-                  <p>Soft: <strong>{result?.fitness_soft ?? 0}</strong></p>
-                  <p>Persisted: <strong>{result?.persistence?.persisted ?? 0}</strong></p>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <StatCard label="High issues" value={String(highIssues)} icon={AlertCircle} tone="danger" />
-              <StatCard label="Medium issues" value={String(mediumIssues)} icon={Clock3} tone="warning" />
-              <StatCard label="Low issues" value={String(lowIssues)} icon={CheckCircle2} tone="success" />
-            </div>
-
-            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Issue Rows + Full Issue Report</h4>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-error-container/40 px-2 py-1 text-xs font-bold text-error">Rows: {issueSubjects.length}</span>
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">Total issues: {issues.length}</span>
-                </div>
-              </div>
-
-              <div className="mt-3 space-y-4">
-                <div className="w-full rounded-lg border border-white/60 bg-white p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Full issue report</p>
-                  <div className="mt-3 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-                    {['high', 'medium', 'low'].map((severity) => {
-                      const items = groupedIssues[severity] || [];
-                      if (!items.length) return null;
-                      return (
-                        <div key={severity}>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">{severity} ({items.length})</p>
-                          <div className="mt-2 space-y-2">
-                            {items.map((issue, idx) => {
-                              const display = formatIssueForDisplay(issue);
-                              return (
-                                <div key={`${severity}-${idx}`} className="rounded-lg border border-white/60 bg-white p-2.5 text-xs">
-                                  <p className="font-semibold text-on-surface flex items-center gap-1.5"><FileWarning size={12} /> {display.name}</p>
-                                  <p className="mt-1 text-on-surface-variant leading-5">{display.issueText}</p>
-                                  <p className="mt-1 text-[11px] font-semibold text-primary">Fix in: {display.page}</p>
-                                  <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant">{display.meta}</p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-full rounded-lg border border-error/15 bg-error-container/15 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Issue rows</p>
-                  <div className="mt-3 max-h-[24rem] space-y-2 overflow-y-auto pr-1">
-                    {issueSubjects.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">No issue rows reported.</p>
-                    ) : (
-                      issueSubjects.slice(0, 30).map((item, idx) => (
-                        <div key={`issue-${idx}`} className="rounded-lg border border-error/15 bg-white p-2.5 text-xs">
-                          <p className="font-semibold text-on-surface">{item.display_label || item.descriptive_title || item.title || item.code || 'Subject'}</p>
-                          <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant leading-5">{item.code || '-'} • {item.course_no || '-'} • {item.department_name || 'Unassigned department'} • {item.load_status || 'unassigned'}</p>
-                          {item.issue_reasons?.length ? <p className="mt-1 text-error">{item.issue_reasons.join(' | ')}</p> : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
+      {/* ── Quality & Readiness Report — browser-style tabs ── */}
+      <div className="glass-panel overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-end gap-0.5 px-4 pt-3 border-b border-slate-200 overflow-x-auto">
+          {[
+            { key: 'quality', label: 'Quality',       badge: null },
+            { key: 'issues',  label: 'Issues',         badge: issueSubjects.length },
+            { key: 'balance', label: 'Load Balance',   badge: uniqueLoadBalance.length },
+          ].map((tab) => {
+            const isActive = activeQualityTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveQualityTab(tab.key)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border border-b-0 -mb-px whitespace-nowrap transition-colors shrink-0 ${
+                  isActive
+                    ? 'bg-white border-slate-200 text-on-surface relative z-10'
+                    : 'bg-slate-50/50 border-transparent text-on-surface-variant hover:bg-white/60 hover:text-on-surface'
+                }`}
+              >
+                {tab.label}
+                {tab.badge !== null && (
+                  <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
+                    tab.badge > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        <div>
-          <div className="glass-panel rounded-2xl p-6">
-            <SectionHeader
-              title="Faculty Capacity Overview"
-              subtitle="Department Unit Capacity, Faculty Load Balance, and Faculty with Free Units in one block."
-              action={
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant">
-                  {deptUnitsSummary.length} dept(s)
+        {/* Tab: Quality */}
+        {activeQualityTab === 'quality' && (
+          <div className="p-4 space-y-4">
+            {hasFacultyLoadingResult && (
+              <div className={`rounded-xl border p-3 ${runQualityClass}`}>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em]">Quality of generated list</p>
+                <h4 className="mt-1 text-lg font-bold">{runQuality}</h4>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span>Overall: <strong>{runFitness}</strong></span>
+                  <span>Hard: <strong>{result?.fitness_hard ?? 0}</strong></span>
+                  <span>Soft: <strong>{result?.fitness_soft ?? 0}</strong></span>
+                  <span>Persisted: <strong>{result?.persistence?.persisted ?? 0}</strong></span>
                 </div>
-              }
-            />
-
-            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Department Unit Capacity</p>
-              <p className="mt-1 text-xs text-on-surface-variant">Combined used vs. max units across all faculty per department after loading.</p>
-              {deptUnitsSummary.length === 0 ? (
-                <div className="mt-3 rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-sm text-on-surface-variant">Run GA to see department unit usage.</div>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                  {deptUnitsSummary.map((dept, idx) => {
-                    const pct = dept.max_units > 0 ? Math.min(100, (dept.used_units / dept.max_units) * 100) : 0;
-                    const barColor = pct >= 95 ? 'bg-error/70' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500/70';
-                    const textColor = pct >= 95 ? 'text-error' : pct >= 80 ? 'text-amber-700' : 'text-emerald-700';
-                    return (
-                      <div key={`dept-${idx}`} className="rounded-xl border border-white/60 bg-white p-3">
-                        <p className="text-sm font-bold text-on-surface truncate" title={dept.department_name}>{dept.department_name}</p>
-                        <p className="mt-1 text-xs text-on-surface-variant">{dept.faculty_count} faculty member{dept.faculty_count !== 1 ? 's' : ''}</p>
-                        <div className="mt-3 flex items-end justify-between gap-2">
-                          <span className={`text-lg font-extrabold ${textColor}`}>{dept.used_units}</span>
-                          <span className="text-xs text-on-surface-variant">/ {dept.max_units} max units</span>
-                        </div>
-                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
-                          <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.max(4, pct)}%` }} />
-                        </div>
-                        <p className={`mt-1 text-right text-xs font-semibold ${textColor}`}>{pct.toFixed(0)}% used</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              </div>
+            )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatCard label="High issues"   value={String(highIssues)}   icon={AlertCircle}  tone="danger"  />
+              <StatCard label="Medium issues" value={String(mediumIssues)} icon={Clock3}       tone="warning" />
+              <StatCard label="Low issues"    value={String(lowIssues)}    icon={CheckCircle2} tone="success" />
             </div>
+          </div>
+        )}
 
-            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty Load Balance</p>
-              <p className="mt-1 text-xs text-on-surface-variant">Sorted by imbalance so the most uneven loads appear first.</p>
-              <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-                {uniqueLoadBalance.slice(0, 16).map((row, idx) => (
-                  <div key={`balance-${row.faculty_id || idx}`} className="rounded-xl border border-white/60 bg-white p-3">
-                    <div className="flex items-start justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-on-surface">{row.faculty_name || `Faculty ${row.faculty_id || idx + 1}`}</p>
-                        <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-on-surface-variant">{row.total_units ?? 0}/{row.max_units ?? 0} units</p>
-                        <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">imbalance {row.imbalance_score ?? 0}</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
-                      <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100))}%` }} />
-                    </div>
-                    <div className="mt-2 text-sm">
-                      {/* Prep units and remaining prep capacity */}
-                      {(() => {
-                        const prepUnits = toNumber(row.prep_units) || 0;
-                        const total = toNumber(row.total_units) || 0;
-                        const max = toNumber(row.max_units);
-                        const remainingPrep = typeof max === 'number' && max > 0 ? Math.max(0, Math.round((max - total - prepUnits) * 100) / 100) : null;
-                        return (
-                          <p className="mt-2 text-xs text-on-surface-variant">
-                            Prep: <span className="font-semibold text-on-surface">{prepUnits}</span> units
-                            {remainingPrep !== null ? (
-                              <span className="ml-2">• remaining prep capacity: <span className="font-semibold text-on-surface">{remainingPrep}</span> units</span>
-                            ) : (
-                              <span className="ml-2">• remaining prep capacity: —</span>
-                            )}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))}
+        {/* Tab: Issues — landscape 2-col */}
+        {activeQualityTab === 'issues' && (
+          <div className="p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Issue Rows + Full Issue Report</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-error-container/40 px-2 py-1 text-xs font-bold text-error">Rows: {issueSubjects.length}</span>
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">Total: {issues.length}</span>
               </div>
             </div>
-
-            <div className="mt-4 rounded-xl border border-white/60 bg-white/80 p-3.5">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty with Free Units</p>
-              <p className="mt-1 text-xs text-on-surface-variant">Faculty still below max capacity, sorted by remaining units.</p>
-              <div className="mt-3 max-h-[230px] space-y-2 overflow-y-auto pr-1">
-                {uniqueFacultyWithFreeUnits.length === 0 ? (
-                  <p className="rounded-xl border border-white/60 bg-white p-3 text-sm text-on-surface-variant">No free-unit report available.</p>
-                ) : (
-                  uniqueFacultyWithFreeUnits.slice(0, 20).map((row, idx) => (
-                    <div key={`free-${idx}`} className="rounded-xl border border-white/60 bg-white p-3">
-                      <div className="flex items-start justify-between gap-3 text-sm">
-                        <div>
-                          <p className="font-semibold text-on-surface">{row.faculty_name || row.name || `Faculty ${row.faculty_id || idx + 1}`}</p>
-                          <p className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned department'}</p>
-                        </div>
-                        <p className="text-on-surface-variant">{row.free_units ?? 0} free</p>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {/* Full Issue Report */}
+              <div className="rounded-lg border border-white/60 bg-white p-4 overflow-y-auto max-h-[32rem]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">Full issue report</p>
+                {['high', 'medium', 'low'].map((severity) => {
+                  const items = groupedIssues[severity] || [];
+                  if (!items.length) return null;
+                  return (
+                    <div key={severity} className="mb-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">{severity} ({items.length})</p>
+                      <div className="mt-2 space-y-2">
+                        {items.map((issue, idx) => {
+                          const display = formatIssueForDisplay(issue);
+                          return (
+                            <div key={`${severity}-${idx}`} className="rounded-lg border border-white/60 bg-white p-2.5 text-xs shadow-sm">
+                              <p className="font-semibold text-on-surface flex items-center gap-1.5"><FileWarning size={12} /> {display.name}</p>
+                              <p className="mt-1 text-on-surface-variant leading-5">{display.issueText}</p>
+                              <p className="mt-1 text-[11px] font-semibold text-primary">Fix in: {display.page}</p>
+                              <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant">{display.meta}</p>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  ))
+                  );
+                })}
+                {issues.length === 0 && (
+                  <p className="text-xs text-on-surface-variant">No pre-flight issues detected.</p>
+                )}
+              </div>
+              {/* Issue Rows */}
+              <div className="rounded-lg border border-error/15 bg-error-container/15 p-4 overflow-y-auto max-h-[32rem]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">Issue rows</p>
+                {issueSubjects.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-3 text-xs text-on-surface-variant">No issue rows reported.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {issueSubjects.slice(0, 30).map((item, idx) => (
+                      <div key={`issue-${idx}`} className="rounded-lg border border-error/15 bg-white p-2.5 text-xs">
+                        <p className="font-semibold text-on-surface">{item.display_label || item.descriptive_title || item.title || item.code || 'Subject'}</p>
+                        <p className="mt-1 uppercase tracking-[0.16em] text-on-surface-variant leading-5">
+                          {item.code || '—'} • {item.course_no || '—'} • {item.department_name || 'Unassigned'} • {item.load_status || 'unassigned'}
+                        </p>
+                        {item.issue_reasons?.length ? <p className="mt-1 text-error">{item.issue_reasons.join(' | ')}</p> : null}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Tab: Load Balance — landscape 2-col grid */}
+        {activeQualityTab === 'balance' && (
+          <div className="p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty Load Balance</span>
+              <span className="rounded-full border border-white/60 bg-white/80 px-2 py-1 text-xs font-semibold text-on-surface-variant">
+                {uniqueLoadBalance.length} faculty
+              </span>
+            </div>
+            {uniqueLoadBalance.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-4 text-xs text-on-surface-variant">
+                Run GA to see faculty load balance.
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {uniqueLoadBalance.map((row, idx) => {
+                  const pct = Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100));
+                  const prepUnits = toNumber(row.prep_units) || 0;
+                  const total = toNumber(row.total_units) || 0;
+                  const max = toNumber(row.max_units);
+                  const remainingPrep = max > 0 ? Math.max(0, Math.round((max - total - prepUnits) * 100) / 100) : null;
+                  return (
+                    <div key={`balance-${row.faculty_id || idx}`} className="rounded-xl border border-white/60 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-on-surface truncate">{row.faculty_name || `Faculty ${row.faculty_id || idx + 1}`}</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant truncate">
+                            {row.faculty_role || 'N/A'} • {row.department_name || row.department_id || 'Unassigned'}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-semibold text-on-surface-variant">{row.total_units ?? 0}/{row.max_units ?? 0} units</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">imb {row.imbalance_score ?? 0}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/70 border border-white/40">
+                        <div className="h-full rounded-full bg-primary/70 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-on-surface-variant">
+                        Prep: <span className="font-semibold text-on-surface">{prepUnits}</span> units
+                        {remainingPrep !== null && (
+                          <span className="ml-2">• remaining prep: <span className="font-semibold text-on-surface">{remainingPrep}</span></span>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* ── Generated Faculty Loading List ── */}
       <div className="glass-panel rounded-2xl p-6">
         <SectionHeader
           title="Generated Faculty Loading List"
@@ -1005,68 +1029,88 @@ export default function FacultyLoadingView() {
         )}
       </div>
 
-      <div className="glass-panel rounded-2xl p-6">
-        <SectionHeader title="Unassigned Subjects" subtitle="Subjects that could not be assigned to faculty. Review reasons and recommendations for resolution." />
-        {unresolved_offerings.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-sm text-on-surface-variant">
-            All offerings were successfully assigned or marked as general subjects.
-          </div>
-        ) : (
-          <div className="mt-6 space-y-3">
-            {unresolved_offerings.map((item, idx) => (
-              <div key={`unresolved-${idx}`} className="rounded-xl border border-error/15 bg-error-container/20 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="font-semibold text-on-surface">
-                      {item.code || 'N/A'} {item.course_no ? `(${item.course_no})` : ''} - Section {item.section || 'N/A'}
-                    </p>
-                    <p className="mt-1 text-sm text-on-surface-variant">{item.descriptive_title || 'No title'}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-on-surface-variant">Department: {item.department_name || 'Unassigned department'}</p>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-error">Reason: {item.reason || 'Unknown'}</p>
-                  </div>
-                </div>
-                {item.recommendations && item.recommendations.length > 0 ? (
-                  <div className="mt-3 rounded-lg bg-white/50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant mb-2">Recommendations:</p>
-                    <ul className="space-y-1 text-xs text-on-surface-variant">
-                      {item.recommendations.map((rec, recIdx) => (
-                        <li key={recIdx} className="flex gap-2">
-                          <span className="mt-0.5 text-primary">→</span>
-                          <span>{rec}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+      {/* ── Unresolved Subjects Modal ── */}
+      {showUnresolvedModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowUnresolvedModal(false); }}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-on-surface">Unresolved Subjects</h3>
+                <p className="text-xs text-on-surface-variant mt-0.5">{unresolved_offerings.length} subject(s) could not be assigned to faculty.</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl border border-white/60 bg-white/80 p-4 text-sm text-on-surface-variant">
-        <div className="flex items-center justify-between gap-3">
-          <span>{preflight?.suggested_next_step || 'Loading checks...'}</span>
-          <ArrowRight size={16} className="shrink-0" />
-        </div>
-      </div>
-
-      {error ? (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-error/20 bg-error-container/40 p-4 text-sm text-error">
-          {error}
+              <button
+                onClick={() => setShowUnresolvedModal(false)}
+                className="rounded-lg p-1.5 text-on-surface-variant hover:bg-slate-100 transition-colors"
+                aria-label="Close modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {/* Modal Body — scrollable */}
+            <div className="overflow-y-auto flex-1 p-5 space-y-3">
+              {unresolved_offerings.length === 0 ? (
+                <p className="text-sm text-on-surface-variant text-center py-6">All offerings were successfully assigned.</p>
+              ) : (
+                unresolved_offerings.map((item, idx) => (
+                  <div key={`unresolved-${idx}`} className="rounded-xl border border-error/15 bg-error-container/20 p-4">
+                    <p className="font-semibold text-on-surface text-sm">
+                      {item.code || 'N/A'} {item.course_no ? `(${item.course_no})` : ''} — §{item.section || 'N/A'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-on-surface-variant">{item.descriptive_title || 'No title'}</p>
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
+                      Dept: {item.department_name || 'Unassigned'}
+                    </p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-error">
+                      Reason: {item.reason || 'Unknown'}
+                    </p>
+                    {item.recommendations?.length > 0 && (
+                      <div className="mt-2 rounded-lg bg-white/60 p-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant mb-1.5">Recommendations:</p>
+                        <ul className="space-y-1">
+                          {item.recommendations.map((rec, recIdx) => (
+                            <li key={recIdx} className="flex gap-2 text-xs text-on-surface-variant">
+                              <ArrowRight size={11} className="mt-0.5 text-primary shrink-0" />
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-slate-100">
+              <button
+                onClick={() => setShowUnresolvedModal(false)}
+                className="w-full rounded-xl border border-outline-variant bg-white/80 px-4 py-2 text-xs font-semibold text-on-surface hover:bg-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
         </motion.div>
-      ) : null}
+      )}
 
-      {/* Full-screen Faculty Loading Overlay — freezes all interaction while running */}
+      {/* ── Full-screen Running Overlay ── */}
       {running && (
         <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/20 bg-white/10 p-8 text-white shadow-2xl">
-            {/* Spinner */}
             <div className="relative h-16 w-16">
               <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/20 border-t-white" />
               <div className="absolute inset-2 animate-spin rounded-full border-4 border-white/10 border-t-white/60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
             </div>
-
             <div className="space-y-1.5 text-center">
               <p className="text-lg font-bold tracking-tight">
                 {dryRun ? 'Running Dry Run…' : 'Running Faculty Loading…'}
@@ -1078,7 +1122,6 @@ export default function FacultyLoadingView() {
               </p>
               <p className="text-xs text-white/50">Do not close or refresh this page.</p>
             </div>
-
             {!dryRun && (
               <div className="w-full rounded-lg border border-orange-300/30 bg-orange-500/20 px-4 py-2.5 text-center text-xs text-orange-200">
                 Live run: assignments will be persisted to the database.

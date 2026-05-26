@@ -317,7 +317,9 @@ function buildFacultyLoadingDisplayRows(snapshot, assignments, preflight) {
       lec_hrs: offering.lec_hrs ?? null,
       lab_hrs: offering.lab_hrs ?? null,
       mth_schedule: offering.mth_schedule ?? null,
+      mth_room_id: offering.mth_room_id ?? null,
       tfs_schedule: offering.tfs_schedule ?? null,
+      tfs_room_id: offering.tfs_room_id ?? null,
       merged: Boolean(offering.merged),
       faculty_id: assignedFaculty ? assignedFaculty.faculty_id ?? null : null,
       faculty_name: assignedFaculty ? normalizeText(assignedFaculty.faculty_name) || null : null,
@@ -585,6 +587,7 @@ function mapSubjectsToGaOfferings(subjects, courseOfferings = []) {
       source_curr_ids: sourceCurrIds,
       source_department_ids: sourceDepartmentIds,
       department_name: representative.department_name || null,
+      subject_status: normalizeText(representative.subject_status) || null,
       source: 'subject',
       source_subject_id: Number(representative.subject_id),
     });
@@ -663,6 +666,21 @@ function buildPreflight(snapshot) {
     if (Boolean(offering.is_general)) {
       continue;
     }
+
+    // PRE-1: inactive subjects are excluded from GA assignment — mark as needs_attention so they still appear in the generated list
+    if (offering.subject_status && normalizeUpper(offering.subject_status) !== 'ACTIVE') {
+      issues.push({
+        type: 'subject',
+        id: offering.id,
+        field: 'subject_status',
+        severity: 'low',
+        problem: 'Subject is inactive',
+        entity_label: describeOffering(offering),
+        department_name: describeDepartment(offering.department_id, departmentLookup),
+      });
+      continue; // skip all other preflight checks for this subject
+    }
+
     const missing = REQUIRED_OFFERING_FIELDS.filter((field) => isEmptyValue(offering[field]));
     if (missing.length > 0) {
       for (const field of missing) {
@@ -1022,7 +1040,7 @@ async function fetchSnapshot() {
     query(`
       select fl.facloading_id, fl.curr_id, fl.faculty_id, fl.code, fl.course_no, fl.department_id, fl.section,
              fl.descriptive_title, fl.units, fl.lec_hrs, fl.lab_hrs, fl.mth_schedule, fl.mth_room_id,
-             fl.tfs_schedule, fl.tfs_room_id, fl.merged,
+             fl.tfs_schedule, fl.tfs_room_id, fl.merged, fl.locked,
              f.faculty_name,
              d.department_name,
              CASE WHEN fl.faculty_id IS NOT NULL THEN 'assigned' ELSE 'unassigned' END AS load_status
@@ -1147,6 +1165,22 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
   const roomLookup = buildRoomLookup(snapshot.rooms);
   const assignmentByOfferingId = new Map();
 
+  // Build a lookup of offering keys that are locked in the current DB snapshot.
+  // This ensures locked status is re-persisted after every GA run (the GA
+  // DELETE+INSERT would otherwise reset locked to NULL).
+  const flLockedByKey = new Map();
+  for (const row of Array.isArray(snapshot.faculty_loading) ? snapshot.faculty_loading : []) {
+    if (!toBoolean(row.locked)) continue;
+    if (toNumber(row.faculty_id) === null) continue;
+    const key = [
+      toNumber(row.department_id) ?? 0,
+      normalizeUpper(row.code),
+      normalizeUpper(row.course_no),
+      normalizeUpper(row.section),
+    ].join('|');
+    flLockedByKey.set(key, true);
+  }
+
   for (const assignment of Array.isArray(assignments) ? assignments : []) {
     const offeringId = Number(assignment?.offering?.id);
     if (Number.isFinite(offeringId)) {
@@ -1154,10 +1188,19 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
     }
   }
 
-  const rows = (Array.isArray(snapshot.offerings) ? snapshot.offerings : []).map((offering, index) => {
+  const rows = (Array.isArray(snapshot.offerings) ? snapshot.offerings : [])
+    .filter((offering) => !offering.subject_status || normalizeUpper(offering.subject_status) === 'ACTIVE') // PRE-1: do not persist inactive subjects to faculty_loading
+    .map((offering, index) => {
     const assignment = assignmentByOfferingId.get(Number(offering.id));
     const mthRoom = resolveRoomReference(offering.mth_room_id, roomLookup);
     const tfsRoom = resolveRoomReference(offering.tfs_room_id, roomLookup);
+
+    const offeringKey = [
+      toNumber(offering.department_id) ?? 0,
+      normalizeUpper(offering.code || ''),
+      normalizeUpper(offering.course_no || ''),
+      normalizeUpper(offering.section || ''),
+    ].join('|');
 
     return {
       facloading_id: index + 1,
@@ -1176,6 +1219,7 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
       tfs_schedule: normalizeText(offering.tfs_schedule) || null,
       tfs_room_id: tfsRoom.roomId,
       merged: toBoolean(offering.merged),
+      locked: flLockedByKey.has(offeringKey),
     };
   });
 
@@ -1201,6 +1245,7 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
       'tfs_schedule',
       'tfs_room_id',
       'merged',
+      'locked',
     ];
 
     const placeholders = [];
@@ -1230,6 +1275,7 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
           row.tfs_schedule,
           row.tfs_room_id,
           row.merged,
+          row.locked,
         );
       });
 
@@ -1311,6 +1357,25 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     assignedUnitsByFaculty.set(facultyId, (assignedUnitsByFaculty.get(facultyId) || 0) + units);
   }
 
+  // Build locked-assignment lookup: offering key → { locked, faculty_id }
+  // Also track which faculty IDs are referenced by locked rows so they are
+  // never filtered out of the GA pool even if their available_units appears 0.
+  const lockedByOfferingKey = new Map();
+  const lockedFacultyIds = new Set();
+  for (const row of Array.isArray(snapshot.faculty_loading) ? snapshot.faculty_loading : []) {
+    if (!toBoolean(row.locked)) continue;
+    const lockedFacultyId = toNumber(row.faculty_id);
+    if (lockedFacultyId === null) continue;
+    const lockedKey = [
+      toNumber(row.department_id) ?? 0,
+      normalizeUpper(row.code),
+      normalizeUpper(row.course_no),
+      normalizeUpper(row.section),
+    ].join('|');
+    lockedByOfferingKey.set(lockedKey, { locked: true, faculty_id: lockedFacultyId });
+    lockedFacultyIds.add(lockedFacultyId);
+  }
+
   const gaFaculty = (Array.isArray(snapshot.faculty) ? snapshot.faculty : [])
     .filter((faculty) => normalizeUpper(faculty.faculty_status) === 'ACTIVE')
     .map((faculty) => {
@@ -1325,7 +1390,14 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
       };
     })
     .filter((faculty) => (toNumber(faculty.faculty_max_units) || 0) > 0)
-    .filter((faculty) => (toNumber(faculty.available_units) || 0) > 0);
+    .filter((faculty) => {
+      const facultyId = toNumber(faculty.faculty_id);
+      // Always include faculty who own a locked assignment, even if their
+      // available_units appears 0 (the locked units are already counted in the
+      // snapshot; the GA will re-account for them during pre-seeding).
+      if (facultyId !== null && lockedFacultyIds.has(facultyId)) return true;
+      return (toNumber(faculty.available_units) || 0) > 0;
+    });
 
   if (gaFaculty.length === 0) {
     const totalActive = (Array.isArray(snapshot.faculty) ? snapshot.faculty : []).filter(
@@ -1359,10 +1431,27 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
     departmentAvailableFacultyCounts[key] = (departmentAvailableFacultyCounts[key] || 0) + 1;
   }
 
+  // Annotate each assignable offering with its locked status and the faculty
+  // currently assigned to it in the DB, so the GA can pre-seed locked genes.
+  const annotatedOfferings = assignableOfferings.map((offering) => {
+    const offeringKey = [
+      toNumber(offering.department_id) ?? 0,
+      normalizeUpper(offering.code),
+      normalizeUpper(offering.course_no),
+      normalizeUpper(offering.section),
+    ].join('|');
+    const lockInfo = lockedByOfferingKey.get(offeringKey);
+    return {
+      ...offering,
+      locked: lockInfo ? true : false,
+      existing_faculty_id: lockInfo ? lockInfo.faculty_id : null,
+    };
+  });
+
   const runId = buildRunId(subjectDrivenSnapshot, normalizedConstraints);
   const payload = {
     faculty: gaFaculty,
-    offerings: assignableOfferings,
+    offerings: annotatedOfferings,
     rooms: snapshot.rooms,
     subjects: snapshot.subjects,
     faculty_loading: snapshot.faculty_loading || [],
