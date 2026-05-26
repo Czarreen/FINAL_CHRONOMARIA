@@ -57,7 +57,13 @@ function isBookingMerged(a, b) {
   return false;
 }
 
-export function useConflictingIdSets(bookings) {
+/**
+ * @param {object[]} bookings  - Raw room booking rows from /api/rooms/bookings
+ * @param {Set<string>} [gymRoomIds] - Optional set of room_id strings that are gym
+ *   rooms; bookings in those rooms are excluded from conflict detection so gym
+ *   subjects don't get false-positive "Conflict" highlights.
+ */
+export function useConflictingIdSets(bookings, gymRoomIds = new Set()) {
   return useMemo(() => {
     const offeringIds = new Set();
     const subjectIds = new Set();
@@ -69,7 +75,11 @@ export function useConflictingIdSets(bookings) {
     const groups = new Map();
     for (const b of bookings) {
       if (!b.room_id || !b.slot) continue;
-      const key = `${String(b.room_id).trim()}:${b.slot}`;
+      const roomStr = String(b.room_id).trim();
+      // Skip gym rooms — multiple classes in a gym at the same time is intentional
+      // (e.g. PE sections sharing the gym) and should not be flagged as a conflict.
+      if (gymRoomIds.has(roomStr) || /gym/i.test(roomStr)) continue;
+      const key = `${roomStr}:${b.slot}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(b);
     }
@@ -96,5 +106,5 @@ export function useConflictingIdSets(bookings) {
     }
 
     return { conflictingOfferingIds: offeringIds, conflictingSubjectIds: subjectIds };
-  }, [bookings]);
+  }, [bookings, gymRoomIds]);
 }

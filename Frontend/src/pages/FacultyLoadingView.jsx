@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { fetchGaPreFlight, runFacultyLoading } from '../services/gaApi.js';
 import { formatScheduleTimeDisplay, getScheduleAmPm } from '../utils/scheduleUtils.js';
+import FacultyLoadingModal from '../components/FacultyLoadingModal.jsx';
 
 const LAST_FACULTY_LOADING_RUN_KEY = 'facultyLoadingLastRun';
 const LAST_FACULTY_LOADING_RESULT_KEY = 'facultyLoadingLastResult';
@@ -267,6 +268,11 @@ export default function FacultyLoadingView() {
   const [activeQualityTab, setActiveQualityTab] = useState('quality'); // 'quality' | 'issues'
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
 
+  // Load Balance: department sub-tab + faculty detail modal
+  const [activeDeptTab, setActiveDeptTab]   = useState('all');
+  const [flvModalFaculty, setFlvModalFaculty] = useState(null);
+  const [showFlvModal, setShowFlvModal]       = useState(false);
+
   const columns = [
     { key: 'section', label: 'Section' },
     { key: 'code', label: 'Course Code' },
@@ -429,6 +435,35 @@ export default function FacultyLoadingView() {
     if (delta !== 0) return delta;
     return toNumber(right.total_units) - toNumber(left.total_units);
   });
+
+  // Department sub-tabs — sorted unique department names from load balance
+  const deptTabs = useMemo(() => {
+    const names = [...new Set(
+      uniqueLoadBalance.map((row) => row.department_name || '').filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return names;
+  }, [uniqueLoadBalance]);
+
+  // Per-department count map
+  const deptCountMap = useMemo(() => {
+    const map = new Map();
+    for (const row of uniqueLoadBalance) {
+      const dept = row.department_name || '';
+      if (dept) map.set(dept, (map.get(dept) || 0) + 1);
+    }
+    return map;
+  }, [uniqueLoadBalance]);
+
+  // Filtered card grid rows
+  const filteredLoadBalance = useMemo(() => {
+    if (activeDeptTab === 'all') return uniqueLoadBalance;
+    return uniqueLoadBalance.filter((row) => row.department_name === activeDeptTab);
+  }, [uniqueLoadBalance, activeDeptTab]);
+
+  // Reset to "all" whenever load balance data refreshes
+  useEffect(() => {
+    setActiveDeptTab('all');
+  }, [uniqueLoadBalance]);
 
   function handleSort(key) {
     setSortConfig((currentSort) => ({
@@ -783,20 +818,79 @@ export default function FacultyLoadingView() {
                 {uniqueLoadBalance.length} faculty
               </span>
             </div>
+            {/* Department sub-tabs — only shown when there is more than one department */}
+            {uniqueLoadBalance.length > 0 && deptTabs.length > 1 && (
+              <div className="flex items-end gap-0.5 mb-3 overflow-x-auto border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setActiveDeptTab('all')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border border-b-0 -mb-px whitespace-nowrap transition-colors shrink-0 ${
+                    activeDeptTab === 'all'
+                      ? 'bg-white border-slate-200 text-on-surface relative z-10'
+                      : 'bg-slate-50/50 border-transparent text-on-surface-variant hover:bg-white/60 hover:text-on-surface'
+                  }`}
+                >
+                  All
+                  <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
+                    activeDeptTab === 'all' ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'
+                  }`}>{uniqueLoadBalance.length}</span>
+                </button>
+                {deptTabs.map((dept) => {
+                  const isActive = activeDeptTab === dept;
+                  return (
+                    <button
+                      key={dept}
+                      type="button"
+                      onClick={() => setActiveDeptTab(dept)}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border border-b-0 -mb-px whitespace-nowrap transition-colors shrink-0 ${
+                        isActive
+                          ? 'bg-white border-slate-200 text-on-surface relative z-10'
+                          : 'bg-slate-50/50 border-transparent text-on-surface-variant hover:bg-white/60 hover:text-on-surface'
+                      }`}
+                    >
+                      {dept}
+                      <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
+                        isActive ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'
+                      }`}>{deptCountMap.get(dept) ?? 0}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {uniqueLoadBalance.length === 0 ? (
               <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-4 text-xs text-on-surface-variant">
                 Run GA to see faculty load balance.
               </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                {uniqueLoadBalance.map((row, idx) => {
+                {filteredLoadBalance.map((row, idx) => {
                   const pct = Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100));
                   const prepUnits = toNumber(row.prep_units) || 0;
                   const total = toNumber(row.total_units) || 0;
                   const max = toNumber(row.max_units);
                   const remainingPrep = max > 0 ? Math.max(0, Math.round((max - total - prepUnits) * 100) / 100) : null;
+                  const canOpenModal = Number.isFinite(row.faculty_id) && row.faculty_id > 0;
                   return (
-                    <div key={`balance-${row.faculty_id || idx}`} className="rounded-xl border border-white/60 bg-white p-3">
+                    <div
+                      key={`balance-${row.faculty_id || idx}`}
+                      onClick={() => {
+                        if (!canOpenModal) return;
+                        setFlvModalFaculty({ faculty_id: row.faculty_id, faculty_name: row.faculty_name || `Faculty ${row.faculty_id}` });
+                        setShowFlvModal(true);
+                      }}
+                      role={canOpenModal ? 'button' : undefined}
+                      tabIndex={canOpenModal ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (!canOpenModal) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setFlvModalFaculty({ faculty_id: row.faculty_id, faculty_name: row.faculty_name || `Faculty ${row.faculty_id}` });
+                          setShowFlvModal(true);
+                        }
+                      }}
+                      className={`rounded-xl border border-white/60 bg-white p-3 transition-all duration-200 ${canOpenModal ? 'cursor-pointer hover:border-primary/30 hover:shadow-md' : ''}`}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-on-surface truncate">{row.faculty_name || `Faculty ${row.faculty_id || idx + 1}`}</p>
@@ -818,6 +912,11 @@ export default function FacultyLoadingView() {
                           <span className="ml-2">• remaining prep: <span className="font-semibold text-on-surface">{remainingPrep}</span></span>
                         )}
                       </p>
+                      {canOpenModal && (
+                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">
+                          Click to view assigned subjects
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -1101,6 +1200,14 @@ export default function FacultyLoadingView() {
             </div>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* ── Faculty Detail Modal (from Load Balance card click) ── */}
+      {showFlvModal && flvModalFaculty && (
+        <FacultyLoadingModal
+          faculty={flvModalFaculty}
+          onClose={() => { setShowFlvModal(false); setFlvModalFaculty(null); }}
+        />
       )}
 
       {/* ── Full-screen Running Overlay ── */}

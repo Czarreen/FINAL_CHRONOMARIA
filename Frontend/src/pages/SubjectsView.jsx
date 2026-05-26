@@ -346,8 +346,20 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     return () => { active = false; };
   }, []);
 
+  // Derive gym room IDs from the already-loaded room list so the conflict hook
+  // can exclude gym rooms from its detection (mirrors backend behaviour).
+  const gymRoomIds = useMemo(
+    () =>
+      new Set(
+        roomObjects
+          .filter((r) => /gym/i.test(r.room_name || ''))
+          .map((r) => String(r.room_id ?? r.id))
+      ),
+    [roomObjects]
+  );
+
   // Conflict set derived from full-DB room bookings — covers every page, not just the first 500 notifications.
-  const { conflictingSubjectIds } = useConflictingIdSets(roomBookings);
+  const { conflictingSubjectIds } = useConflictingIdSets(roomBookings, gymRoomIds);
 
   // Auto-toggle subject_status based on open notification issues
   // Runs on initial load, refresh, and whenever notifications or subjects change.

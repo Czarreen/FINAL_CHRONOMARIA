@@ -764,8 +764,19 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       .filter((item) => item.issues.length > 0);
   }, [notifications]);
 
+  // Derive gym room IDs so the conflict hook can exclude gym rooms (mirrors backend behaviour).
+  const gymRoomIds = useMemo(
+    () =>
+      new Set(
+        rooms
+          .filter((r) => /gym/i.test(r.room_name || ''))
+          .map((r) => String(r.room_id ?? r.id))
+      ),
+    [rooms]
+  );
+
   // Conflict set derived from full-DB room bookings — covers every page, not just the first 500 notifications.
-  const { conflictingOfferingIds } = useConflictingIdSets(roomBookings);
+  const { conflictingOfferingIds } = useConflictingIdSets(roomBookings, gymRoomIds);
 
   // Filter notifications by severity and search
   const filteredNotifications = useMemo(() => {

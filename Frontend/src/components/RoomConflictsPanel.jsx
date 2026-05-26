@@ -36,7 +36,13 @@ function buildConflictPairs(items, peerIdField) {
       if (issue.field !== 'schedule_conflict') continue;
 
       const primaryId = Number(item.entity_id);
-      const rawPeerId = issue.details?.[peerIdField];
+      // Try the entity-type-specific peer field first; fall back to the cross-type
+      // peer field so subject↔offering conflicts (stored as conflicting_offering_id
+      // on a subject notification) still appear in the panel.
+      const rawPeerId =
+        issue.details?.[peerIdField] ??
+        issue.details?.conflicting_offering_id ??
+        issue.details?.conflicting_subject_id;
       if (!rawPeerId) continue;
       const peerId = Number(rawPeerId);
       if (!peerId || Number.isNaN(peerId)) continue;

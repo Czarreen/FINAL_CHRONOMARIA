@@ -9,7 +9,39 @@ function isEmptyValue(value) {
   return value === null || value === undefined || String(value).trim() === '' || Number(value) === 0;
 }
 
-export function buildSubjectNotificationIssues(subject, allSubjects = []) {
+/**
+ * Fetch gym room IDs and room-name lookup from the DB in a single query.
+ * Mirrors getGymRoomIds() in courseOfferingNotifications.js, but also
+ * builds the roomNameById map needed for cross-type room normalisation.
+ */
+async function getRoomData() {
+  const { data: allRooms } = await supabaseAdmin.from('rooms').select('room_id, room_name');
+  const gymRoomIds = new Set(
+    (allRooms || []).filter((r) => isRoomGym(r.room_name)).map((r) => String(r.room_id))
+  );
+  const roomNameById = new Map(
+    (allRooms || []).map((r) => [String(r.room_id), r.room_name || ''])
+  );
+  return { gymRoomIds, roomNameById };
+}
+
+/**
+ * Re-map a course_offerings row so its room values are room NAMES (strings)
+ * instead of numeric IDs.  This lets findConflictingSchedules compare
+ * offering rooms against subject rooms on the same basis (both use names).
+ */
+function normalizeOfferingRooms(offering, roomNameById) {
+  return {
+    ...offering,
+    // Clear the numeric ID fields so expandEntityToRecords falls back to mth_room/tfs_room.
+    mth_room_id: undefined,
+    tfs_room_id: undefined,
+    mth_room: roomNameById.get(String(offering.mth_room_id ?? '')) || offering.mth_room || '',
+    tfs_room: roomNameById.get(String(offering.tfs_room_id ?? '')) || offering.tfs_room || '',
+  };
+}
+
+export function buildSubjectNotificationIssues(subject, allSubjects = [], gymRoomIds = new Set(), allOfferings = []) {
   const issues = [];
 
   if (!normalizeSubjectText(subject?.subject_code)) {
@@ -100,10 +132,13 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
     });
   }
 
-  const isMthRoomGym = isRoomGym(subject?.mth_room);
-  const isTfsRoomGym = isRoomGym(subject?.tfs_room);
+  // Use DB-backed gymRoomIds set (same as courseOfferingNotifications.js) so numeric
+  // room-ID values are properly recognised as gym rooms, not just name-string checks.
+  const isMthRoomGym = gymRoomIds.has(String(subject?.mth_room)) || isRoomGym(subject?.mth_room);
+  const isTfsRoomGym = gymRoomIds.has(String(subject?.tfs_room)) || isRoomGym(subject?.tfs_room);
 
-  const conflicts = findConflictingSchedules(subject, allSubjects, false);
+  // ── Subject vs Subject conflicts ──────────────────────────────────────────
+  const conflicts = findConflictingSchedules(subject, allSubjects, false, gymRoomIds);
   for (const conflict of conflicts) {
     if ((conflict.schedule === 'MTH' && !isMthRoomGym) || (conflict.schedule === 'TFS' && !isTfsRoomGym)) {
       issues.push({
@@ -112,12 +147,38 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
         severity: 'high',
         message: `${conflict.schedule} schedule conflicts with ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
         conflicting_subject_id: conflict.entityId,
+        conflicting_offering_id: null,
         conflicting_code: conflict.entityCode || null,
         conflict_room_id: conflict.room || null,
         conflict_schedule_type: conflict.schedule || null,
         conflict_days: conflict.conflictingDays || null,
         conflict_entity_schedule: conflict.schedule === 'MTH' ? (subject.mth_schedule || null) : (subject.tfs_schedule || null),
       });
+    }
+  }
+
+  // ── Subject vs Course-Offering cross-type conflicts ───────────────────────
+  // Subjects use room names; offerings use numeric room IDs.  allOfferings has
+  // already been normalised (room IDs replaced with room names) by the caller
+  // so findConflictingSchedules can match on the same room-name basis.
+  if (allOfferings.length > 0) {
+    const crossConflicts = findConflictingSchedules(subject, allOfferings, false, gymRoomIds);
+    for (const conflict of crossConflicts) {
+      if ((conflict.schedule === 'MTH' && !isMthRoomGym) || (conflict.schedule === 'TFS' && !isTfsRoomGym)) {
+        issues.push({
+          field_name: 'schedule_conflict',
+          issue_type: 'conflict',
+          severity: 'high',
+          message: `${conflict.schedule} schedule conflicts with offering ${conflict.entityCode} (${conflict.room}) on ${conflict.conflictingDays.join('/')}`,
+          conflicting_subject_id: null,
+          conflicting_offering_id: conflict.entityId,
+          conflicting_code: conflict.entityCode || null,
+          conflict_room_id: conflict.room || null,
+          conflict_schedule_type: conflict.schedule || null,
+          conflict_days: conflict.conflictingDays || null,
+          conflict_entity_schedule: conflict.schedule === 'MTH' ? (subject.mth_schedule || null) : (subject.tfs_schedule || null),
+        });
+      }
     }
   }
 
@@ -129,8 +190,8 @@ export function buildSubjectNotificationIssues(subject, allSubjects = []) {
   return issues;
 }
 
-export function buildSubjectNotificationRows(subject, allSubjects = []) {
-  const issues = buildSubjectNotificationIssues(subject, allSubjects);
+export function buildSubjectNotificationRows(subject, allSubjects = [], gymRoomIds = new Set(), allOfferings = []) {
+  const issues = buildSubjectNotificationIssues(subject, allSubjects, gymRoomIds, allOfferings);
 
   return issues.map((issue) => ({
     entity_id: subject.subject_id,
@@ -143,6 +204,7 @@ export function buildSubjectNotificationRows(subject, allSubjects = []) {
       subject_code: normalizeSubjectText(subject.subject_code) || null,
       subject_descriptive_title: normalizeSubjectText(subject.subject_descriptive_title) || null,
       conflicting_subject_id: issue.conflicting_subject_id || null,
+      conflicting_offering_id: issue.conflicting_offering_id || null,
       conflicting_code: issue.conflicting_code || null,
       conflict_room_id: issue.conflict_room_id || null,
       conflict_schedule_type: issue.conflict_schedule_type || null,
@@ -167,16 +229,30 @@ export async function upsertSubjectNotificationCache(subject) {
     throw new Error(deleteError.message);
   }
 
-  // Fetch all subjects so conflict detection can compare against peers.
-  const { data: allSubjects, error: allFetchError } = await supabaseAdmin
-    .from('subjects')
-    .select('subject_id, subject_code, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no');
+  // Fetch room data, all subjects (peers), and all course offerings (cross-type peers)
+  // in parallel to keep rescan fast.
+  const [
+    { gymRoomIds, roomNameById },
+    { data: allSubjects, error: allFetchError },
+    { data: rawOfferings, error: offeringFetchError },
+  ] = await Promise.all([
+    getRoomData(),
+    supabaseAdmin
+      .from('subjects')
+      .select('subject_id, subject_code, subject_descriptive_title, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no'),
+    supabaseAdmin
+      .from('course_offerings')
+      .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id, merged'),
+  ]);
 
-  if (allFetchError) {
-    throw new Error(allFetchError.message);
-  }
+  if (allFetchError) throw new Error(allFetchError.message);
+  if (offeringFetchError) throw new Error(offeringFetchError.message);
 
-  const rows = buildSubjectNotificationRows(subject, allSubjects || []);
+  // Normalise offering room IDs → room names so conflict detection can compare
+  // on the same basis as subject room values (which are stored as names).
+  const allOfferings = (rawOfferings || []).map((o) => normalizeOfferingRooms(o, roomNameById));
+
+  const rows = buildSubjectNotificationRows(subject, allSubjects || [], gymRoomIds, allOfferings);
   if (rows.length === 0) {
     return { updated: 0, issues: [] };
   }
@@ -202,14 +278,27 @@ export async function upsertSubjectNotificationCache(subject) {
 }
 
 export async function rescanAllSubjectNotifications() {
-  const { data: subjects, error: fetchError } = await supabaseAdmin
-    .from('subjects')
-    .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no')
-    .order('subject_id', { ascending: true });
+  // Fetch subjects, room data, and course offerings in parallel for speed.
+  const [
+    { data: subjects, error: fetchError },
+    { gymRoomIds, roomNameById },
+    { data: rawOfferings, error: offeringFetchError },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('subjects')
+      .select('subject_id, subject_code, subject_descriptive_title, subject_units, mth_schedule, tfs_schedule, mth_room, tfs_room, curr_id, department_id, subject_course_no')
+      .order('subject_id', { ascending: true }),
+    getRoomData(),
+    supabaseAdmin
+      .from('course_offerings')
+      .select('id, code, course_no, descriptive_title, curr_id, department_id, mth_schedule, mth_room_id, tfs_schedule, tfs_room_id, merged'),
+  ]);
 
-  if (fetchError) {
-    throw new Error(fetchError.message);
-  }
+  if (fetchError) throw new Error(fetchError.message);
+  if (offeringFetchError) throw new Error(offeringFetchError.message);
+
+  // Normalise offering room IDs → room names (same basis as subjects).
+  const allOfferings = (rawOfferings || []).map((o) => normalizeOfferingRooms(o, roomNameById));
 
   const { error: deleteError } = await supabaseAdmin
     .from('subject_notifications')
@@ -224,7 +313,7 @@ export async function rescanAllSubjectNotifications() {
   const inserts = [];
 
   for (const subject of subjects || []) {
-    const rows = buildSubjectNotificationRows(subject, subjects || []);
+    const rows = buildSubjectNotificationRows(subject, subjects || [], gymRoomIds, allOfferings);
     if (rows.length === 0) {
       continue;
     }
