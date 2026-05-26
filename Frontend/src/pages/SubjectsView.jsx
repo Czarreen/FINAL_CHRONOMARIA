@@ -844,6 +844,8 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
     }
   }
 
+  const canAddSubject = Boolean(newSubject.subject_code?.trim()) && (mthCard.enabled || tfsCard.enabled);
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const pageStart = total === 0 ? 0 : (safePage - 1) * limit + 1;
@@ -1612,9 +1614,12 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                         type="text"
                         value={newSubject.subject_code}
                         onChange={(e) => setNewSubject({ ...newSubject, subject_code: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px]"
+                        className={`w-full rounded-lg border bg-white px-4 py-3 text-base text-on-surface outline-none focus:border-primary min-h-[44px] ${!newSubject.subject_code?.trim() ? 'border-amber-300 focus:border-amber-400' : 'border-slate-300'}`}
                         placeholder="e.g., 4700"
                       />
+                      {!newSubject.subject_code?.trim() && (
+                        <p className="mt-1 text-xs text-amber-600">Required to save</p>
+                      )}
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-on-surface-variant">
@@ -1729,9 +1734,14 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
                 {/* Schedules Section */}
                 <div className="space-y-4">
-                  <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
-                    Schedules & Rooms (At least one required *)
-                  </h4>
+                  <div className="flex items-center gap-3">
+                    <h4 className="text-lg font-bold uppercase tracking-[0.2em] text-on-surface-variant/80">
+                      Schedules & Rooms (At least one required *)
+                    </h4>
+                    {!mthCard.enabled && !tfsCard.enabled && (
+                      <span className="text-xs font-semibold text-amber-600">Enable at least one schedule to save</span>
+                    )}
+                  </div>
                   <ScheduleCardInput
                     slot="mth"
                     value={mthCard}
@@ -1825,8 +1835,9 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
                   </button>
                   <button
                     onClick={handleAddSubject}
-                    disabled={savingSubject}
-                    className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 text-base min-h-[48px]"
+                    disabled={savingSubject || !canAddSubject}
+                    title={!canAddSubject ? 'Fill in Subject Code and enable at least one schedule' : undefined}
+                    className="flex-1 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-base min-h-[48px]"
                   >
                     {savingSubject ? 'Saving...' : 'Save Subject'}
                   </button>
