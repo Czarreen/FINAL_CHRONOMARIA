@@ -5,7 +5,7 @@
     "sat_only_offerings": 7,
     "wed_only_offerings": 1,
     "problematic_offerings": 65,
-    "faculties": 64,
+    "faculties": 65,
     "tagged_faculty_count": 65
   },
   "p1_preassignments": [
@@ -150,81 +150,17 @@
           "dept_id": 1,
           "same_dept": true,
           "is_ft": false,
-          "load": 0.0,
+          "load": 3.0,
           "max_units": 12.0,
-          "usage_ratio": 0.0,
-          "preps_before": [],
+          "usage_ratio": 0.25,
+          "preps_before": [
+            "4000|ARCHMATH 2"
+          ],
           "score_tuple": [
             1,
             false,
-            -0.0,
-            -0.0
-          ],
-          "eligible": true,
-          "rejection": null
-        }
-      ]
-    },
-    {
-      "code": "4000",
-      "offering_id": 50831,
-      "section": "1A",
-      "descriptive_title": "Differential and Integral Calculus",
-      "units": 3.0,
-      "result": "ASSIGNED",
-      "winner": {
-        "fi": 5,
-        "faculty_id": "7",
-        "name": "Ar. Christopher R. Dominguez",
-        "role": "PT",
-        "dept_id": 1,
-        "score_tuple": [
-          1,
-          false,
-          -0.0,
-          -0.0
-        ],
-        "load_after": 3.0
-      },
-      "candidates": [
-        {
-          "fi": 5,
-          "faculty_id": "7",
-          "name": "Ar. Christopher R. Dominguez",
-          "role": "PT",
-          "dept_id": 1,
-          "same_dept": true,
-          "is_ft": false,
-          "load": 0.0,
-          "max_units": 12.0,
-          "usage_ratio": 0.0,
-          "preps_before": [],
-          "score_tuple": [
-            1,
-            false,
-            -0.0,
-            -0.0
-          ],
-          "eligible": true,
-          "rejection": null
-        },
-        {
-          "fi": 55,
-          "faculty_id": "59",
-          "name": "Dr. Dominga C. Valtoribio",
-          "role": "Guest Lecturer",
-          "dept_id": 8,
-          "same_dept": false,
-          "is_ft": false,
-          "load": 0.0,
-          "max_units": 6.0,
-          "usage_ratio": 0.0,
-          "preps_before": [],
-          "score_tuple": [
-            0,
-            false,
-            -0.0,
-            -0.0
+            -0.25,
+            -3.0
           ],
           "eligible": true,
           "rejection": null
@@ -596,6 +532,51 @@
       ]
     },
     {
+      "code": "4142",
+      "offering_id": 50974,
+      "section": "3B",
+      "descriptive_title": "Building Systems Design",
+      "units": 3.0,
+      "result": "ASSIGNED",
+      "winner": {
+        "fi": 15,
+        "faculty_id": "18",
+        "name": "Engr. Rod Kline M. Perpetua",
+        "role": "PT",
+        "dept_id": 2,
+        "score_tuple": [
+          1,
+          false,
+          -0.0,
+          -0.0
+        ],
+        "load_after": 3.0
+      },
+      "candidates": [
+        {
+          "fi": 15,
+          "faculty_id": "18",
+          "name": "Engr. Rod Kline M. Perpetua",
+          "role": "PT",
+          "dept_id": 2,
+          "same_dept": true,
+          "is_ft": false,
+          "load": 0.0,
+          "max_units": 12.0,
+          "usage_ratio": 0.0,
+          "preps_before": [],
+          "score_tuple": [
+            1,
+            false,
+            -0.0,
+            -0.0
+          ],
+          "eligible": true,
+          "rejection": null
+        }
+      ]
+    },
+    {
       "code": "4106",
       "offering_id": 50938,
       "section": "2A",
@@ -603,7 +584,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 15,
+        "fi": 16,
         "faculty_id": "19",
         "name": "Engr. John Russel S. Miguel",
         "role": "PT",
@@ -618,7 +599,7 @@
       },
       "candidates": [
         {
-          "fi": 15,
+          "fi": 16,
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "role": "PT",
@@ -648,7 +629,7 @@
       "units": 1.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 16,
+        "fi": 17,
         "faculty_id": "20",
         "name": "Engr. John Philip M. Garces",
         "role": "FT",
@@ -663,7 +644,7 @@
       },
       "candidates": [
         {
-          "fi": 16,
+          "fi": 17,
           "faculty_id": "20",
           "name": "Engr. John Philip M. Garces",
           "role": "FT",
@@ -693,7 +674,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 17,
+        "fi": 18,
         "faculty_id": "21",
         "name": "Engr. Marvin Ryan C. Ferrer",
         "role": "PT",
@@ -708,7 +689,7 @@
       },
       "candidates": [
         {
-          "fi": 17,
+          "fi": 18,
           "faculty_id": "21",
           "name": "Engr. Marvin Ryan C. Ferrer",
           "role": "PT",
@@ -738,7 +719,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 20,
+        "fi": 21,
         "faculty_id": "24",
         "name": "Engr. Vince Alex V. Cabagay",
         "role": "PT",
@@ -753,7 +734,7 @@
       },
       "candidates": [
         {
-          "fi": 20,
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
@@ -783,7 +764,7 @@
       "units": 5.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 22,
+        "fi": 23,
         "faculty_id": "26",
         "name": "Engr. Dan Gerico L. Bacani",
         "role": "PT",
@@ -798,7 +779,7 @@
       },
       "candidates": [
         {
-          "fi": 22,
+          "fi": 23,
           "faculty_id": "26",
           "name": "Engr. Dan Gerico L. Bacani",
           "role": "PT",
@@ -828,7 +809,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 23,
+        "fi": 24,
         "faculty_id": "27",
         "name": "Engr. Joy Riana L. Agrimor",
         "role": "FT",
@@ -843,7 +824,7 @@
       },
       "candidates": [
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
@@ -864,7 +845,7 @@
           "rejection": null
         },
         {
-          "fi": 33,
+          "fi": 34,
           "faculty_id": "37",
           "name": "Engr. Jan Joseph Karlo B. Raquipo",
           "role": "FT",
@@ -894,7 +875,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 23,
+        "fi": 24,
         "faculty_id": "27",
         "name": "Engr. Joy Riana L. Agrimor",
         "role": "FT",
@@ -909,7 +890,7 @@
       },
       "candidates": [
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
@@ -941,7 +922,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 24,
+        "fi": 25,
         "faculty_id": "28",
         "name": "Engr. Jefrie T. Alindayu",
         "role": "FT",
@@ -956,7 +937,7 @@
       },
       "candidates": [
         {
-          "fi": 24,
+          "fi": 25,
           "faculty_id": "28",
           "name": "Engr. Jefrie T. Alindayu",
           "role": "FT",
@@ -986,7 +967,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 25,
+        "fi": 26,
         "faculty_id": "29",
         "name": "Engr. Joel T. Mendoza",
         "role": "Department Head",
@@ -1001,7 +982,7 @@
       },
       "candidates": [
         {
-          "fi": 25,
+          "fi": 26,
           "faculty_id": "29",
           "name": "Engr. Joel T. Mendoza",
           "role": "Department Head",
@@ -1031,7 +1012,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 28,
+        "fi": 29,
         "faculty_id": "32",
         "name": "Ms. Rocel Audrey J. Batara",
         "role": "Department Head",
@@ -1046,7 +1027,7 @@
       },
       "candidates": [
         {
-          "fi": 28,
+          "fi": 29,
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "role": "Department Head",
@@ -1076,7 +1057,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 28,
+        "fi": 29,
         "faculty_id": "32",
         "name": "Ms. Rocel Audrey J. Batara",
         "role": "Department Head",
@@ -1091,7 +1072,7 @@
       },
       "candidates": [
         {
-          "fi": 28,
+          "fi": 29,
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "role": "Department Head",
@@ -1123,7 +1104,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 29,
+        "fi": 30,
         "faculty_id": "33",
         "name": "Engr. Wenson R. Evangelista",
         "role": "FT",
@@ -1138,7 +1119,7 @@
       },
       "candidates": [
         {
-          "fi": 29,
+          "fi": 30,
           "faculty_id": "33",
           "name": "Engr. Wenson R. Evangelista",
           "role": "FT",
@@ -1168,7 +1149,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 29,
+        "fi": 30,
         "faculty_id": "33",
         "name": "Engr. Wenson R. Evangelista",
         "role": "FT",
@@ -1183,7 +1164,7 @@
       },
       "candidates": [
         {
-          "fi": 29,
+          "fi": 30,
           "faculty_id": "33",
           "name": "Engr. Wenson R. Evangelista",
           "role": "FT",
@@ -1215,7 +1196,7 @@
       "units": 2.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 29,
+        "fi": 30,
         "faculty_id": "33",
         "name": "Engr. Wenson R. Evangelista",
         "role": "FT",
@@ -1230,7 +1211,7 @@
       },
       "candidates": [
         {
-          "fi": 29,
+          "fi": 30,
           "faculty_id": "33",
           "name": "Engr. Wenson R. Evangelista",
           "role": "FT",
@@ -1263,7 +1244,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 29,
+        "fi": 30,
         "faculty_id": "33",
         "name": "Engr. Wenson R. Evangelista",
         "role": "FT",
@@ -1278,7 +1259,7 @@
       },
       "candidates": [
         {
-          "fi": 29,
+          "fi": 30,
           "faculty_id": "33",
           "name": "Engr. Wenson R. Evangelista",
           "role": "FT",
@@ -1312,7 +1293,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 30,
+        "fi": 31,
         "faculty_id": "34",
         "name": "Engr. Jojo C. Mariano",
         "role": "Department Head",
@@ -1327,7 +1308,7 @@
       },
       "candidates": [
         {
-          "fi": 30,
+          "fi": 31,
           "faculty_id": "34",
           "name": "Engr. Jojo C. Mariano",
           "role": "Department Head",
@@ -1357,7 +1338,7 @@
       "units": 2.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 30,
+        "fi": 31,
         "faculty_id": "34",
         "name": "Engr. Jojo C. Mariano",
         "role": "Department Head",
@@ -1372,7 +1353,7 @@
       },
       "candidates": [
         {
-          "fi": 30,
+          "fi": 31,
           "faculty_id": "34",
           "name": "Engr. Jojo C. Mariano",
           "role": "Department Head",
@@ -1404,7 +1385,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 32,
+        "fi": 33,
         "faculty_id": "36",
         "name": "Engr. Rojan I. Reyes",
         "role": "FT",
@@ -1419,7 +1400,7 @@
       },
       "candidates": [
         {
-          "fi": 32,
+          "fi": 33,
           "faculty_id": "36",
           "name": "Engr. Rojan I. Reyes",
           "role": "FT",
@@ -1449,7 +1430,7 @@
       "units": 1.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 34,
+        "fi": 35,
         "faculty_id": "38",
         "name": "Engr. Angelino A. Pimentel",
         "role": "FT",
@@ -1464,7 +1445,7 @@
       },
       "candidates": [
         {
-          "fi": 34,
+          "fi": 35,
           "faculty_id": "38",
           "name": "Engr. Angelino A. Pimentel",
           "role": "FT",
@@ -1494,7 +1475,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 35,
+        "fi": 36,
         "faculty_id": "39",
         "name": "Engr. Jessica B. Castillo",
         "role": "FT",
@@ -1509,7 +1490,7 @@
       },
       "candidates": [
         {
-          "fi": 34,
+          "fi": 35,
           "faculty_id": "38",
           "name": "Engr. Angelino A. Pimentel",
           "role": "FT",
@@ -1532,7 +1513,7 @@
           "rejection": null
         },
         {
-          "fi": 35,
+          "fi": 36,
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "role": "FT",
@@ -1562,7 +1543,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 62,
+        "fi": 63,
         "faculty_id": "132",
         "name": "Ar. Bobby U. Argote ",
         "role": "PT",
@@ -1577,7 +1558,7 @@
       },
       "candidates": [
         {
-          "fi": 36,
+          "fi": 37,
           "faculty_id": "40",
           "name": "Engr. Gerene-Leigh C. Almazan",
           "role": "Research Coordinator",
@@ -1598,7 +1579,7 @@
           "rejection": null
         },
         {
-          "fi": 62,
+          "fi": 63,
           "faculty_id": "132",
           "name": "Ar. Bobby U. Argote ",
           "role": "PT",
@@ -1628,7 +1609,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 37,
+        "fi": 38,
         "faculty_id": "41",
         "name": "Mrs. Sheryll D. Barut",
         "role": "Coordinator, CES",
@@ -1643,7 +1624,7 @@
       },
       "candidates": [
         {
-          "fi": 37,
+          "fi": 38,
           "faculty_id": "41",
           "name": "Mrs. Sheryll D. Barut",
           "role": "Coordinator, CES",
@@ -1673,7 +1654,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 39,
+        "fi": 40,
         "faculty_id": "43",
         "name": "Mr. IC Ramzil P. Ruiz",
         "role": "PT",
@@ -1688,7 +1669,7 @@
       },
       "candidates": [
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
@@ -1718,7 +1699,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 39,
+        "fi": 40,
         "faculty_id": "43",
         "name": "Mr. IC Ramzil P. Ruiz",
         "role": "PT",
@@ -1733,7 +1714,7 @@
       },
       "candidates": [
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
@@ -1765,7 +1746,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 40,
+        "fi": 41,
         "faculty_id": "44",
         "name": "Miss Krby Zyryll G. Perez",
         "role": "FT",
@@ -1780,7 +1761,7 @@
       },
       "candidates": [
         {
-          "fi": 40,
+          "fi": 41,
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
@@ -1810,7 +1791,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 42,
+        "fi": 43,
         "faculty_id": "46",
         "name": "Mr. June Delmar A. Labitoria",
         "role": "PT",
@@ -1825,7 +1806,7 @@
       },
       "candidates": [
         {
-          "fi": 42,
+          "fi": 43,
           "faculty_id": "46",
           "name": "Mr. June Delmar A. Labitoria",
           "role": "PT",
@@ -1846,7 +1827,7 @@
           "rejection": null
         },
         {
-          "fi": 47,
+          "fi": 48,
           "faculty_id": "51",
           "name": "Mr. Scott Dominic T. Bautista",
           "role": "PT",
@@ -1876,7 +1857,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 43,
+        "fi": 44,
         "faculty_id": "47",
         "name": "Mr. JC Ron Miguel D. James",
         "role": "PT",
@@ -1891,7 +1872,7 @@
       },
       "candidates": [
         {
-          "fi": 43,
+          "fi": 44,
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "role": "PT",
@@ -1921,7 +1902,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 44,
+        "fi": 45,
         "faculty_id": "48",
         "name": "Dr. Adonis V. Garces",
         "role": "Graduate Program Head",
@@ -1936,7 +1917,7 @@
       },
       "candidates": [
         {
-          "fi": 44,
+          "fi": 45,
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "role": "Graduate Program Head",
@@ -1968,7 +1949,7 @@
       "winner": null,
       "candidates": [
         {
-          "fi": 44,
+          "fi": 45,
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "role": "Graduate Program Head",
@@ -2000,7 +1981,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 45,
+        "fi": 46,
         "faculty_id": "49",
         "name": "Mrs. Milagros S. Constantino",
         "role": "FT",
@@ -2015,7 +1996,7 @@
       },
       "candidates": [
         {
-          "fi": 45,
+          "fi": 46,
           "faculty_id": "49",
           "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
@@ -2045,7 +2026,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 46,
+        "fi": 47,
         "faculty_id": "50",
         "name": "Mrs. Essel T. Ca\u00f1aberal",
         "role": "Director, CICT",
@@ -2060,7 +2041,7 @@
       },
       "candidates": [
         {
-          "fi": 46,
+          "fi": 47,
           "faculty_id": "50",
           "name": "Mrs. Essel T. Ca\u00f1aberal",
           "role": "Director, CICT",
@@ -2090,7 +2071,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 49,
+        "fi": 50,
         "faculty_id": "53",
         "name": "Miss Evelyn J. Rizardo",
         "role": "FT",
@@ -2105,7 +2086,7 @@
       },
       "candidates": [
         {
-          "fi": 49,
+          "fi": 50,
           "faculty_id": "53",
           "name": "Miss Evelyn J. Rizardo",
           "role": "FT",
@@ -2135,7 +2116,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 50,
+        "fi": 51,
         "faculty_id": "54",
         "name": "Mrs. Rhenalyn B. Pimentel",
         "role": "FT",
@@ -2150,7 +2131,7 @@
       },
       "candidates": [
         {
-          "fi": 50,
+          "fi": 51,
           "faculty_id": "54",
           "name": "Mrs. Rhenalyn B. Pimentel",
           "role": "FT",
@@ -2180,7 +2161,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 50,
+        "fi": 51,
         "faculty_id": "54",
         "name": "Mrs. Rhenalyn B. Pimentel",
         "role": "FT",
@@ -2195,7 +2176,7 @@
       },
       "candidates": [
         {
-          "fi": 50,
+          "fi": 51,
           "faculty_id": "54",
           "name": "Mrs. Rhenalyn B. Pimentel",
           "role": "FT",
@@ -2227,7 +2208,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 51,
+        "fi": 52,
         "faculty_id": "55",
         "name": "Mrs. Marjorie M. Lucquiao",
         "role": "FT",
@@ -2242,7 +2223,7 @@
       },
       "candidates": [
         {
-          "fi": 51,
+          "fi": 52,
           "faculty_id": "55",
           "name": "Mrs. Marjorie M. Lucquiao",
           "role": "FT",
@@ -2263,7 +2244,7 @@
           "rejection": null
         },
         {
-          "fi": 53,
+          "fi": 54,
           "faculty_id": "57",
           "name": "Mr. Mark Paul G. Camonayan",
           "role": "FT",
@@ -2293,7 +2274,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 52,
+        "fi": 53,
         "faculty_id": "56",
         "name": "Mrs. Rachelle Joy T. Lazo",
         "role": "FT",
@@ -2308,7 +2289,7 @@
       },
       "candidates": [
         {
-          "fi": 52,
+          "fi": 53,
           "faculty_id": "56",
           "name": "Mrs. Rachelle Joy T. Lazo",
           "role": "FT",
@@ -2338,7 +2319,7 @@
       "units": 4.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 56,
+        "fi": 57,
         "faculty_id": "60",
         "name": "Miss Donna Bee R. Tominez",
         "role": "FT",
@@ -2353,7 +2334,7 @@
       },
       "candidates": [
         {
-          "fi": 56,
+          "fi": 57,
           "faculty_id": "60",
           "name": "Miss Donna Bee R. Tominez",
           "role": "FT",
@@ -2383,7 +2364,7 @@
       "units": 5.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 59,
+        "fi": 60,
         "faculty_id": "63",
         "name": "Dr. Analyn A. Guevara",
         "role": "FT",
@@ -2398,7 +2379,7 @@
       },
       "candidates": [
         {
-          "fi": 59,
+          "fi": 60,
           "faculty_id": "63",
           "name": "Dr. Analyn A. Guevara",
           "role": "FT",
@@ -2428,7 +2409,7 @@
       "units": 3.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 62,
+        "fi": 63,
         "faculty_id": "132",
         "name": "Ar. Bobby U. Argote ",
         "role": "PT",
@@ -2443,7 +2424,7 @@
       },
       "candidates": [
         {
-          "fi": 62,
+          "fi": 63,
           "faculty_id": "132",
           "name": "Ar. Bobby U. Argote ",
           "role": "PT",
@@ -2475,7 +2456,7 @@
       "units": 5.0,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 63,
+        "fi": 64,
         "faculty_id": "134",
         "name": "Ar. Romeo C. Romero Jr.",
         "role": "FT",
@@ -2490,7 +2471,7 @@
       },
       "candidates": [
         {
-          "fi": 63,
+          "fi": 64,
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "role": "FT",
@@ -2802,6 +2783,19 @@
       "preps_keys_after": [
         "4065|ENG MATH 2",
         "4075|ENG MATH 2",
+        "4142|CE 329"
+      ],
+      "preps_units_after": 3.0
+    },
+    {
+      "faculty_id": "18",
+      "name": "Engr. Rod Kline M. Perpetua",
+      "role": "PT",
+      "priority": 3,
+      "subject_code": "4106",
+      "prep_key_reserved": "4106|CE 224",
+      "preps_keys_after": [
+        "4106|CE 224",
         "4142|CE 329"
       ],
       "preps_units_after": 3.0
@@ -3741,7 +3735,7 @@
       "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 49,
+        "fi": 50,
         "faculty_id": "53",
         "name": "Miss Evelyn J. Rizardo",
         "role": "FT",
@@ -3757,7 +3751,7 @@
       },
       "top3_candidates": [
         {
-          "fi": 49,
+          "fi": 50,
           "faculty_id": "53",
           "name": "Miss Evelyn J. Rizardo",
           "role": "FT",
@@ -3765,7 +3759,7 @@
           "usage_ratio": 0.125
         },
         {
-          "fi": 50,
+          "fi": 51,
           "faculty_id": "54",
           "name": "Mrs. Rhenalyn B. Pimentel",
           "role": "FT",
@@ -3773,7 +3767,7 @@
           "usage_ratio": 0.25
         },
         {
-          "fi": 37,
+          "fi": 38,
           "faculty_id": "41",
           "name": "Mrs. Sheryll D. Barut",
           "role": "Coordinator, CES",
@@ -3786,7 +3780,7 @@
           "faculty_id": "41",
           "name": "Mrs. Sheryll D. Barut",
           "priority": 3,
-          "fi": 37,
+          "fi": 38,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -3802,7 +3796,7 @@
           "faculty_id": "53",
           "name": "Miss Evelyn J. Rizardo",
           "priority": 3,
-          "fi": 49,
+          "fi": 50,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -3817,7 +3811,7 @@
           "faculty_id": "54",
           "name": "Mrs. Rhenalyn B. Pimentel",
           "priority": 3,
-          "fi": 50,
+          "fi": 51,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -3868,7 +3862,7 @@
           "usage_ratio": 1.0
         },
         {
-          "fi": 63,
+          "fi": 64,
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "role": "FT",
@@ -3897,7 +3891,7 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 22,
+        "fi": 23,
         "faculty_id": "26",
         "name": "Engr. Dan Gerico L. Bacani",
         "role": "PT",
@@ -3912,7 +3906,7 @@
       },
       "top3_candidates": [
         {
-          "fi": 22,
+          "fi": 23,
           "faculty_id": "26",
           "name": "Engr. Dan Gerico L. Bacani",
           "role": "PT",
@@ -3948,7 +3942,7 @@
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "priority": 2,
-          "fi": 35,
+          "fi": 36,
           "in_candidates": false,
           "rejection": null,
           "load": 4.0,
@@ -3970,7 +3964,7 @@
       "dept_id": 2,
       "units": 5.0,
       "pass_used": "A",
-      "candidate_count": 4,
+      "candidate_count": 5,
       "result": "ASSIGNED",
       "winner": {
         "fi": 13,
@@ -4000,19 +3994,19 @@
           "usage_ratio": 0.0
         },
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 124.2501,
+          "score": 124.2503,
           "usage_ratio": 1.0
         },
         {
-          "fi": 15,
+          "fi": 16,
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "role": "PT",
-          "score": 55.5001,
+          "score": 55.5006,
           "usage_ratio": 1.0
         }
       ],
@@ -4039,7 +4033,7 @@
           "faculty_id": "21",
           "name": "Engr. Marvin Ryan C. Ferrer",
           "priority": 3,
-          "fi": 17,
+          "fi": 18,
           "in_candidates": true,
           "rejection": null,
           "load": 4.0,
@@ -4060,46 +4054,31 @@
       "descriptive_title": "Principles of Reinforced/Prestressed Concrete",
       "dept_id": 2,
       "units": 5.0,
-      "pass_used": "B",
-      "candidate_count": 15,
+      "pass_used": "A",
+      "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 19,
-        "faculty_id": "23",
-        "name": "Engr. Christopher John P. De Vera",
-        "role": "FT",
+        "fi": 15,
+        "faculty_id": "18",
+        "name": "Engr. Rod Kline M. Perpetua",
+        "role": "PT",
         "dept_id": 2,
-        "score": 120.0008,
+        "score": 55.5001,
         "usage_ratio": 1.0,
-        "load_after": 5.0,
+        "load_after": 8.0,
         "preps_before": [
-          "4067|ENG DRAW"
+          "4106|CE 224",
+          "4142|CE 329"
         ],
-        "preps_units_before": 0.0
+        "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 19,
-          "faculty_id": "23",
-          "name": "Engr. Christopher John P. De Vera",
-          "role": "FT",
-          "score": 120.0008,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 16,
-          "faculty_id": "20",
-          "name": "Engr. John Philip M. Garces",
-          "role": "FT",
-          "score": 113.7508,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 10,
-          "faculty_id": "13",
-          "name": "Engr. Aurus Jodeo C. Tiam",
-          "role": "FT",
-          "score": 107.5001,
+          "fi": 15,
+          "faculty_id": "18",
+          "name": "Engr. Rod Kline M. Perpetua",
+          "role": "PT",
+          "score": 55.5001,
           "usage_ratio": 1.0
         }
       ],
@@ -4116,12 +4095,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 33,
+        "fi": 34,
         "faculty_id": "37",
         "name": "Engr. Jan Joseph Karlo B. Raquipo",
         "role": "FT",
         "dept_id": 5,
-        "score": 129.7503,
+        "score": 129.7508,
         "usage_ratio": 0.0,
         "load_after": 5.0,
         "preps_before": [
@@ -4131,11 +4110,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 33,
+          "fi": 34,
           "faculty_id": "37",
           "name": "Engr. Jan Joseph Karlo B. Raquipo",
           "role": "FT",
-          "score": 129.7503,
+          "score": 129.7508,
           "usage_ratio": 0.0
         }
       ],
@@ -4144,7 +4123,7 @@
           "faculty_id": "37",
           "name": "Engr. Jan Joseph Karlo B. Raquipo",
           "priority": 3,
-          "fi": 33,
+          "fi": 34,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -4167,12 +4146,12 @@
       "candidate_count": 8,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 63,
+        "fi": 64,
         "faculty_id": "134",
         "name": "Ar. Romeo C. Romero Jr.",
         "role": "FT",
         "dept_id": 1,
-        "score": 88.7505,
+        "score": 88.7508,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
@@ -4184,11 +4163,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 63,
+          "fi": 64,
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "role": "FT",
-          "score": 88.7505,
+          "score": 88.7508,
           "usage_ratio": 1.0
         },
         {
@@ -4196,7 +4175,7 @@
           "faculty_id": "4",
           "name": "Ar. Maeritz U. Lachica",
           "role": "PT",
-          "score": 45.0008,
+          "score": 45.0009,
           "usage_ratio": 1.0
         },
         {
@@ -4204,7 +4183,7 @@
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 45.0005,
+          "score": 45.0006,
           "usage_ratio": 1.0
         }
       ],
@@ -4226,7 +4205,7 @@
         "name": "Engr. Joy B. Pimentel",
         "role": "FT",
         "dept_id": 2,
-        "score": 136.7502,
+        "score": 136.7503,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
@@ -4244,23 +4223,23 @@
           "faculty_id": "16",
           "name": "Engr. Joy B. Pimentel",
           "role": "FT",
-          "score": 136.7502,
+          "score": 136.7503,
           "usage_ratio": 1.0
         },
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 124.2507,
+          "score": 124.2505,
           "usage_ratio": 1.0
         },
         {
-          "fi": 21,
+          "fi": 22,
           "faculty_id": "25",
           "name": "Engr. Jim Frell B. Buenafe",
           "role": "PT",
-          "score": 93.0009,
+          "score": 93.0008,
           "usage_ratio": 1.0
         }
       ],
@@ -4269,7 +4248,7 @@
           "faculty_id": "52",
           "name": "Miss Rhodora M. Aquino",
           "priority": 3,
-          "fi": 48,
+          "fi": 49,
           "in_candidates": false,
           "rejection": null,
           "load": 0.0,
@@ -4285,7 +4264,7 @@
           "faculty_id": "59",
           "name": "Dr. Dominga C. Valtoribio",
           "priority": 2,
-          "fi": 55,
+          "fi": 56,
           "in_candidates": false,
           "rejection": null,
           "load": 0.0,
@@ -4308,12 +4287,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 35,
+        "fi": 36,
         "faculty_id": "39",
         "name": "Engr. Jessica B. Castillo",
         "role": "FT",
         "dept_id": 5,
-        "score": 126.2002,
+        "score": 126.2,
         "usage_ratio": 1.0,
         "load_after": 8.0,
         "preps_before": [
@@ -4325,11 +4304,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 35,
+          "fi": 36,
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "role": "FT",
-          "score": 126.2002,
+          "score": 126.2,
           "usage_ratio": 1.0
         }
       ],
@@ -4351,7 +4330,7 @@
         "name": "Engr. Joy B. Pimentel",
         "role": "FT",
         "dept_id": 2,
-        "score": 113.7502,
+        "score": 113.7507,
         "usage_ratio": 0.375,
         "load_after": 13.0,
         "preps_before": [
@@ -4370,23 +4349,23 @@
           "faculty_id": "16",
           "name": "Engr. Joy B. Pimentel",
           "role": "FT",
-          "score": 113.7502,
+          "score": 113.7507,
           "usage_ratio": 0.375
         },
         {
-          "fi": 21,
+          "fi": 22,
           "faculty_id": "25",
           "name": "Engr. Jim Frell B. Buenafe",
           "role": "PT",
-          "score": 93.0007,
+          "score": 93.0003,
           "usage_ratio": 1.0
         },
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 91.2509,
+          "score": 91.2504,
           "usage_ratio": 0.2917
         }
       ],
@@ -4414,7 +4393,7 @@
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "priority": 3,
-          "fi": 23,
+          "fi": 24,
           "in_candidates": true,
           "rejection": null,
           "load": 7.0,
@@ -4441,12 +4420,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 35,
+        "fi": 36,
         "faculty_id": "39",
         "name": "Engr. Jessica B. Castillo",
         "role": "FT",
         "dept_id": 5,
-        "score": 101.201,
+        "score": 101.2,
         "usage_ratio": 1.0,
         "load_after": 12.0,
         "preps_before": [
@@ -4459,11 +4438,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 35,
+          "fi": 36,
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "role": "FT",
-          "score": 101.201,
+          "score": 101.2,
           "usage_ratio": 1.0
         }
       ],
@@ -4480,12 +4459,12 @@
       "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 23,
+        "fi": 24,
         "faculty_id": "27",
         "name": "Engr. Joy Riana L. Agrimor",
         "role": "FT",
         "dept_id": 2,
-        "score": 124.2503,
+        "score": 124.251,
         "usage_ratio": 1.0,
         "load_after": 11.0,
         "preps_before": [
@@ -4499,27 +4478,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 124.2503,
+          "score": 124.251,
           "usage_ratio": 1.0
         },
         {
-          "fi": 21,
+          "fi": 22,
           "faculty_id": "25",
           "name": "Engr. Jim Frell B. Buenafe",
           "role": "PT",
-          "score": 95.0004,
+          "score": 95.001,
           "usage_ratio": 0.0
         },
         {
-          "fi": 17,
+          "fi": 18,
           "faculty_id": "21",
           "name": "Engr. Marvin Ryan C. Ferrer",
           "role": "PT",
-          "score": 43.0003,
+          "score": 43.0006,
           "usage_ratio": 1.0
         }
       ],
@@ -4528,7 +4507,7 @@
           "faculty_id": "25",
           "name": "Engr. Jim Frell B. Buenafe",
           "priority": 2,
-          "fi": 21,
+          "fi": 22,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -4550,31 +4529,37 @@
       "dept_id": 2,
       "units": 4.0,
       "pass_used": "B",
-      "candidate_count": 13,
+      "candidate_count": 14,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 16,
-        "faculty_id": "20",
-        "name": "Engr. John Philip M. Garces",
+        "fi": 20,
+        "faculty_id": "23",
+        "name": "Engr. Christopher John P. De Vera",
         "role": "FT",
         "dept_id": 2,
-        "score": 113.7503,
+        "score": 120.0004,
         "usage_ratio": 1.0,
-        "load_after": 5.0,
+        "load_after": 4.0,
         "preps_before": [
-          "4087|ENG DRAW",
-          "4114|CE ECON",
-          "4159|CE 4222"
+          "4067|ENG DRAW"
         ],
-        "preps_units_before": 1.0
+        "preps_units_before": 0.0
       },
       "top3_candidates": [
         {
-          "fi": 16,
+          "fi": 20,
+          "faculty_id": "23",
+          "name": "Engr. Christopher John P. De Vera",
+          "role": "FT",
+          "score": 120.0004,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 17,
           "faculty_id": "20",
           "name": "Engr. John Philip M. Garces",
           "role": "FT",
-          "score": 113.7503,
+          "score": 113.7504,
           "usage_ratio": 1.0
         },
         {
@@ -4582,15 +4567,7 @@
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 107.5005,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 24,
-          "faculty_id": "28",
-          "name": "Engr. Jefrie T. Alindayu",
-          "role": "FT",
-          "score": 101.251,
+          "score": 107.5001,
           "usage_ratio": 1.0
         }
       ],
@@ -4604,46 +4581,47 @@
       "dept_id": 2,
       "units": 4.0,
       "pass_used": "B",
-      "candidate_count": 12,
+      "candidate_count": 13,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 10,
-        "faculty_id": "13",
-        "name": "Engr. Aurus Jodeo C. Tiam",
+        "fi": 17,
+        "faculty_id": "20",
+        "name": "Engr. John Philip M. Garces",
         "role": "FT",
         "dept_id": 2,
-        "score": 107.5004,
+        "score": 113.7508,
         "usage_ratio": 1.0,
-        "load_after": 6.0,
+        "load_after": 5.0,
         "preps_before": [
-          "4143|CE 3212",
-          "4147|HYDRO 322"
+          "4087|ENG DRAW",
+          "4114|CE ECON",
+          "4159|CE 4222"
         ],
-        "preps_units_before": 2.0
+        "preps_units_before": 1.0
       },
       "top3_candidates": [
+        {
+          "fi": 17,
+          "faculty_id": "20",
+          "name": "Engr. John Philip M. Garces",
+          "role": "FT",
+          "score": 113.7508,
+          "usage_ratio": 1.0
+        },
         {
           "fi": 10,
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 107.5004,
+          "score": 107.5001,
           "usage_ratio": 1.0
         },
         {
-          "fi": 24,
+          "fi": 25,
           "faculty_id": "28",
           "name": "Engr. Jefrie T. Alindayu",
           "role": "FT",
-          "score": 101.2501,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 19,
-          "faculty_id": "23",
-          "name": "Engr. Christopher John P. De Vera",
-          "role": "FT",
-          "score": 88.7501,
+          "score": 101.2509,
           "usage_ratio": 1.0
         }
       ],
@@ -4656,47 +4634,32 @@
       "descriptive_title": "Principles of Steel Design",
       "dept_id": 2,
       "units": 4.0,
-      "pass_used": "B",
-      "candidate_count": 13,
+      "pass_used": "A",
+      "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 24,
-        "faculty_id": "28",
-        "name": "Engr. Jefrie T. Alindayu",
-        "role": "FT",
+        "fi": 15,
+        "faculty_id": "18",
+        "name": "Engr. Rod Kline M. Perpetua",
+        "role": "PT",
         "dept_id": 2,
-        "score": 101.2507,
+        "score": -6.9996,
         "usage_ratio": 1.0,
-        "load_after": 7.0,
+        "load_after": 12.0,
         "preps_before": [
-          "4104|CE ECON",
-          "4159|CE 4222"
+          "4106|CE 224",
+          "4138|CE 3211",
+          "4142|CE 329"
         ],
-        "preps_units_before": 3.0
+        "preps_units_before": 8.0
       },
       "top3_candidates": [
         {
-          "fi": 24,
-          "faculty_id": "28",
-          "name": "Engr. Jefrie T. Alindayu",
-          "role": "FT",
-          "score": 101.2507,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 16,
-          "faculty_id": "20",
-          "name": "Engr. John Philip M. Garces",
-          "role": "FT",
-          "score": 88.7505,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 19,
-          "faculty_id": "23",
-          "name": "Engr. Christopher John P. De Vera",
-          "role": "FT",
-          "score": 88.7504,
+          "fi": 15,
+          "faculty_id": "18",
+          "name": "Engr. Rod Kline M. Perpetua",
+          "role": "PT",
+          "score": -6.9996,
           "usage_ratio": 1.0
         }
       ],
@@ -4718,15 +4681,14 @@
         "name": "Engr. Aurus Jodeo C. Tiam",
         "role": "FT",
         "dept_id": 2,
-        "score": 132.5003,
-        "usage_ratio": 0.25,
-        "load_after": 10.0,
+        "score": 157.5007,
+        "usage_ratio": 0.0833,
+        "load_after": 6.0,
         "preps_before": [
-          "4096|ENG PHYS 1",
           "4143|CE 3212",
           "4147|HYDRO 322"
         ],
-        "preps_units_before": 6.0
+        "preps_units_before": 2.0
       },
       "top3_candidates": [
         {
@@ -4734,23 +4696,23 @@
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 132.5003,
-          "usage_ratio": 0.25
+          "score": 157.5007,
+          "usage_ratio": 0.0833
         },
         {
-          "fi": 18,
+          "fi": 19,
           "faculty_id": "22",
           "name": "Engr. Eunice Pristeen D. Espejo",
           "role": "PT",
-          "score": 95.0007,
+          "score": 95.0004,
           "usage_ratio": 0.0
         },
         {
-          "fi": 20,
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 55.501,
+          "score": 55.5002,
           "usage_ratio": 1.0
         }
       ],
@@ -4762,20 +4724,19 @@
           "fi": 10,
           "in_candidates": true,
           "rejection": null,
-          "load": 6.0,
+          "load": 2.0,
           "max_units": 24.0,
           "preps": [
-            "4096|ENG PHYS 1",
             "4143|CE 3212",
             "4147|HYDRO 322"
           ],
-          "preps_units": 6.0
+          "preps_units": 2.0
         },
         {
           "faculty_id": "22",
           "name": "Engr. Eunice Pristeen D. Espejo",
           "priority": 2,
-          "fi": 18,
+          "fi": 19,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -4803,15 +4764,14 @@
         "name": "Engr. Aurus Jodeo C. Tiam",
         "role": "FT",
         "dept_id": 2,
-        "score": 105.5007,
+        "score": 130.5001,
         "usage_ratio": 1.0,
-        "load_after": 14.0,
+        "load_after": 10.0,
         "preps_before": [
-          "4096|ENG PHYS 1",
           "4143|CE 3212",
           "4147|HYDRO 322"
         ],
-        "preps_units_before": 6.0
+        "preps_units_before": 2.0
       },
       "top3_candidates": [
         {
@@ -4819,23 +4779,23 @@
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 105.5007,
+          "score": 130.5001,
           "usage_ratio": 1.0
         },
         {
-          "fi": 18,
+          "fi": 19,
           "faculty_id": "22",
           "name": "Engr. Eunice Pristeen D. Espejo",
           "role": "PT",
-          "score": 93.0008,
+          "score": 93.0001,
           "usage_ratio": 1.0
         },
         {
-          "fi": 20,
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 55.5,
+          "score": 55.5005,
           "usage_ratio": 1.0
         }
       ],
@@ -4844,7 +4804,7 @@
           "faculty_id": "21",
           "name": "Engr. Marvin Ryan C. Ferrer",
           "priority": 2,
-          "fi": 17,
+          "fi": 18,
           "in_candidates": true,
           "rejection": null,
           "load": 4.0,
@@ -4930,12 +4890,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 35,
+        "fi": 36,
         "faculty_id": "39",
         "name": "Engr. Jessica B. Castillo",
         "role": "FT",
         "dept_id": 5,
-        "score": 54.7505,
+        "score": 54.7507,
         "usage_ratio": 0.5,
         "load_after": 16.0,
         "preps_before": [
@@ -4949,11 +4909,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 35,
+          "fi": 36,
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "role": "FT",
-          "score": 54.7505,
+          "score": 54.7507,
           "usage_ratio": 0.5
         }
       ],
@@ -4962,7 +4922,7 @@
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "priority": 3,
-          "fi": 35,
+          "fi": 36,
           "in_candidates": true,
           "rejection": null,
           "load": 12.0,
@@ -4989,12 +4949,12 @@
       "candidate_count": 5,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 26,
+        "fi": 27,
         "faculty_id": "30",
         "name": "Engr. Kenosis John B. Wajchina",
         "role": "FT",
         "dept_id": 3,
-        "score": 151.2005,
+        "score": 151.2004,
         "usage_ratio": 1.0,
         "load_after": 4.0,
         "preps_before": [
@@ -5004,27 +4964,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 26,
+          "fi": 27,
           "faculty_id": "30",
           "name": "Engr. Kenosis John B. Wajchina",
           "role": "FT",
-          "score": 151.2005,
+          "score": 151.2004,
           "usage_ratio": 1.0
         },
         {
-          "fi": 56,
+          "fi": 57,
           "faculty_id": "60",
           "name": "Miss Donna Bee R. Tominez",
           "role": "FT",
-          "score": 126.2009,
+          "score": 126.201,
           "usage_ratio": 1.0
         },
         {
-          "fi": 21,
+          "fi": 22,
           "faculty_id": "25",
           "name": "Engr. Jim Frell B. Buenafe",
           "role": "PT",
-          "score": 76.2005,
+          "score": 76.2008,
           "usage_ratio": 1.0
         }
       ],
@@ -5041,12 +5001,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 27,
+        "fi": 28,
         "faculty_id": "31",
         "name": "Engr. Carina S. Mallillin",
         "role": "Dean",
         "dept_id": 3,
-        "score": 14.0003,
+        "score": 14.0005,
         "usage_ratio": 1.0,
         "load_after": 4.0,
         "preps_before": [],
@@ -5054,11 +5014,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 27,
+          "fi": 28,
           "faculty_id": "31",
           "name": "Engr. Carina S. Mallillin",
           "role": "Dean",
-          "score": 14.0003,
+          "score": 14.0005,
           "usage_ratio": 1.0
         }
       ],
@@ -5080,7 +5040,7 @@
         "name": "Engr. Paulina A. Marzan",
         "role": "Department Head",
         "dept_id": 3,
-        "score": -15.9995,
+        "score": -15.9992,
         "usage_ratio": 1.0,
         "load_after": 7.0,
         "preps_before": [
@@ -5095,7 +5055,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -15.9995,
+          "score": -15.9992,
           "usage_ratio": 1.0
         }
       ],
@@ -5104,7 +5064,7 @@
           "faculty_id": "61",
           "name": "Dr. Melanie G. Gurat",
           "priority": 2,
-          "fi": 57,
+          "fi": 58,
           "in_candidates": false,
           "rejection": null,
           "load": 0.0,
@@ -5119,7 +5079,7 @@
           "faculty_id": "62",
           "name": "Mr. Domingo T. Guntalilib Jr.",
           "priority": 3,
-          "fi": 58,
+          "fi": 59,
           "in_candidates": false,
           "rejection": null,
           "load": 0.0,
@@ -5148,7 +5108,7 @@
         "name": "Engr. Paulina A. Marzan",
         "role": "Department Head",
         "dept_id": 3,
-        "score": -55.9998,
+        "score": -55.9991,
         "usage_ratio": 1.0,
         "load_after": 11.0,
         "preps_before": [
@@ -5164,7 +5124,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -55.9998,
+          "score": -55.9991,
           "usage_ratio": 1.0
         }
       ],
@@ -5173,7 +5133,7 @@
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "priority": 3,
-          "fi": 40,
+          "fi": 41,
           "in_candidates": false,
           "rejection": null,
           "load": 3.0,
@@ -5198,12 +5158,12 @@
       "candidate_count": 6,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 34,
+        "fi": 35,
         "faculty_id": "38",
         "name": "Engr. Angelino A. Pimentel",
         "role": "FT",
         "dept_id": 5,
-        "score": 113.7506,
+        "score": 113.7508,
         "usage_ratio": 1.0,
         "load_after": 5.0,
         "preps_before": [
@@ -5214,27 +5174,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 34,
+          "fi": 35,
           "faculty_id": "38",
           "name": "Engr. Angelino A. Pimentel",
           "role": "FT",
-          "score": 113.7506,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 32,
-          "faculty_id": "36",
-          "name": "Engr. Rojan I. Reyes",
-          "role": "FT",
-          "score": 95.0009,
+          "score": 113.7508,
           "usage_ratio": 1.0
         },
         {
           "fi": 33,
+          "faculty_id": "36",
+          "name": "Engr. Rojan I. Reyes",
+          "role": "FT",
+          "score": 95.0007,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 34,
           "faculty_id": "37",
           "name": "Engr. Jan Joseph Karlo B. Raquipo",
           "role": "FT",
-          "score": 88.7502,
+          "score": 88.7503,
           "usage_ratio": 1.0
         }
       ],
@@ -5251,12 +5211,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 31,
+        "fi": 32,
         "faculty_id": "35",
         "name": "Engr. Teofilo M. Sagabaen",
         "role": "Head, TTBDO",
         "dept_id": 5,
-        "score": 32.5003,
+        "score": 32.5009,
         "usage_ratio": 0.0,
         "load_after": 4.0,
         "preps_before": [
@@ -5266,15 +5226,15 @@
       },
       "top3_candidates": [
         {
-          "fi": 31,
+          "fi": 32,
           "faculty_id": "35",
           "name": "Engr. Teofilo M. Sagabaen",
           "role": "Head, TTBDO",
-          "score": 32.5003,
+          "score": 32.5009,
           "usage_ratio": 0.0
         },
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
@@ -5287,7 +5247,7 @@
           "faculty_id": "35",
           "name": "Engr. Teofilo M. Sagabaen",
           "priority": 2,
-          "fi": 31,
+          "fi": 32,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -5310,12 +5270,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 32,
+        "fi": 33,
         "faculty_id": "36",
         "name": "Engr. Rojan I. Reyes",
         "role": "FT",
         "dept_id": 5,
-        "score": 145.0009,
+        "score": 145.0001,
         "usage_ratio": 0.1667,
         "load_after": 8.0,
         "preps_before": [
@@ -5326,11 +5286,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 32,
+          "fi": 33,
           "faculty_id": "36",
           "name": "Engr. Rojan I. Reyes",
           "role": "FT",
-          "score": 145.0009,
+          "score": 145.0001,
           "usage_ratio": 0.1667
         }
       ],
@@ -5339,7 +5299,7 @@
           "faculty_id": "36",
           "name": "Engr. Rojan I. Reyes",
           "priority": 2,
-          "fi": 32,
+          "fi": 33,
           "in_candidates": true,
           "rejection": null,
           "load": 4.0,
@@ -5364,43 +5324,41 @@
       "result": "ASSIGNED",
       "winner": {
         "fi": 34,
-        "faculty_id": "38",
-        "name": "Engr. Angelino A. Pimentel",
+        "faculty_id": "37",
+        "name": "Engr. Jan Joseph Karlo B. Raquipo",
         "role": "FT",
         "dept_id": 5,
-        "score": 88.7507,
+        "score": 88.7509,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
-          "4229|EST A321",
-          "4243|EE A423",
-          "4252|ECE A422"
+          "4208|ENG MATH 5"
         ],
-        "preps_units_before": 5.0
+        "preps_units_before": 0.0
       },
       "top3_candidates": [
         {
           "fi": 34,
+          "faculty_id": "37",
+          "name": "Engr. Jan Joseph Karlo B. Raquipo",
+          "role": "FT",
+          "score": 88.7509,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 35,
           "faculty_id": "38",
           "name": "Engr. Angelino A. Pimentel",
           "role": "FT",
-          "score": 88.7507,
+          "score": 88.7503,
           "usage_ratio": 1.0
         },
         {
           "fi": 33,
-          "faculty_id": "37",
-          "name": "Engr. Jan Joseph Karlo B. Raquipo",
-          "role": "FT",
-          "score": 88.7505,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 32,
           "faculty_id": "36",
           "name": "Engr. Rojan I. Reyes",
           "role": "FT",
-          "score": 70.0008,
+          "score": 70.0004,
           "usage_ratio": 1.0
         }
       ],
@@ -5422,7 +5380,7 @@
         "name": "Ar. Maeritz U. Lachica",
         "role": "PT",
         "dept_id": 1,
-        "score": 95.0008,
+        "score": 95.0002,
         "usage_ratio": 0.0,
         "load_after": 3.0,
         "preps_before": [
@@ -5437,7 +5395,7 @@
           "faculty_id": "4",
           "name": "Ar. Maeritz U. Lachica",
           "role": "PT",
-          "score": 95.0008,
+          "score": 95.0002,
           "usage_ratio": 0.0
         }
       ],
@@ -5475,7 +5433,7 @@
         "name": "Ar. Tomas B. Binbinon Jr.",
         "role": "FT",
         "dept_id": 1,
-        "score": 126.2505,
+        "score": 126.2504,
         "usage_ratio": 0.2917,
         "load_after": 10.0,
         "preps_before": [
@@ -5492,7 +5450,7 @@
           "faculty_id": "9",
           "name": "Ar. Tomas B. Binbinon Jr.",
           "role": "FT",
-          "score": 126.2505,
+          "score": 126.2504,
           "usage_ratio": 0.2917
         },
         {
@@ -5500,7 +5458,7 @@
           "faculty_id": "6",
           "name": "Ar. Rino Franz U. Gumayagay",
           "role": "FT",
-          "score": 122.5006,
+          "score": 122.5003,
           "usage_ratio": 0.0833
         }
       ],
@@ -5551,12 +5509,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 63,
+        "fi": 64,
         "faculty_id": "134",
         "name": "Ar. Romeo C. Romero Jr.",
         "role": "FT",
         "dept_id": 1,
-        "score": 113.7502,
+        "score": 113.7501,
         "usage_ratio": 0.375,
         "load_after": 12.0,
         "preps_before": [
@@ -5569,11 +5527,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 63,
+          "fi": 64,
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "role": "FT",
-          "score": 113.7502,
+          "score": 113.7501,
           "usage_ratio": 0.375
         },
         {
@@ -5581,7 +5539,7 @@
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 95.0004,
+          "score": 95.0009,
           "usage_ratio": 0.0
         }
       ],
@@ -5605,7 +5563,7 @@
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "priority": 2,
-          "fi": 63,
+          "fi": 64,
           "in_candidates": true,
           "rejection": null,
           "load": 9.0,
@@ -5636,7 +5594,7 @@
         "name": "Engr. Mark Lester B. Tallungan",
         "role": "PT",
         "dept_id": 2,
-        "score": 76.2005,
+        "score": 76.2002,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -5651,7 +5609,7 @@
           "faculty_id": "14",
           "name": "Engr. Mark Lester B. Tallungan",
           "role": "PT",
-          "score": 76.2005,
+          "score": 76.2002,
           "usage_ratio": 1.0
         },
         {
@@ -5659,7 +5617,7 @@
           "faculty_id": "17",
           "name": "Engr. Rovic Jay S. Pi\u00f1on",
           "role": "PT",
-          "score": 38.7001,
+          "score": 38.7002,
           "usage_ratio": 1.0
         }
       ],
@@ -5676,37 +5634,35 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 63,
-        "faculty_id": "134",
-        "name": "Ar. Romeo C. Romero Jr.",
-        "role": "FT",
+        "fi": 3,
+        "faculty_id": "5",
+        "name": "Ar. Joshua Eliz P. Hernandez",
+        "role": "PT",
         "dept_id": 1,
-        "score": 93.0009,
+        "score": 93.001,
         "usage_ratio": 1.0,
-        "load_after": 15.0,
+        "load_after": 3.0,
         "preps_before": [
-          "4024|AR A221",
-          "4042|AR A321",
-          "4048|AR A323",
-          "4050|AR A421"
+          "4010|ARCHMATH 2",
+          "4024|AR A221"
         ],
-        "preps_units_before": 9.0
+        "preps_units_before": 0.0
       },
       "top3_candidates": [
-        {
-          "fi": 63,
-          "faculty_id": "134",
-          "name": "Ar. Romeo C. Romero Jr.",
-          "role": "FT",
-          "score": 93.0009,
-          "usage_ratio": 1.0
-        },
         {
           "fi": 3,
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 93.0006,
+          "score": 93.001,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 93.0009,
           "usage_ratio": 1.0
         }
       ],
@@ -5723,16 +5679,16 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 11,
-        "faculty_id": "14",
-        "name": "Engr. Mark Lester B. Tallungan",
+        "fi": 14,
+        "faculty_id": "17",
+        "name": "Engr. Rovic Jay S. Pi\u00f1on",
         "role": "PT",
         "dept_id": 2,
-        "score": 38.7008,
+        "score": 38.7006,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4026|AR A225",
+          "4065|ENG MATH 2",
           "4075|ENG MATH 2",
           "4142|CE 329"
         ],
@@ -5740,19 +5696,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 11,
-          "faculty_id": "14",
-          "name": "Engr. Mark Lester B. Tallungan",
-          "role": "PT",
-          "score": 38.7008,
-          "usage_ratio": 1.0
-        },
-        {
           "fi": 14,
           "faculty_id": "17",
           "name": "Engr. Rovic Jay S. Pi\u00f1on",
           "role": "PT",
           "score": 38.7006,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 11,
+          "faculty_id": "14",
+          "name": "Engr. Mark Lester B. Tallungan",
+          "role": "PT",
+          "score": 38.7002,
           "usage_ratio": 1.0
         }
       ],
@@ -5769,12 +5725,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 62,
+        "fi": 63,
         "faculty_id": "132",
         "name": "Ar. Bobby U. Argote ",
         "role": "PT",
         "dept_id": 1,
-        "score": 20.0005,
+        "score": 20.0001,
         "usage_ratio": 0.5,
         "load_after": 9.0,
         "preps_before": [
@@ -5786,11 +5742,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 62,
+          "fi": 63,
           "faculty_id": "132",
           "name": "Ar. Bobby U. Argote ",
           "role": "PT",
-          "score": 20.0005,
+          "score": 20.0001,
           "usage_ratio": 0.5
         }
       ],
@@ -5799,7 +5755,7 @@
           "faculty_id": "132",
           "name": "Ar. Bobby U. Argote ",
           "priority": 2,
-          "fi": 62,
+          "fi": 63,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -5853,15 +5809,15 @@
           "faculty_id": "9",
           "name": "Ar. Tomas B. Binbinon Jr.",
           "role": "FT",
-          "score": 57.5004,
+          "score": 57.5008,
           "usage_ratio": 1.0
         },
         {
-          "fi": 3,
-          "faculty_id": "5",
-          "name": "Ar. Joshua Eliz P. Hernandez",
-          "role": "PT",
-          "score": 45.0001,
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 45.0008,
           "usage_ratio": 1.0
         }
       ],
@@ -5878,12 +5834,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 61,
+        "fi": 62,
         "faculty_id": "65",
         "name": "Ar. Giancarlo Cenon C. Mendoza",
         "role": "Department Head",
         "dept_id": 1,
-        "score": 48.0008,
+        "score": 48.0006,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -5893,19 +5849,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 61,
+          "fi": 62,
           "faculty_id": "65",
           "name": "Ar. Giancarlo Cenon C. Mendoza",
           "role": "Department Head",
-          "score": 48.0008,
+          "score": 48.0006,
           "usage_ratio": 1.0
         },
         {
-          "fi": 62,
+          "fi": 63,
           "faculty_id": "132",
           "name": "Ar. Bobby U. Argote ",
           "role": "PT",
-          "score": -19.4998,
+          "score": -19.4995,
           "usage_ratio": 1.0
         }
       ],
@@ -5914,7 +5870,7 @@
           "faculty_id": "40",
           "name": "Engr. Gerene-Leigh C. Almazan",
           "priority": 2,
-          "fi": 36,
+          "fi": 37,
           "in_candidates": false,
           "rejection": null,
           "load": 0.0,
@@ -5937,12 +5893,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 47,
+        "fi": 48,
         "faculty_id": "51",
         "name": "Mr. Scott Dominic T. Bautista",
         "role": "PT",
         "dept_id": 6,
-        "score": 76.2001,
+        "score": 76.2002,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -5952,19 +5908,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 47,
+          "fi": 48,
           "faculty_id": "51",
           "name": "Mr. Scott Dominic T. Bautista",
           "role": "PT",
-          "score": 76.2001,
+          "score": 76.2002,
           "usage_ratio": 1.0
         },
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
-          "score": 1.201,
+          "score": 1.2004,
           "usage_ratio": 1.0
         }
       ],
@@ -5986,7 +5942,7 @@
         "name": "Ar. Rino Franz U. Gumayagay",
         "role": "FT",
         "dept_id": 1,
-        "score": 88.7502,
+        "score": 88.7509,
         "usage_ratio": 1.0,
         "load_after": 8.0,
         "preps_before": [
@@ -6003,7 +5959,15 @@
           "faculty_id": "6",
           "name": "Ar. Rino Franz U. Gumayagay",
           "role": "FT",
-          "score": 88.7502,
+          "score": 88.7509,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 45.0001,
           "usage_ratio": 1.0
         },
         {
@@ -6011,15 +5975,7 @@
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 45.0008,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 63,
-          "faculty_id": "134",
-          "name": "Ar. Romeo C. Romero Jr.",
-          "role": "FT",
-          "score": 26.2503,
+          "score": 26.2506,
           "usage_ratio": 1.0
         }
       ],
@@ -6041,7 +5997,7 @@
         "name": "Ar. Rino Franz U. Gumayagay",
         "role": "FT",
         "dept_id": 1,
-        "score": 70.0001,
+        "score": 70.0007,
         "usage_ratio": 1.0,
         "load_after": 11.0,
         "preps_before": [
@@ -6059,7 +6015,7 @@
           "faculty_id": "6",
           "name": "Ar. Rino Franz U. Gumayagay",
           "role": "FT",
-          "score": 70.0001,
+          "score": 70.0007,
           "usage_ratio": 1.0
         },
         {
@@ -6067,15 +6023,15 @@
           "faculty_id": "9",
           "name": "Ar. Tomas B. Binbinon Jr.",
           "role": "FT",
-          "score": 57.5006,
+          "score": 57.5008,
           "usage_ratio": 1.0
         },
         {
-          "fi": 3,
-          "faculty_id": "5",
-          "name": "Ar. Joshua Eliz P. Hernandez",
-          "role": "PT",
-          "score": 45.0009,
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 45.0008,
           "usage_ratio": 1.0
         }
       ],
@@ -6097,7 +6053,7 @@
         "name": "Ar. Tomas B. Binbinon Jr.",
         "role": "FT",
         "dept_id": 1,
-        "score": 57.5005,
+        "score": 57.5008,
         "usage_ratio": 1.0,
         "load_after": 13.0,
         "preps_before": [
@@ -6114,7 +6070,15 @@
           "faculty_id": "9",
           "name": "Ar. Tomas B. Binbinon Jr.",
           "role": "FT",
-          "score": 57.5005,
+          "score": 57.5008,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 45.0004,
           "usage_ratio": 1.0
         },
         {
@@ -6122,15 +6086,7 @@
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 45.0006,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 63,
-          "faculty_id": "134",
-          "name": "Ar. Romeo C. Romero Jr.",
-          "role": "FT",
-          "score": 26.251,
+          "score": 26.2501,
           "usage_ratio": 1.0
         }
       ],
@@ -6147,45 +6103,44 @@
       "candidate_count": 4,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 14,
-        "faculty_id": "17",
-        "name": "Engr. Rovic Jay S. Pi\u00f1on",
+        "fi": 21,
+        "faculty_id": "24",
+        "name": "Engr. Vince Alex V. Cabagay",
         "role": "PT",
         "dept_id": 2,
-        "score": 57.5,
-        "usage_ratio": 0.25,
+        "score": 55.5008,
+        "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4065|ENG MATH 2",
-          "4075|ENG MATH 2",
-          "4142|CE 329"
+          "4085|ENG MATH 2",
+          "4140|HYDRO 322"
         ],
         "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 14,
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
-          "role": "PT",
-          "score": 57.5,
-          "usage_ratio": 0.25
-        },
-        {
-          "fi": 20,
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 55.5007,
+          "score": 55.5008,
           "usage_ratio": 1.0
         },
         {
-          "fi": 15,
+          "fi": 16,
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "role": "PT",
-          "score": 55.5007,
+          "score": 55.5003,
           "usage_ratio": 1.0
+        },
+        {
+          "fi": 11,
+          "faculty_id": "14",
+          "name": "Engr. Mark Lester B. Tallungan",
+          "role": "PT",
+          "score": 22.5009,
+          "usage_ratio": 0.25
         }
       ],
       "tagged_faculty": [
@@ -6196,15 +6151,14 @@
           "fi": 11,
           "in_candidates": true,
           "rejection": null,
-          "load": 6.0,
+          "load": 3.0,
           "max_units": 12.0,
           "preps": [
             "4026|AR A225",
-            "4037|AR A225",
             "4075|ENG MATH 2",
             "4142|CE 329"
           ],
-          "preps_units": 6.0
+          "preps_units": 3.0
         },
         {
           "faculty_id": "17",
@@ -6213,14 +6167,15 @@
           "fi": 14,
           "in_candidates": true,
           "rejection": null,
-          "load": 3.0,
+          "load": 6.0,
           "max_units": 12.0,
           "preps": [
+            "4037|AR A225",
             "4065|ENG MATH 2",
             "4075|ENG MATH 2",
             "4142|CE 329"
           ],
-          "preps_units": 3.0
+          "preps_units": 6.0
         }
       ]
     },
@@ -6235,35 +6190,36 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 20,
-        "faculty_id": "24",
-        "name": "Engr. Vince Alex V. Cabagay",
+        "fi": 11,
+        "faculty_id": "14",
+        "name": "Engr. Mark Lester B. Tallungan",
         "role": "PT",
         "dept_id": 2,
-        "score": 55.5,
+        "score": 55.5003,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4085|ENG MATH 2",
-          "4140|HYDRO 322"
+          "4026|AR A225",
+          "4075|ENG MATH 2",
+          "4142|CE 329"
         ],
         "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 20,
-          "faculty_id": "24",
-          "name": "Engr. Vince Alex V. Cabagay",
+          "fi": 11,
+          "faculty_id": "14",
+          "name": "Engr. Mark Lester B. Tallungan",
           "role": "PT",
-          "score": 55.5,
+          "score": 55.5003,
           "usage_ratio": 1.0
         },
         {
-          "fi": 14,
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
+          "fi": 21,
+          "faculty_id": "24",
+          "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 18.0005,
+          "score": 18.0009,
           "usage_ratio": 1.0
         }
       ],
@@ -6280,12 +6236,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 18,
+        "fi": 19,
         "faculty_id": "22",
         "name": "Engr. Eunice Pristeen D. Espejo",
         "role": "PT",
         "dept_id": 2,
-        "score": 93.001,
+        "score": 93.0001,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -6295,11 +6251,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 18,
+          "fi": 19,
           "faculty_id": "22",
           "name": "Engr. Eunice Pristeen D. Espejo",
           "role": "PT",
-          "score": 93.001,
+          "score": 93.0001,
           "usage_ratio": 1.0
         }
       ],
@@ -6316,12 +6272,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 36,
+        "fi": 37,
         "faculty_id": "40",
         "name": "Engr. Gerene-Leigh C. Almazan",
         "role": "Research Coordinator",
         "dept_id": 5,
-        "score": 31.2009,
+        "score": 31.2001,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -6331,19 +6287,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 36,
+          "fi": 37,
           "faculty_id": "40",
           "name": "Engr. Gerene-Leigh C. Almazan",
           "role": "Research Coordinator",
-          "score": 31.2009,
+          "score": 31.2001,
           "usage_ratio": 1.0
         },
         {
-          "fi": 25,
+          "fi": 26,
           "faculty_id": "29",
           "name": "Engr. Joel T. Mendoza",
           "role": "Department Head",
-          "score": -8.7999,
+          "score": -8.7996,
           "usage_ratio": 1.0
         }
       ],
@@ -6360,12 +6316,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 18,
+        "fi": 19,
         "faculty_id": "22",
         "name": "Engr. Eunice Pristeen D. Espejo",
         "role": "PT",
         "dept_id": 2,
-        "score": 55.5009,
+        "score": 55.5006,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -6376,11 +6332,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 18,
+          "fi": 19,
           "faculty_id": "22",
           "name": "Engr. Eunice Pristeen D. Espejo",
           "role": "PT",
-          "score": 55.5009,
+          "score": 55.5006,
           "usage_ratio": 1.0
         }
       ],
@@ -6397,12 +6353,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 36,
+        "fi": 37,
         "faculty_id": "40",
         "name": "Engr. Gerene-Leigh C. Almazan",
         "role": "Research Coordinator",
         "dept_id": 5,
-        "score": -6.2991,
+        "score": -6.2997,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -6413,138 +6369,23 @@
       },
       "top3_candidates": [
         {
-          "fi": 36,
+          "fi": 37,
           "faculty_id": "40",
           "name": "Engr. Gerene-Leigh C. Almazan",
           "role": "Research Coordinator",
-          "score": -6.2991,
+          "score": -6.2997,
           "usage_ratio": 1.0
         },
         {
-          "fi": 25,
+          "fi": 26,
           "faculty_id": "29",
           "name": "Engr. Joel T. Mendoza",
           "role": "Department Head",
-          "score": -8.7998,
+          "score": -8.799,
           "usage_ratio": 1.0
         }
       ],
       "tagged_faculty": []
-    },
-    {
-      "code": "4142",
-      "offering_id": 50974,
-      "section": "3B",
-      "descriptive_title": "Building Systems Design",
-      "dept_id": 2,
-      "units": 3.0,
-      "pass_used": "A",
-      "candidate_count": 3,
-      "result": "ASSIGNED",
-      "winner": {
-        "fi": 13,
-        "faculty_id": "16",
-        "name": "Engr. Joy B. Pimentel",
-        "role": "FT",
-        "dept_id": 2,
-        "score": 28.7509,
-        "usage_ratio": 0.7083,
-        "load_after": 20.0,
-        "preps_before": [
-          "4064|ENG MATH 1",
-          "4065|ENG MATH 2",
-          "4074|ENG MATH 1",
-          "4128|CE 224",
-          "4142|CE 329",
-          "4169|ENG PHYS 1"
-        ],
-        "preps_units_before": 4.0
-      },
-      "top3_candidates": [
-        {
-          "fi": 13,
-          "faculty_id": "16",
-          "name": "Engr. Joy B. Pimentel",
-          "role": "FT",
-          "score": 28.7509,
-          "usage_ratio": 0.7083
-        },
-        {
-          "fi": 11,
-          "faculty_id": "14",
-          "name": "Engr. Mark Lester B. Tallungan",
-          "role": "PT",
-          "score": 20.0005,
-          "usage_ratio": 0.5
-        },
-        {
-          "fi": 14,
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
-          "role": "PT",
-          "score": -14.9991,
-          "usage_ratio": 0.5
-        }
-      ],
-      "tagged_faculty": [
-        {
-          "faculty_id": "14",
-          "name": "Engr. Mark Lester B. Tallungan",
-          "priority": 2,
-          "fi": 11,
-          "in_candidates": true,
-          "rejection": null,
-          "load": 6.0,
-          "max_units": 12.0,
-          "preps": [
-            "4026|AR A225",
-            "4037|AR A225",
-            "4075|ENG MATH 2",
-            "4142|CE 329"
-          ],
-          "preps_units": 6.0
-        },
-        {
-          "faculty_id": "16",
-          "name": "Engr. Joy B. Pimentel",
-          "priority": 3,
-          "fi": 13,
-          "in_candidates": true,
-          "rejection": null,
-          "load": 17.0,
-          "max_units": 24.0,
-          "preps": [
-            "4064|ENG MATH 1",
-            "4065|ENG MATH 2",
-            "4074|ENG MATH 1",
-            "4128|CE 224",
-            "4142|CE 329",
-            "4169|ENG PHYS 1"
-          ],
-          "preps_units": 4.0
-        },
-        {
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
-          "priority": 3,
-          "fi": 14,
-          "in_candidates": true,
-          "rejection": null,
-          "load": 6.0,
-          "max_units": 12.0,
-          "preps": [
-            "4065|ENG MATH 2",
-            "4075|ENG MATH 2",
-            "4142|CE 329"
-          ],
-          "preps_units": 3.0
-        },
-        {
-          "faculty_id": "18",
-          "priority": 1,
-          "status": "NOT_IN_GA_POOL"
-        }
-      ]
     },
     {
       "code": "4172",
@@ -6554,15 +6395,15 @@
       "dept_id": 3,
       "units": 3.0,
       "pass_used": "A",
-      "candidate_count": 4,
+      "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 23,
+        "fi": 24,
         "faculty_id": "27",
         "name": "Engr. Joy Riana L. Agrimor",
         "role": "FT",
         "dept_id": 2,
-        "score": 83.7507,
+        "score": 83.7504,
         "usage_ratio": 0.4583,
         "load_after": 14.0,
         "preps_before": [
@@ -6577,27 +6418,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 23,
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 83.7507,
+          "score": 83.7504,
           "usage_ratio": 0.4583
         },
         {
-          "fi": 15,
+          "fi": 16,
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "role": "PT",
-          "score": 17.2503,
+          "score": 17.2506,
           "usage_ratio": 0.25
         },
         {
-          "fi": 14,
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
+          "fi": 21,
+          "faculty_id": "24",
+          "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 1.201,
+          "score": 1.2003,
           "usage_ratio": 1.0
         }
       ],
@@ -6606,7 +6447,7 @@
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "priority": 3,
-          "fi": 15,
+          "fi": 16,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -6621,7 +6462,7 @@
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "priority": 2,
-          "fi": 23,
+          "fi": 24,
           "in_candidates": true,
           "rejection": null,
           "load": 11.0,
@@ -6649,12 +6490,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 47,
+        "fi": 48,
         "faculty_id": "51",
         "name": "Mr. Scott Dominic T. Bautista",
         "role": "PT",
         "dept_id": 6,
-        "score": 40.0003,
+        "score": 40.0002,
         "usage_ratio": 0.25,
         "load_after": 6.0,
         "preps_before": [
@@ -6665,19 +6506,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 47,
+          "fi": 48,
           "faculty_id": "51",
           "name": "Mr. Scott Dominic T. Bautista",
           "role": "PT",
-          "score": 40.0003,
+          "score": 40.0002,
           "usage_ratio": 0.25
         },
         {
-          "fi": 43,
+          "fi": 44,
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "role": "PT",
-          "score": 38.7001,
+          "score": 38.7006,
           "usage_ratio": 1.0
         }
       ],
@@ -6686,7 +6527,7 @@
           "faculty_id": "51",
           "name": "Mr. Scott Dominic T. Bautista",
           "priority": 2,
-          "fi": 47,
+          "fi": 48,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -6707,15 +6548,15 @@
       "dept_id": 4,
       "units": 3.0,
       "pass_used": "A",
-      "candidate_count": 3,
+      "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 15,
+        "fi": 16,
         "faculty_id": "19",
         "name": "Engr. John Russel S. Miguel",
         "role": "PT",
         "dept_id": 2,
-        "score": 38.7004,
+        "score": 38.7007,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -6726,27 +6567,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 15,
+          "fi": 16,
           "faculty_id": "19",
           "name": "Engr. John Russel S. Miguel",
           "role": "PT",
-          "score": 38.7004,
+          "score": 38.7007,
           "usage_ratio": 1.0
         },
         {
-          "fi": 20,
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 1.2004,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 14,
-          "faculty_id": "17",
-          "name": "Engr. Rovic Jay S. Pi\u00f1on",
-          "role": "PT",
-          "score": 1.2002,
+          "score": 1.2005,
           "usage_ratio": 1.0
         }
       ],
@@ -6763,12 +6596,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 43,
+        "fi": 44,
         "faculty_id": "47",
         "name": "Mr. JC Ron Miguel D. James",
         "role": "PT",
         "dept_id": 6,
-        "score": 40.0006,
+        "score": 40.0009,
         "usage_ratio": 0.25,
         "load_after": 6.0,
         "preps_before": [
@@ -6780,11 +6613,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 43,
+          "fi": 44,
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "role": "PT",
-          "score": 40.0006,
+          "score": 40.0009,
           "usage_ratio": 0.25
         }
       ],
@@ -6793,7 +6626,7 @@
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "priority": 2,
-          "fi": 43,
+          "fi": 44,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -6818,12 +6651,12 @@
       "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 38,
+        "fi": 39,
         "faculty_id": "42",
         "name": "Mr. Kim Paolo C. Salgado",
         "role": "FT",
         "dept_id": 6,
-        "score": 152.5005,
+        "score": 152.5003,
         "usage_ratio": 0.0,
         "load_after": 3.0,
         "preps_before": [
@@ -6834,27 +6667,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 38,
+          "fi": 39,
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "role": "FT",
-          "score": 152.5005,
+          "score": 152.5003,
           "usage_ratio": 0.0
         },
         {
-          "fi": 45,
+          "fi": 46,
           "faculty_id": "49",
           "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
-          "score": 132.45,
+          "score": 132.4502,
           "usage_ratio": 1.0
         },
         {
-          "fi": 41,
+          "fi": 42,
           "faculty_id": "45",
           "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 129.7502,
+          "score": 129.751,
           "usage_ratio": 0.0
         }
       ],
@@ -6863,7 +6696,7 @@
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "priority": 2,
-          "fi": 38,
+          "fi": 39,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -6878,7 +6711,7 @@
           "faculty_id": "45",
           "name": "Mr. Ferdinand D. Molina",
           "priority": 3,
-          "fi": 41,
+          "fi": 42,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -6902,12 +6735,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 26,
+        "fi": 27,
         "faculty_id": "30",
         "name": "Engr. Kenosis John B. Wajchina",
         "role": "FT",
         "dept_id": 3,
-        "score": 143.0008,
+        "score": 143.0007,
         "usage_ratio": 1.0,
         "load_after": 7.0,
         "preps_before": [
@@ -6918,11 +6751,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 26,
+          "fi": 27,
           "faculty_id": "30",
           "name": "Engr. Kenosis John B. Wajchina",
           "role": "FT",
-          "score": 143.0008,
+          "score": 143.0007,
           "usage_ratio": 1.0
         },
         {
@@ -6930,7 +6763,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -61.9995,
+          "score": -62.0,
           "usage_ratio": 1.0
         }
       ],
@@ -6947,12 +6780,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 35,
+        "fi": 36,
         "faculty_id": "39",
         "name": "Engr. Jessica B. Castillo",
         "role": "FT",
         "dept_id": 5,
-        "score": 51.2003,
+        "score": 51.2,
         "usage_ratio": 1.0,
         "load_after": 19.0,
         "preps_before": [
@@ -6966,11 +6799,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 35,
+          "fi": 36,
           "faculty_id": "39",
           "name": "Engr. Jessica B. Castillo",
           "role": "FT",
-          "score": 51.2003,
+          "score": 51.2,
           "usage_ratio": 1.0
         },
         {
@@ -6978,7 +6811,7 @@
           "faculty_id": "1",
           "name": "Engr. Michelle Kyra S. Bautista",
           "role": "Department Head",
-          "score": 1.2008,
+          "score": 1.2005,
           "usage_ratio": 1.0
         }
       ],
@@ -6995,12 +6828,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 38,
+        "fi": 39,
         "faculty_id": "42",
         "name": "Mr. Kim Paolo C. Salgado",
         "role": "FT",
         "dept_id": 6,
-        "score": 149.2509,
+        "score": 149.251,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -7011,11 +6844,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 38,
+          "fi": 39,
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "role": "FT",
-          "score": 149.2509,
+          "score": 149.251,
           "usage_ratio": 1.0
         }
       ],
@@ -7032,12 +6865,12 @@
       "candidate_count": 4,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 42,
+        "fi": 43,
         "faculty_id": "46",
         "name": "Mr. June Delmar A. Labitoria",
         "role": "PT",
         "dept_id": 6,
-        "score": 55.5003,
+        "score": 55.5009,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -7049,27 +6882,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 42,
+          "fi": 43,
           "faculty_id": "46",
           "name": "Mr. June Delmar A. Labitoria",
           "role": "PT",
-          "score": 55.5003,
+          "score": 55.5009,
           "usage_ratio": 1.0
         },
         {
-          "fi": 44,
+          "fi": 45,
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "role": "Graduate Program Head",
-          "score": 31.2501,
+          "score": 31.2509,
           "usage_ratio": 0.125
         },
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
-          "score": 20.0005,
+          "score": 20.0001,
           "usage_ratio": 0.5
         }
       ],
@@ -7078,7 +6911,7 @@
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "priority": 2,
-          "fi": 39,
+          "fi": 40,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -7094,7 +6927,7 @@
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "priority": 2,
-          "fi": 44,
+          "fi": 45,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -7119,12 +6952,12 @@
       "candidate_count": 10,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 41,
+        "fi": 42,
         "faculty_id": "45",
         "name": "Mr. Ferdinand D. Molina",
         "role": "FT",
         "dept_id": 6,
-        "score": 120.0001,
+        "score": 120.0008,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -7135,27 +6968,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 41,
+          "fi": 42,
           "faculty_id": "45",
           "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 120.0001,
+          "score": 120.0008,
           "usage_ratio": 1.0
         },
         {
-          "fi": 40,
+          "fi": 46,
+          "faculty_id": "49",
+          "name": "Mrs. Milagros S. Constantino",
+          "role": "FT",
+          "score": 101.251,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 41,
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
           "score": 101.2509,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 45,
-          "faculty_id": "49",
-          "name": "Mrs. Milagros S. Constantino",
-          "role": "FT",
-          "score": 101.2508,
           "usage_ratio": 1.0
         }
       ],
@@ -7172,12 +7005,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 38,
+        "fi": 39,
         "faculty_id": "42",
         "name": "Mr. Kim Paolo C. Salgado",
         "role": "FT",
         "dept_id": 6,
-        "score": 97.5008,
+        "score": 97.5007,
         "usage_ratio": 0.25,
         "load_after": 9.0,
         "preps_before": [
@@ -7189,11 +7022,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 38,
+          "fi": 39,
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "role": "FT",
-          "score": 97.5008,
+          "score": 97.5007,
           "usage_ratio": 0.25
         }
       ],
@@ -7202,7 +7035,7 @@
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "priority": 3,
-          "fi": 38,
+          "fi": 39,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -7227,41 +7060,42 @@
       "candidate_count": 10,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 45,
-        "faculty_id": "49",
-        "name": "Mrs. Milagros S. Constantino",
+        "fi": 42,
+        "faculty_id": "45",
+        "name": "Mr. Ferdinand D. Molina",
         "role": "FT",
         "dept_id": 6,
-        "score": 101.2509,
+        "score": 101.2504,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4757|SP-101",
-          "4758|MRCS101"
+          "4192|CPE 221",
+          "4703|PELECT1",
+          "4754|CS-106"
         ],
         "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 45,
-          "faculty_id": "49",
-          "name": "Mrs. Milagros S. Constantino",
+          "fi": 42,
+          "faculty_id": "45",
+          "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 101.2509,
+          "score": 101.2504,
           "usage_ratio": 1.0
         },
         {
           "fi": 41,
-          "faculty_id": "45",
-          "name": "Mr. Ferdinand D. Molina",
+          "faculty_id": "44",
+          "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
-          "score": 101.2502,
+          "score": 101.2504,
           "usage_ratio": 1.0
         },
         {
-          "fi": 40,
-          "faculty_id": "44",
-          "name": "Miss Krby Zyryll G. Perez",
+          "fi": 46,
+          "faculty_id": "49",
+          "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
           "score": 101.2502,
           "usage_ratio": 1.0
@@ -7280,12 +7114,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 44,
+        "fi": 45,
         "faculty_id": "48",
         "name": "Dr. Adonis V. Garces",
         "role": "Graduate Program Head",
         "dept_id": 6,
-        "score": 12.45,
+        "score": 12.4508,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -7297,19 +7131,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 44,
+          "fi": 45,
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "role": "Graduate Program Head",
-          "score": 12.45,
+          "score": 12.4508,
           "usage_ratio": 1.0
         },
         {
-          "fi": 47,
+          "fi": 48,
           "faculty_id": "51",
           "name": "Mr. Scott Dominic T. Bautista",
           "role": "PT",
-          "score": 1.2007,
+          "score": 1.2009,
           "usage_ratio": 1.0
         }
       ],
@@ -7326,12 +7160,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 28,
+        "fi": 29,
         "faculty_id": "32",
         "name": "Ms. Rocel Audrey J. Batara",
         "role": "Department Head",
         "dept_id": 6,
-        "score": -28.7995,
+        "score": -28.7992,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
@@ -7344,11 +7178,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 28,
+          "fi": 29,
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "role": "Department Head",
-          "score": -28.7995,
+          "score": -28.7992,
           "usage_ratio": 1.0
         }
       ],
@@ -7366,43 +7200,43 @@
       "result": "ASSIGNED",
       "winner": {
         "fi": 41,
-        "faculty_id": "45",
-        "name": "Mr. Ferdinand D. Molina",
+        "faculty_id": "44",
+        "name": "Miss Krby Zyryll G. Perez",
         "role": "FT",
         "dept_id": 6,
-        "score": 101.2509,
+        "score": 101.2505,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4192|CPE 221",
-          "4703|PELECT1",
-          "4754|CS-106"
+          "4218|CPE ELECT. 2",
+          "4219|CPE 5A5",
+          "4740|CC105"
         ],
         "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
           "fi": 41,
-          "faculty_id": "45",
-          "name": "Mr. Ferdinand D. Molina",
-          "role": "FT",
-          "score": 101.2509,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 40,
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
-          "score": 101.2507,
+          "score": 101.2505,
           "usage_ratio": 1.0
         },
         {
-          "fi": 45,
+          "fi": 46,
           "faculty_id": "49",
           "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
-          "score": 82.5004,
+          "score": 101.2501,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 42,
+          "faculty_id": "45",
+          "name": "Mr. Ferdinand D. Molina",
+          "role": "FT",
+          "score": 82.5003,
           "usage_ratio": 1.0
         }
       ],
@@ -7411,7 +7245,7 @@
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "priority": 3,
-          "fi": 44,
+          "fi": 45,
           "in_candidates": false,
           "rejection": "time_conflict",
           "load": 6.0,
@@ -7437,12 +7271,12 @@
       "candidate_count": 7,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 53,
+        "fi": 54,
         "faculty_id": "57",
         "name": "Mr. Mark Paul G. Camonayan",
         "role": "FT",
         "dept_id": 7,
-        "score": 120.0,
+        "score": 120.0009,
         "usage_ratio": 1.0,
         "load_after": 3.0,
         "preps_before": [
@@ -7453,27 +7287,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 53,
+          "fi": 54,
           "faculty_id": "57",
           "name": "Mr. Mark Paul G. Camonayan",
           "role": "FT",
-          "score": 120.0,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 51,
-          "faculty_id": "55",
-          "name": "Mrs. Marjorie M. Lucquiao",
-          "role": "FT",
-          "score": 101.2508,
+          "score": 120.0009,
           "usage_ratio": 1.0
         },
         {
           "fi": 52,
+          "faculty_id": "55",
+          "name": "Mrs. Marjorie M. Lucquiao",
+          "role": "FT",
+          "score": 101.2509,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 53,
           "faculty_id": "56",
           "name": "Mrs. Rachelle Joy T. Lazo",
           "role": "FT",
-          "score": 101.2502,
+          "score": 101.2501,
           "usage_ratio": 1.0
         }
       ],
@@ -7490,12 +7324,12 @@
       "candidate_count": 7,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 51,
+        "fi": 52,
         "faculty_id": "55",
         "name": "Mrs. Marjorie M. Lucquiao",
         "role": "FT",
         "dept_id": 7,
-        "score": 101.2507,
+        "score": 101.2508,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -7507,25 +7341,25 @@
       },
       "top3_candidates": [
         {
-          "fi": 51,
+          "fi": 52,
           "faculty_id": "55",
           "name": "Mrs. Marjorie M. Lucquiao",
           "role": "FT",
-          "score": 101.2507,
+          "score": 101.2508,
           "usage_ratio": 1.0
         },
         {
           "fi": 53,
-          "faculty_id": "57",
-          "name": "Mr. Mark Paul G. Camonayan",
+          "faculty_id": "56",
+          "name": "Mrs. Rachelle Joy T. Lazo",
           "role": "FT",
-          "score": 101.2506,
+          "score": 101.2504,
           "usage_ratio": 1.0
         },
         {
-          "fi": 52,
-          "faculty_id": "56",
-          "name": "Mrs. Rachelle Joy T. Lazo",
+          "fi": 54,
+          "faculty_id": "57",
+          "name": "Mr. Mark Paul G. Camonayan",
           "role": "FT",
           "score": 101.2504,
           "usage_ratio": 1.0
@@ -7544,12 +7378,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 26,
+        "fi": 27,
         "faculty_id": "30",
         "name": "Engr. Kenosis John B. Wajchina",
         "role": "FT",
         "dept_id": 3,
-        "score": 107.4505,
+        "score": 107.4502,
         "usage_ratio": 1.0,
         "load_after": 10.0,
         "preps_before": [
@@ -7561,11 +7395,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 26,
+          "fi": 27,
           "faculty_id": "30",
           "name": "Engr. Kenosis John B. Wajchina",
           "role": "FT",
-          "score": 107.4505,
+          "score": 107.4502,
           "usage_ratio": 1.0
         },
         {
@@ -7573,7 +7407,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -78.799,
+          "score": -78.7998,
           "usage_ratio": 1.0
         }
       ],
@@ -7590,44 +7424,43 @@
       "candidate_count": 8,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 40,
-        "faculty_id": "44",
-        "name": "Miss Krby Zyryll G. Perez",
+        "fi": 46,
+        "faculty_id": "49",
+        "name": "Mrs. Milagros S. Constantino",
         "role": "FT",
         "dept_id": 6,
-        "score": 101.2507,
+        "score": 101.25,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4218|CPE ELECT. 2",
-          "4219|CPE 5A5",
-          "4740|CC105"
+          "4757|SP-101",
+          "4758|MRCS101"
         ],
         "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 40,
-          "faculty_id": "44",
-          "name": "Miss Krby Zyryll G. Perez",
+          "fi": 46,
+          "faculty_id": "49",
+          "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
-          "score": 101.2507,
+          "score": 101.25,
           "usage_ratio": 1.0
         },
         {
           "fi": 41,
-          "faculty_id": "45",
-          "name": "Mr. Ferdinand D. Molina",
+          "faculty_id": "44",
+          "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
           "score": 82.5009,
           "usage_ratio": 1.0
         },
         {
-          "fi": 45,
-          "faculty_id": "49",
-          "name": "Mrs. Milagros S. Constantino",
+          "fi": 42,
+          "faculty_id": "45",
+          "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 82.5005,
+          "score": 82.5001,
           "usage_ratio": 1.0
         }
       ],
@@ -7641,40 +7474,31 @@
       "dept_id": 6,
       "units": 3.0,
       "pass_used": "A",
-      "candidate_count": 2,
+      "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 40,
-        "faculty_id": "44",
-        "name": "Miss Krby Zyryll G. Perez",
-        "role": "FT",
+        "fi": 47,
+        "faculty_id": "50",
+        "name": "Mrs. Essel T. Ca\u00f1aberal",
+        "role": "Director, CICT",
         "dept_id": 6,
-        "score": 130.5,
-        "usage_ratio": 1.0,
-        "load_after": 9.0,
+        "score": 12.5,
+        "usage_ratio": 0.25,
+        "load_after": 6.0,
         "preps_before": [
-          "4218|CPE ELECT. 2",
-          "4219|CPE 5A5",
-          "4730|PELECT3",
-          "4740|CC105"
+          "4252|ECE A422",
+          "4726|NET101",
+          "4732|CC105"
         ],
-        "preps_units_before": 6.0
+        "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 40,
-          "faculty_id": "44",
-          "name": "Miss Krby Zyryll G. Perez",
-          "role": "FT",
-          "score": 130.5,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 46,
+          "fi": 47,
           "faculty_id": "50",
           "name": "Mrs. Essel T. Ca\u00f1aberal",
           "role": "Director, CICT",
-          "score": 12.5005,
+          "score": 12.5,
           "usage_ratio": 0.25
         }
       ],
@@ -7683,7 +7507,7 @@
           "faculty_id": "50",
           "name": "Mrs. Essel T. Ca\u00f1aberal",
           "priority": 2,
-          "fi": 46,
+          "fi": 47,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -7708,14 +7532,14 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 46,
+        "fi": 47,
         "faculty_id": "50",
         "name": "Mrs. Essel T. Ca\u00f1aberal",
         "role": "Director, CICT",
         "dept_id": 6,
-        "score": 10.5002,
+        "score": -26.9993,
         "usage_ratio": 1.0,
-        "load_after": 6.0,
+        "load_after": 9.0,
         "preps_before": [
           "4252|ECE A422",
           "4726|NET101",
@@ -7725,11 +7549,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 46,
+          "fi": 47,
           "faculty_id": "50",
           "name": "Mrs. Essel T. Ca\u00f1aberal",
           "role": "Director, CICT",
-          "score": 10.5002,
+          "score": -26.9993,
           "usage_ratio": 1.0
         }
       ],
@@ -7746,12 +7570,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 26,
+        "fi": 27,
         "faculty_id": "30",
         "name": "Engr. Kenosis John B. Wajchina",
         "role": "FT",
         "dept_id": 3,
-        "score": 88.7001,
+        "score": 88.7004,
         "usage_ratio": 1.0,
         "load_after": 13.0,
         "preps_before": [
@@ -7764,11 +7588,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 26,
+          "fi": 27,
           "faculty_id": "30",
           "name": "Engr. Kenosis John B. Wajchina",
           "role": "FT",
-          "score": 88.7001,
+          "score": 88.7004,
           "usage_ratio": 1.0
         },
         {
@@ -7790,19 +7614,19 @@
       "dept_id": 6,
       "units": 3.0,
       "pass_used": "B",
-      "candidate_count": 3,
+      "candidate_count": 4,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 45,
+        "fi": 46,
         "faculty_id": "49",
         "name": "Mrs. Milagros S. Constantino",
         "role": "FT",
         "dept_id": 6,
-        "score": 82.5006,
+        "score": 82.5007,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
-          "4711|PELECT1",
+          "4730|PELECT3",
           "4757|SP-101",
           "4758|MRCS101"
         ],
@@ -7810,27 +7634,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 45,
+          "fi": 46,
           "faculty_id": "49",
           "name": "Mrs. Milagros S. Constantino",
           "role": "FT",
-          "score": 82.5006,
+          "score": 82.5007,
           "usage_ratio": 1.0
         },
         {
-          "fi": 38,
-          "faculty_id": "42",
-          "name": "Mr. Kim Paolo C. Salgado",
+          "fi": 42,
+          "faculty_id": "45",
+          "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 63.7508,
+          "score": 82.5001,
           "usage_ratio": 1.0
         },
         {
           "fi": 39,
-          "faculty_id": "43",
-          "name": "Mr. IC Ramzil P. Ruiz",
-          "role": "PT",
-          "score": -29.9992,
+          "faculty_id": "42",
+          "name": "Mr. Kim Paolo C. Salgado",
+          "role": "FT",
+          "score": 63.7503,
           "usage_ratio": 1.0
         }
       ],
@@ -7847,31 +7671,30 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 40,
+        "fi": 41,
         "faculty_id": "44",
         "name": "Miss Krby Zyryll G. Perez",
         "role": "FT",
         "dept_id": 6,
-        "score": 113.7503,
-        "usage_ratio": 0.375,
-        "load_after": 12.0,
+        "score": 132.5008,
+        "usage_ratio": 0.25,
+        "load_after": 9.0,
         "preps_before": [
           "4218|CPE ELECT. 2",
           "4219|CPE 5A5",
-          "4730|PELECT3",
-          "4732|CC105",
+          "4721|DS-102",
           "4740|CC105"
         ],
-        "preps_units_before": 9.0
+        "preps_units_before": 6.0
       },
       "top3_candidates": [
         {
-          "fi": 40,
+          "fi": 41,
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
-          "score": 113.7503,
-          "usage_ratio": 0.375
+          "score": 132.5008,
+          "usage_ratio": 0.25
         }
       ],
       "tagged_faculty": [
@@ -7879,19 +7702,18 @@
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "priority": 2,
-          "fi": 40,
+          "fi": 41,
           "in_candidates": true,
           "rejection": null,
-          "load": 9.0,
+          "load": 6.0,
           "max_units": 24.0,
           "preps": [
             "4218|CPE ELECT. 2",
             "4219|CPE 5A5",
-            "4730|PELECT3",
-            "4732|CC105",
+            "4721|DS-102",
             "4740|CC105"
           ],
-          "preps_units": 9.0
+          "preps_units": 6.0
         }
       ]
     },
@@ -7906,31 +7728,30 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 40,
+        "fi": 41,
         "faculty_id": "44",
         "name": "Miss Krby Zyryll G. Perez",
         "role": "FT",
         "dept_id": 6,
-        "score": 77.5001,
-        "usage_ratio": 0.5,
-        "load_after": 15.0,
+        "score": 96.2502,
+        "usage_ratio": 0.375,
+        "load_after": 12.0,
         "preps_before": [
           "4218|CPE ELECT. 2",
           "4219|CPE 5A5",
-          "4730|PELECT3",
-          "4732|CC105",
+          "4721|DS-102",
           "4740|CC105"
         ],
-        "preps_units_before": 9.0
+        "preps_units_before": 6.0
       },
       "top3_candidates": [
         {
-          "fi": 40,
+          "fi": 41,
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "role": "FT",
-          "score": 77.5001,
-          "usage_ratio": 0.5
+          "score": 96.2502,
+          "usage_ratio": 0.375
         }
       ],
       "tagged_faculty": [
@@ -7938,19 +7759,18 @@
           "faculty_id": "44",
           "name": "Miss Krby Zyryll G. Perez",
           "priority": 2,
-          "fi": 40,
+          "fi": 41,
           "in_candidates": true,
           "rejection": null,
-          "load": 12.0,
+          "load": 9.0,
           "max_units": 24.0,
           "preps": [
             "4218|CPE ELECT. 2",
             "4219|CPE 5A5",
-            "4730|PELECT3",
-            "4732|CC105",
+            "4721|DS-102",
             "4740|CC105"
           ],
-          "preps_units": 9.0
+          "preps_units": 6.0
         }
       ]
     },
@@ -7965,12 +7785,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 26,
+        "fi": 27,
         "faculty_id": "30",
         "name": "Engr. Kenosis John B. Wajchina",
         "role": "FT",
         "dept_id": 3,
-        "score": 69.951,
+        "score": 69.9504,
         "usage_ratio": 1.0,
         "load_after": 16.0,
         "preps_before": [
@@ -7984,11 +7804,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 26,
+          "fi": 27,
           "faculty_id": "30",
           "name": "Engr. Kenosis John B. Wajchina",
           "role": "FT",
-          "score": 69.951,
+          "score": 69.9504,
           "usage_ratio": 1.0
         },
         {
@@ -7996,7 +7816,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -78.7993,
+          "score": -78.8,
           "usage_ratio": 1.0
         }
       ],
@@ -8013,7 +7833,7 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 48,
+        "fi": 49,
         "faculty_id": "52",
         "name": "Miss Rhodora M. Aquino",
         "role": "Research Center Statistician",
@@ -8030,7 +7850,7 @@
       },
       "top3_candidates": [
         {
-          "fi": 48,
+          "fi": 49,
           "faculty_id": "52",
           "name": "Miss Rhodora M. Aquino",
           "role": "Research Center Statistician",
@@ -8043,7 +7863,7 @@
           "faculty_id": "52",
           "name": "Miss Rhodora M. Aquino",
           "priority": 2,
-          "fi": 48,
+          "fi": 49,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -8068,12 +7888,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 54,
+        "fi": 55,
         "faculty_id": "58",
         "name": "Mr. David A. Cabonero",
         "role": "Director, ULRC",
         "dept_id": 7,
-        "score": 50.0001,
+        "score": 50.0002,
         "usage_ratio": 0.0,
         "load_after": 3.0,
         "preps_before": [
@@ -8084,11 +7904,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 54,
+          "fi": 55,
           "faculty_id": "58",
           "name": "Mr. David A. Cabonero",
           "role": "Director, ULRC",
-          "score": 50.0001,
+          "score": 50.0002,
           "usage_ratio": 0.0
         }
       ],
@@ -8097,7 +7917,7 @@
           "faculty_id": "58",
           "name": "Mr. David A. Cabonero",
           "priority": 2,
-          "fi": 54,
+          "fi": 55,
           "in_candidates": true,
           "rejection": null,
           "load": 0.0,
@@ -8121,12 +7941,12 @@
       "candidate_count": 5,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 53,
+        "fi": 54,
         "faculty_id": "57",
         "name": "Mr. Mark Paul G. Camonayan",
         "role": "FT",
         "dept_id": 7,
-        "score": 101.2508,
+        "score": 101.2506,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
@@ -8138,27 +7958,27 @@
       },
       "top3_candidates": [
         {
-          "fi": 53,
+          "fi": 54,
           "faculty_id": "57",
           "name": "Mr. Mark Paul G. Camonayan",
           "role": "FT",
-          "score": 101.2508,
+          "score": 101.2506,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 53,
+          "faculty_id": "56",
+          "name": "Mrs. Rachelle Joy T. Lazo",
+          "role": "FT",
+          "score": 101.2504,
           "usage_ratio": 1.0
         },
         {
           "fi": 52,
-          "faculty_id": "56",
-          "name": "Mrs. Rachelle Joy T. Lazo",
-          "role": "FT",
-          "score": 101.25,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 51,
           "faculty_id": "55",
           "name": "Mrs. Marjorie M. Lucquiao",
           "role": "FT",
-          "score": 82.5009,
+          "score": 82.5007,
           "usage_ratio": 1.0
         }
       ],
@@ -8180,7 +8000,7 @@
         "name": "Engr. Paulina A. Marzan",
         "role": "Department Head",
         "dept_id": 3,
-        "score": -78.8,
+        "score": -78.799,
         "usage_ratio": 1.0,
         "load_after": 14.0,
         "preps_before": [
@@ -8197,7 +8017,7 @@
           "faculty_id": "11",
           "name": "Engr. Paulina A. Marzan",
           "role": "Department Head",
-          "score": -78.8,
+          "score": -78.799,
           "usage_ratio": 1.0
         }
       ],
@@ -8214,37 +8034,37 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 41,
+        "fi": 42,
         "faculty_id": "45",
         "name": "Mr. Ferdinand D. Molina",
         "role": "FT",
         "dept_id": 6,
-        "score": 130.5005,
+        "score": 130.5,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
           "4192|CPE 221",
           "4703|PELECT1",
-          "4721|DS-102",
+          "4711|PELECT1",
           "4754|CS-106"
         ],
         "preps_units_before": 6.0
       },
       "top3_candidates": [
         {
-          "fi": 41,
+          "fi": 42,
           "faculty_id": "45",
           "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
-          "score": 130.5005,
+          "score": 130.5,
           "usage_ratio": 1.0
         },
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
-          "score": 18.0001,
+          "score": 18.0005,
           "usage_ratio": 1.0
         }
       ],
@@ -8261,12 +8081,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 43,
+        "fi": 44,
         "faculty_id": "47",
         "name": "Mr. JC Ron Miguel D. James",
         "role": "PT",
         "dept_id": 6,
-        "score": -14.9991,
+        "score": -14.9999,
         "usage_ratio": 0.5,
         "load_after": 9.0,
         "preps_before": [
@@ -8278,11 +8098,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 43,
+          "fi": 44,
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "role": "PT",
-          "score": -14.9991,
+          "score": -14.9999,
           "usage_ratio": 0.5
         }
       ],
@@ -8291,7 +8111,7 @@
           "faculty_id": "47",
           "name": "Mr. JC Ron Miguel D. James",
           "priority": 3,
-          "fi": 43,
+          "fi": 44,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -8316,33 +8136,24 @@
       "candidate_count": 7,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 45,
-        "faculty_id": "49",
-        "name": "Mrs. Milagros S. Constantino",
+        "fi": 39,
+        "faculty_id": "42",
+        "name": "Mr. Kim Paolo C. Salgado",
         "role": "FT",
         "dept_id": 6,
         "score": 63.7507,
         "usage_ratio": 1.0,
         "load_after": 12.0,
         "preps_before": [
-          "4711|PELECT1",
-          "4737|PELECT 3",
-          "4757|SP-101",
-          "4758|MRCS101"
+          "4192|CPE 221",
+          "4700|HCI-101",
+          "4708|HCI101"
         ],
-        "preps_units_before": 9.0
+        "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 45,
-          "faculty_id": "49",
-          "name": "Mrs. Milagros S. Constantino",
-          "role": "FT",
-          "score": 63.7507,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 38,
+          "fi": 39,
           "faculty_id": "42",
           "name": "Mr. Kim Paolo C. Salgado",
           "role": "FT",
@@ -8350,7 +8161,15 @@
           "usage_ratio": 1.0
         },
         {
-          "fi": 41,
+          "fi": 46,
+          "faculty_id": "49",
+          "name": "Mrs. Milagros S. Constantino",
+          "role": "FT",
+          "score": 63.7506,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 42,
           "faculty_id": "45",
           "name": "Mr. Ferdinand D. Molina",
           "role": "FT",
@@ -8371,12 +8190,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 52,
+        "fi": 53,
         "faculty_id": "56",
         "name": "Mrs. Rachelle Joy T. Lazo",
         "role": "FT",
         "dept_id": 7,
-        "score": 151.251,
+        "score": 151.2505,
         "usage_ratio": 0.125,
         "load_after": 6.0,
         "preps_before": [
@@ -8388,11 +8207,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 52,
+          "fi": 53,
           "faculty_id": "56",
           "name": "Mrs. Rachelle Joy T. Lazo",
           "role": "FT",
-          "score": 151.251,
+          "score": 151.2505,
           "usage_ratio": 0.125
         }
       ],
@@ -8401,7 +8220,7 @@
           "faculty_id": "56",
           "name": "Mrs. Rachelle Joy T. Lazo",
           "priority": 2,
-          "fi": 52,
+          "fi": 53,
           "in_candidates": true,
           "rejection": null,
           "load": 3.0,
@@ -8426,12 +8245,12 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 42,
+        "fi": 43,
         "faculty_id": "46",
         "name": "Mr. June Delmar A. Labitoria",
         "role": "PT",
         "dept_id": 6,
-        "score": 2.5008,
+        "score": 2.5002,
         "usage_ratio": 0.5,
         "load_after": 9.0,
         "preps_before": [
@@ -8444,19 +8263,19 @@
       },
       "top3_candidates": [
         {
-          "fi": 42,
+          "fi": 43,
           "faculty_id": "46",
           "name": "Mr. June Delmar A. Labitoria",
           "role": "PT",
-          "score": 2.5008,
+          "score": 2.5002,
           "usage_ratio": 0.5
         },
         {
-          "fi": 28,
+          "fi": 29,
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "role": "Department Head",
-          "score": -57.4992,
+          "score": -57.4997,
           "usage_ratio": 0.6
         }
       ],
@@ -8465,7 +8284,7 @@
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "priority": 2,
-          "fi": 28,
+          "fi": 29,
           "in_candidates": true,
           "rejection": null,
           "load": 9.0,
@@ -8483,7 +8302,7 @@
           "faculty_id": "46",
           "name": "Mr. June Delmar A. Labitoria",
           "priority": 2,
-          "fi": 42,
+          "fi": 43,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
@@ -8509,12 +8328,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 39,
+        "fi": 40,
         "faculty_id": "43",
         "name": "Mr. IC Ramzil P. Ruiz",
         "role": "PT",
         "dept_id": 6,
-        "score": 1.2002,
+        "score": 1.2009,
         "usage_ratio": 1.0,
         "load_after": 9.0,
         "preps_before": [
@@ -8526,11 +8345,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 39,
+          "fi": 40,
           "faculty_id": "43",
           "name": "Mr. IC Ramzil P. Ruiz",
           "role": "PT",
-          "score": 1.2002,
+          "score": 1.2009,
           "usage_ratio": 1.0
         }
       ],
@@ -8539,7 +8358,7 @@
           "faculty_id": "48",
           "name": "Dr. Adonis V. Garces",
           "priority": 1,
-          "fi": 44,
+          "fi": 45,
           "in_candidates": false,
           "rejection": "time_conflict",
           "load": 6.0,
@@ -8556,19 +8375,18 @@
           "faculty_id": "49",
           "name": "Mrs. Milagros S. Constantino",
           "priority": 2,
-          "fi": 45,
+          "fi": 46,
           "in_candidates": false,
           "rejection": "time_conflict",
-          "load": 12.0,
+          "load": 9.0,
           "max_units": 24.0,
           "preps": [
-            "4711|PELECT1",
+            "4730|PELECT3",
             "4737|PELECT 3",
-            "4752|CAP101",
             "4757|SP-101",
             "4758|MRCS101"
           ],
-          "preps_units": 12.0
+          "preps_units": 9.0
         }
       ]
     },
@@ -8583,12 +8401,12 @@
       "candidate_count": 1,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 28,
+        "fi": 29,
         "faculty_id": "32",
         "name": "Ms. Rocel Audrey J. Batara",
         "role": "Department Head",
         "dept_id": 6,
-        "score": -80.2496,
+        "score": -80.2499,
         "usage_ratio": 0.6,
         "load_after": 12.0,
         "preps_before": [
@@ -8602,11 +8420,11 @@
       },
       "top3_candidates": [
         {
-          "fi": 28,
+          "fi": 29,
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "role": "Department Head",
-          "score": -80.2496,
+          "score": -80.2499,
           "usage_ratio": 0.6
         }
       ],
@@ -8615,7 +8433,7 @@
           "faculty_id": "32",
           "name": "Ms. Rocel Audrey J. Batara",
           "priority": 3,
-          "fi": 28,
+          "fi": 29,
           "in_candidates": true,
           "rejection": null,
           "load": 9.0,
@@ -8647,7 +8465,7 @@
         "name": "Ar. Rino Franz U. Gumayagay",
         "role": "FT",
         "dept_id": 1,
-        "score": 101.2501,
+        "score": 101.2508,
         "usage_ratio": 0.4583,
         "load_after": 13.0,
         "preps_before": [
@@ -8666,7 +8484,7 @@
           "faculty_id": "6",
           "name": "Ar. Rino Franz U. Gumayagay",
           "role": "FT",
-          "score": 101.2501,
+          "score": 101.2508,
           "usage_ratio": 0.4583
         },
         {
@@ -8674,7 +8492,7 @@
           "faculty_id": "3",
           "name": "Ar. Nicole Robles",
           "role": "PT",
-          "score": 68.0007,
+          "score": 68.0008,
           "usage_ratio": 1.0
         }
       ],
@@ -8711,35 +8529,37 @@
       "candidate_count": 8,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 3,
-        "faculty_id": "5",
-        "name": "Ar. Joshua Eliz P. Hernandez",
-        "role": "PT",
+        "fi": 64,
+        "faculty_id": "134",
+        "name": "Ar. Romeo C. Romero Jr.",
+        "role": "FT",
         "dept_id": 1,
-        "score": 45.0004,
+        "score": 45.0005,
         "usage_ratio": 1.0,
-        "load_after": 2.0,
+        "load_after": 14.0,
         "preps_before": [
-          "4010|ARCHMATH 2",
-          "4024|AR A221"
+          "4024|AR A221",
+          "4042|AR A321",
+          "4048|AR A323",
+          "4050|AR A421"
         ],
-        "preps_units_before": 0.0
+        "preps_units_before": 9.0
       },
       "top3_candidates": [
+        {
+          "fi": 64,
+          "faculty_id": "134",
+          "name": "Ar. Romeo C. Romero Jr.",
+          "role": "FT",
+          "score": 45.0005,
+          "usage_ratio": 1.0
+        },
         {
           "fi": 3,
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 45.0004,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 63,
-          "faculty_id": "134",
-          "name": "Ar. Romeo C. Romero Jr.",
-          "role": "FT",
-          "score": 26.2509,
+          "score": 26.2501,
           "usage_ratio": 1.0
         },
         {
@@ -8747,7 +8567,7 @@
           "faculty_id": "3",
           "name": "Ar. Nicole Robles",
           "role": "PT",
-          "score": 20.0,
+          "score": 20.0006,
           "usage_ratio": 1.0
         }
       ],
@@ -8769,15 +8589,15 @@
         "name": "Ar. Joshua Eliz P. Hernandez",
         "role": "PT",
         "dept_id": 1,
-        "score": 32.5001,
+        "score": 26.25,
         "usage_ratio": 1.0,
-        "load_after": 4.0,
+        "load_after": 5.0,
         "preps_before": [
           "4010|ARCHMATH 2",
           "4024|AR A221",
-          "4039|AR A323"
+          "4035|AR A221"
         ],
-        "preps_units_before": 2.0
+        "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
@@ -8785,7 +8605,7 @@
           "faculty_id": "5",
           "name": "Ar. Joshua Eliz P. Hernandez",
           "role": "PT",
-          "score": 32.5001,
+          "score": 26.25,
           "usage_ratio": 1.0
         },
         {
@@ -8793,7 +8613,7 @@
           "faculty_id": "3",
           "name": "Ar. Nicole Robles",
           "role": "PT",
-          "score": 20.0003,
+          "score": 20.0009,
           "usage_ratio": 1.0
         },
         {
@@ -8810,19 +8630,19 @@
           "faculty_id": "134",
           "name": "Ar. Romeo C. Romero Jr.",
           "priority": 3,
-          "fi": 63,
+          "fi": 64,
           "in_candidates": false,
           "rejection": "consecutive_hours_exceeded_on_TUE",
-          "load": 15.0,
+          "load": 14.0,
           "max_units": 24.0,
           "preps": [
             "4024|AR A221",
-            "4035|AR A221",
+            "4039|AR A323",
             "4042|AR A321",
             "4048|AR A323",
             "4050|AR A421"
           ],
-          "preps_units": 12.0
+          "preps_units": 11.0
         }
       ]
     },
@@ -8837,36 +8657,36 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 21,
-        "faculty_id": "25",
-        "name": "Engr. Jim Frell B. Buenafe",
-        "role": "PT",
+        "fi": 10,
+        "faculty_id": "13",
+        "name": "Engr. Aurus Jodeo C. Tiam",
+        "role": "FT",
         "dept_id": 2,
-        "score": 107.0009,
+        "score": 119.5005,
         "usage_ratio": 1.0,
-        "load_after": 2.0,
+        "load_after": 12.0,
         "preps_before": [
-          "4084|ENG MATH 1",
+          "4143|CE 3212",
           "4147|HYDRO 322",
-          "4171|ENG MATH 1"
+          "4149|CE 3212"
         ],
-        "preps_units_before": 0.0
+        "preps_units_before": 6.0
       },
       "top3_candidates": [
-        {
-          "fi": 21,
-          "faculty_id": "25",
-          "name": "Engr. Jim Frell B. Buenafe",
-          "role": "PT",
-          "score": 107.0009,
-          "usage_ratio": 1.0
-        },
         {
           "fi": 10,
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 94.5009,
+          "score": 119.5005,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 22,
+          "faculty_id": "25",
+          "name": "Engr. Jim Frell B. Buenafe",
+          "role": "PT",
+          "score": 107.0009,
           "usage_ratio": 1.0
         }
       ],
@@ -8880,7 +8700,7 @@
       "dept_id": 2,
       "units": 2.0,
       "pass_used": "A",
-      "candidate_count": 2,
+      "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
         "fi": 10,
@@ -8888,16 +8708,16 @@
         "name": "Engr. Aurus Jodeo C. Tiam",
         "role": "FT",
         "dept_id": 2,
-        "score": 80.5003,
+        "score": 93.0007,
         "usage_ratio": 1.0,
-        "load_after": 16.0,
+        "load_after": 14.0,
         "preps_before": [
-          "4096|ENG PHYS 1",
+          "4115|HYDRO 1",
           "4143|CE 3212",
           "4147|HYDRO 322",
           "4149|CE 3212"
         ],
-        "preps_units_before": 10.0
+        "preps_units_before": 8.0
       },
       "top3_candidates": [
         {
@@ -8905,15 +8725,23 @@
           "faculty_id": "13",
           "name": "Engr. Aurus Jodeo C. Tiam",
           "role": "FT",
-          "score": 80.5003,
+          "score": 93.0007,
           "usage_ratio": 1.0
         },
         {
-          "fi": 20,
+          "fi": 22,
+          "faculty_id": "25",
+          "name": "Engr. Jim Frell B. Buenafe",
+          "role": "PT",
+          "score": 93.0002,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 21,
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "role": "PT",
-          "score": 20.0004,
+          "score": 20.0001,
           "usage_ratio": 0.5
         }
       ],
@@ -8922,14 +8750,14 @@
           "faculty_id": "24",
           "name": "Engr. Vince Alex V. Cabagay",
           "priority": 2,
-          "fi": 20,
+          "fi": 21,
           "in_candidates": true,
           "rejection": null,
           "load": 6.0,
           "max_units": 12.0,
           "preps": [
+            "4075|ENG MATH 2",
             "4085|ENG MATH 2",
-            "4095|ENG MATH 2",
             "4140|HYDRO 322"
           ],
           "preps_units": 6.0
@@ -8947,35 +8775,35 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 19,
-        "faculty_id": "23",
-        "name": "Engr. Christopher John P. De Vera",
+        "fi": 25,
+        "faculty_id": "28",
+        "name": "Engr. Jefrie T. Alindayu",
         "role": "FT",
         "dept_id": 2,
-        "score": 136.751,
+        "score": 149.2501,
         "usage_ratio": 1.0,
-        "load_after": 7.0,
+        "load_after": 5.0,
         "preps_before": [
-          "4067|ENG DRAW",
-          "4138|CE 3211"
+          "4104|CE ECON",
+          "4159|CE 4222"
         ],
-        "preps_units_before": 5.0
+        "preps_units_before": 3.0
       },
       "top3_candidates": [
         {
-          "fi": 19,
-          "faculty_id": "23",
-          "name": "Engr. Christopher John P. De Vera",
-          "role": "FT",
-          "score": 136.751,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 24,
+          "fi": 25,
           "faculty_id": "28",
           "name": "Engr. Jefrie T. Alindayu",
           "role": "FT",
-          "score": 124.2504,
+          "score": 149.2501,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 22,
+          "faculty_id": "25",
+          "name": "Engr. Jim Frell B. Buenafe",
+          "role": "PT",
+          "score": 93.0005,
           "usage_ratio": 1.0
         }
       ],
@@ -8992,17 +8820,17 @@
       "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 16,
+        "fi": 17,
         "faculty_id": "20",
         "name": "Engr. John Philip M. Garces",
         "role": "FT",
         "dept_id": 2,
-        "score": 136.7506,
+        "score": 136.7507,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4086|ENG PHYS 1",
           "4087|ENG DRAW",
+          "4096|ENG PHYS 1",
           "4114|CE ECON",
           "4159|CE 4222"
         ],
@@ -9010,20 +8838,20 @@
       },
       "top3_candidates": [
         {
-          "fi": 16,
+          "fi": 17,
           "faculty_id": "20",
           "name": "Engr. John Philip M. Garces",
           "role": "FT",
-          "score": 136.7506,
+          "score": 136.7507,
           "usage_ratio": 1.0
         },
         {
-          "fi": 19,
+          "fi": 20,
           "faculty_id": "23",
           "name": "Engr. Christopher John P. De Vera",
           "role": "FT",
-          "score": 91.2508,
-          "usage_ratio": 0.2917
+          "score": 110.0004,
+          "usage_ratio": 0.1667
         }
       ],
       "tagged_faculty": [
@@ -9031,17 +8859,16 @@
           "faculty_id": "23",
           "name": "Engr. Christopher John P. De Vera",
           "priority": 3,
-          "fi": 19,
+          "fi": 20,
           "in_candidates": true,
           "rejection": null,
-          "load": 7.0,
+          "load": 4.0,
           "max_units": 24.0,
           "preps": [
             "4067|ENG DRAW",
-            "4138|CE 3211",
-            "4161|CE 4221"
+            "4086|ENG PHYS 1"
           ],
-          "preps_units": 7.0
+          "preps_units": 4.0
         }
       ]
     },
@@ -9056,46 +8883,43 @@
       "candidate_count": 3,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 16,
-        "faculty_id": "20",
-        "name": "Engr. John Philip M. Garces",
+        "fi": 20,
+        "faculty_id": "23",
+        "name": "Engr. Christopher John P. De Vera",
         "role": "FT",
         "dept_id": 2,
-        "score": 130.5009,
+        "score": 143.0008,
         "usage_ratio": 1.0,
-        "load_after": 7.0,
+        "load_after": 5.0,
         "preps_before": [
           "4067|ENG DRAW",
-          "4086|ENG PHYS 1",
-          "4087|ENG DRAW",
-          "4114|CE ECON",
-          "4159|CE 4222"
+          "4086|ENG PHYS 1"
         ],
-        "preps_units_before": 6.0
+        "preps_units_before": 4.0
       },
       "top3_candidates": [
         {
-          "fi": 16,
-          "faculty_id": "20",
-          "name": "Engr. John Philip M. Garces",
-          "role": "FT",
-          "score": 130.5009,
-          "usage_ratio": 1.0
-        },
-        {
-          "fi": 19,
+          "fi": 20,
           "faculty_id": "23",
           "name": "Engr. Christopher John P. De Vera",
           "role": "FT",
-          "score": 124.2506,
+          "score": 143.0008,
           "usage_ratio": 1.0
         },
         {
-          "fi": 23,
+          "fi": 17,
+          "faculty_id": "20",
+          "name": "Engr. John Philip M. Garces",
+          "role": "FT",
+          "score": 130.501,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 24,
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "role": "FT",
-          "score": 82.5003,
+          "score": 82.5008,
           "usage_ratio": 0.5833
         }
       ],
@@ -9104,7 +8928,7 @@
           "faculty_id": "27",
           "name": "Engr. Joy Riana L. Agrimor",
           "priority": 2,
-          "fi": 23,
+          "fi": 24,
           "in_candidates": true,
           "rejection": null,
           "load": 14.0,
@@ -9129,31 +8953,39 @@
       "dept_id": 2,
       "units": 1.0,
       "pass_used": "A",
-      "candidate_count": 1,
+      "candidate_count": 2,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 19,
+        "fi": 20,
         "faculty_id": "23",
         "name": "Engr. Christopher John P. De Vera",
         "role": "FT",
         "dept_id": 2,
-        "score": 124.2507,
+        "score": 136.7504,
         "usage_ratio": 1.0,
-        "load_after": 8.0,
+        "load_after": 6.0,
         "preps_before": [
           "4067|ENG DRAW",
-          "4138|CE 3211",
-          "4161|CE 4221"
+          "4077|ENG DRAW",
+          "4086|ENG PHYS 1"
         ],
-        "preps_units_before": 7.0
+        "preps_units_before": 5.0
       },
       "top3_candidates": [
         {
-          "fi": 19,
+          "fi": 20,
           "faculty_id": "23",
           "name": "Engr. Christopher John P. De Vera",
           "role": "FT",
-          "score": 124.2507,
+          "score": 136.7504,
+          "usage_ratio": 1.0
+        },
+        {
+          "fi": 17,
+          "faculty_id": "20",
+          "name": "Engr. John Philip M. Garces",
+          "role": "FT",
+          "score": 130.5002,
           "usage_ratio": 1.0
         }
       ],
@@ -9170,42 +9002,44 @@
       "candidate_count": 6,
       "result": "ASSIGNED",
       "winner": {
-        "fi": 33,
-        "faculty_id": "37",
-        "name": "Engr. Jan Joseph Karlo B. Raquipo",
+        "fi": 35,
+        "faculty_id": "38",
+        "name": "Engr. Angelino A. Pimentel",
         "role": "FT",
         "dept_id": 5,
-        "score": 88.7506,
+        "score": 88.7504,
         "usage_ratio": 1.0,
         "load_after": 6.0,
         "preps_before": [
-          "4208|ENG MATH 5"
+          "4229|EST A321",
+          "4243|EE A423",
+          "4252|ECE A422"
         ],
-        "preps_units_before": 0.0
+        "preps_units_before": 5.0
       },
       "top3_candidates": [
         {
-          "fi": 33,
-          "faculty_id": "37",
-          "name": "Engr. Jan Joseph Karlo B. Raquipo",
+          "fi": 35,
+          "faculty_id": "38",
+          "name": "Engr. Angelino A. Pimentel",
           "role": "FT",
-          "score": 88.7506,
+          "score": 88.7504,
           "usage_ratio": 1.0
         },
         {
-          "fi": 32,
+          "fi": 33,
           "faculty_id": "36",
           "name": "Engr. Rojan I. Reyes",
           "role": "FT",
-          "score": 70.0008,
+          "score": 70.0,
           "usage_ratio": 1.0
         },
         {
           "fi": 34,
-          "faculty_id": "38",
-          "name": "Engr. Angelino A. Pimentel",
+          "faculty_id": "37",
+          "name": "Engr. Jan Joseph Karlo B. Raquipo",
           "role": "FT",
-          "score": 63.7501,
+          "score": 63.7503,
           "usage_ratio": 1.0
         }
       ],
@@ -9266,14 +9100,14 @@
       "name": "Ar. Joshua Eliz P. Hernandez",
       "role": "PT",
       "dept_id": 1,
-      "units_loaded": 4.0,
+      "units_loaded": 5.0,
       "max_units": 24.0,
       "prep_count": 4,
-      "prep_units": 4.0,
+      "prep_units": 5.0,
       "preps": [
         "4010|ARCHMATH 2",
         "4024|AR A221",
-        "4039|AR A323",
+        "4035|AR A221",
         "4048|AR A323"
       ],
       "assignments": 2
@@ -9391,12 +9225,12 @@
       "name": "Engr. Aurus Jodeo C. Tiam",
       "role": "FT",
       "dept_id": 2,
-      "units_loaded": 16.0,
+      "units_loaded": 14.0,
       "max_units": 24.0,
       "prep_count": 5,
-      "prep_units": 12.0,
+      "prep_units": 10.0,
       "preps": [
-        "4096|ENG PHYS 1",
+        "4115|HYDRO 1",
         "4140|HYDRO 322",
         "4143|CE 3212",
         "4147|HYDRO 322",
@@ -9416,8 +9250,8 @@
       "prep_units": 6.0,
       "preps": [
         "4026|AR A225",
-        "4037|AR A225",
         "4075|ENG MATH 2",
+        "4095|ENG MATH 2",
         "4142|CE 329"
       ],
       "assignments": 2
@@ -9441,7 +9275,7 @@
       "name": "Engr. Joy B. Pimentel",
       "role": "FT",
       "dept_id": 2,
-      "units_loaded": 20.0,
+      "units_loaded": 17.0,
       "max_units": 24.0,
       "prep_count": 6,
       "prep_units": 4.0,
@@ -9453,7 +9287,7 @@
         "4142|CE 329",
         "4169|ENG PHYS 1"
       ],
-      "assignments": 5
+      "assignments": 4
     },
     {
       "fi": 14,
@@ -9463,9 +9297,10 @@
       "dept_id": 2,
       "units_loaded": 6.0,
       "max_units": 12.0,
-      "prep_count": 3,
-      "prep_units": 3.0,
+      "prep_count": 4,
+      "prep_units": 6.0,
       "preps": [
+        "4037|AR A225",
         "4065|ENG MATH 2",
         "4075|ENG MATH 2",
         "4142|CE 329"
@@ -9474,6 +9309,24 @@
     },
     {
       "fi": 15,
+      "faculty_id": "18",
+      "name": "Engr. Rod Kline M. Perpetua",
+      "role": "PT",
+      "dept_id": 2,
+      "units_loaded": 12.0,
+      "max_units": 12.0,
+      "prep_count": 4,
+      "prep_units": 12.0,
+      "preps": [
+        "4106|CE 224",
+        "4138|CE 3211",
+        "4141|CE 3210",
+        "4142|CE 329"
+      ],
+      "assignments": 3
+    },
+    {
+      "fi": 16,
       "faculty_id": "19",
       "name": "Engr. John Russel S. Miguel",
       "role": "PT",
@@ -9490,27 +9343,26 @@
       "assignments": 2
     },
     {
-      "fi": 16,
+      "fi": 17,
       "faculty_id": "20",
       "name": "Engr. John Philip M. Garces",
       "role": "FT",
       "dept_id": 2,
-      "units_loaded": 7.0,
+      "units_loaded": 6.0,
       "max_units": 24.0,
-      "prep_count": 6,
-      "prep_units": 7.0,
+      "prep_count": 5,
+      "prep_units": 6.0,
       "preps": [
         "4067|ENG DRAW",
-        "4077|ENG DRAW",
-        "4086|ENG PHYS 1",
         "4087|ENG DRAW",
+        "4096|ENG PHYS 1",
         "4114|CE ECON",
         "4159|CE 4222"
       ],
-      "assignments": 4
+      "assignments": 3
     },
     {
-      "fi": 17,
+      "fi": 18,
       "faculty_id": "21",
       "name": "Engr. Marvin Ryan C. Ferrer",
       "role": "PT",
@@ -9527,7 +9379,7 @@
       "assignments": 1
     },
     {
-      "fi": 18,
+      "fi": 19,
       "faculty_id": "22",
       "name": "Engr. Eunice Pristeen D. Espejo",
       "role": "PT",
@@ -9544,25 +9396,25 @@
       "assignments": 2
     },
     {
-      "fi": 19,
+      "fi": 20,
       "faculty_id": "23",
       "name": "Engr. Christopher John P. De Vera",
       "role": "FT",
       "dept_id": 2,
-      "units_loaded": 8.0,
+      "units_loaded": 6.0,
       "max_units": 24.0,
       "prep_count": 4,
-      "prep_units": 8.0,
+      "prep_units": 6.0,
       "preps": [
         "4067|ENG DRAW",
-        "4097|ENG DRAW",
-        "4138|CE 3211",
-        "4161|CE 4221"
+        "4077|ENG DRAW",
+        "4086|ENG PHYS 1",
+        "4097|ENG DRAW"
       ],
       "assignments": 3
     },
     {
-      "fi": 20,
+      "fi": 21,
       "faculty_id": "24",
       "name": "Engr. Vince Alex V. Cabagay",
       "role": "PT",
@@ -9572,32 +9424,31 @@
       "prep_count": 3,
       "prep_units": 6.0,
       "preps": [
+        "4075|ENG MATH 2",
         "4085|ENG MATH 2",
-        "4095|ENG MATH 2",
         "4140|HYDRO 322"
       ],
       "assignments": 2
     },
     {
-      "fi": 21,
+      "fi": 22,
       "faculty_id": "25",
       "name": "Engr. Jim Frell B. Buenafe",
       "role": "PT",
       "dept_id": 2,
-      "units_loaded": 2.0,
+      "units_loaded": 0.0,
       "max_units": 12.0,
-      "prep_count": 4,
-      "prep_units": 2.0,
+      "prep_count": 3,
+      "prep_units": 0.0,
       "preps": [
         "4084|ENG MATH 1",
-        "4115|HYDRO 1",
         "4147|HYDRO 322",
         "4171|ENG MATH 1"
       ],
-      "assignments": 1
+      "assignments": 0
     },
     {
-      "fi": 22,
+      "fi": 23,
       "faculty_id": "26",
       "name": "Engr. Dan Gerico L. Bacani",
       "role": "PT",
@@ -9613,7 +9464,7 @@
       "assignments": 2
     },
     {
-      "fi": 23,
+      "fi": 24,
       "faculty_id": "27",
       "name": "Engr. Joy Riana L. Agrimor",
       "role": "FT",
@@ -9633,24 +9484,24 @@
       "assignments": 4
     },
     {
-      "fi": 24,
+      "fi": 25,
       "faculty_id": "28",
       "name": "Engr. Jefrie T. Alindayu",
       "role": "FT",
       "dept_id": 2,
-      "units_loaded": 7.0,
+      "units_loaded": 5.0,
       "max_units": 24.0,
       "prep_count": 3,
-      "prep_units": 7.0,
+      "prep_units": 5.0,
       "preps": [
         "4104|CE ECON",
-        "4141|CE 3210",
-        "4159|CE 4222"
+        "4159|CE 4222",
+        "4161|CE 4221"
       ],
       "assignments": 2
     },
     {
-      "fi": 25,
+      "fi": 26,
       "faculty_id": "29",
       "name": "Engr. Joel T. Mendoza",
       "role": "Department Head",
@@ -9667,7 +9518,7 @@
       "assignments": 1
     },
     {
-      "fi": 26,
+      "fi": 27,
       "faculty_id": "30",
       "name": "Engr. Kenosis John B. Wajchina",
       "role": "FT",
@@ -9687,7 +9538,7 @@
       "assignments": 5
     },
     {
-      "fi": 27,
+      "fi": 28,
       "faculty_id": "31",
       "name": "Engr. Carina S. Mallillin",
       "role": "Dean",
@@ -9702,7 +9553,7 @@
       "assignments": 1
     },
     {
-      "fi": 28,
+      "fi": 29,
       "faculty_id": "32",
       "name": "Ms. Rocel Audrey J. Batara",
       "role": "Department Head",
@@ -9721,7 +9572,7 @@
       "assignments": 4
     },
     {
-      "fi": 29,
+      "fi": 30,
       "faculty_id": "33",
       "name": "Engr. Wenson R. Evangelista",
       "role": "FT",
@@ -9739,7 +9590,7 @@
       "assignments": 4
     },
     {
-      "fi": 30,
+      "fi": 31,
       "faculty_id": "34",
       "name": "Engr. Jojo C. Mariano",
       "role": "Department Head",
@@ -9755,7 +9606,7 @@
       "assignments": 2
     },
     {
-      "fi": 31,
+      "fi": 32,
       "faculty_id": "35",
       "name": "Engr. Teofilo M. Sagabaen",
       "role": "Head, TTBDO",
@@ -9770,7 +9621,7 @@
       "assignments": 1
     },
     {
-      "fi": 32,
+      "fi": 33,
       "faculty_id": "36",
       "name": "Engr. Rojan I. Reyes",
       "role": "FT",
@@ -9786,41 +9637,41 @@
       "assignments": 2
     },
     {
-      "fi": 33,
+      "fi": 34,
       "faculty_id": "37",
       "name": "Engr. Jan Joseph Karlo B. Raquipo",
       "role": "FT",
       "dept_id": 5,
-      "units_loaded": 6.0,
+      "units_loaded": 9.0,
       "max_units": 24.0,
       "prep_count": 2,
-      "prep_units": 3.0,
+      "prep_units": 4.0,
       "preps": [
-        "4197|ENG CAD",
-        "4208|ENG MATH 5"
+        "4208|ENG MATH 5",
+        "4255|EST A421"
       ],
       "assignments": 2
     },
     {
-      "fi": 34,
+      "fi": 35,
       "faculty_id": "38",
       "name": "Engr. Angelino A. Pimentel",
       "role": "FT",
       "dept_id": 5,
-      "units_loaded": 9.0,
+      "units_loaded": 6.0,
       "max_units": 24.0,
       "prep_count": 4,
-      "prep_units": 9.0,
+      "prep_units": 8.0,
       "preps": [
+        "4197|ENG CAD",
         "4229|EST A321",
         "4243|EE A423",
-        "4252|ECE A422",
-        "4255|EST A421"
+        "4252|ECE A422"
       ],
       "assignments": 3
     },
     {
-      "fi": 35,
+      "fi": 36,
       "faculty_id": "39",
       "name": "Engr. Jessica B. Castillo",
       "role": "FT",
@@ -9840,7 +9691,7 @@
       "assignments": 5
     },
     {
-      "fi": 36,
+      "fi": 37,
       "faculty_id": "40",
       "name": "Engr. Gerene-Leigh C. Almazan",
       "role": "Research Coordinator",
@@ -9857,7 +9708,7 @@
       "assignments": 2
     },
     {
-      "fi": 37,
+      "fi": 38,
       "faculty_id": "41",
       "name": "Mrs. Sheryll D. Barut",
       "role": "Coordinator, CES",
@@ -9874,24 +9725,25 @@
       "assignments": 1
     },
     {
-      "fi": 38,
+      "fi": 39,
       "faculty_id": "42",
       "name": "Mr. Kim Paolo C. Salgado",
       "role": "FT",
       "dept_id": 6,
-      "units_loaded": 9.0,
+      "units_loaded": 12.0,
       "max_units": 24.0,
-      "prep_count": 3,
-      "prep_units": 3.0,
+      "prep_count": 4,
+      "prep_units": 6.0,
       "preps": [
         "4192|CPE 221",
         "4700|HCI-101",
-        "4708|HCI101"
+        "4708|HCI101",
+        "4752|CAP101"
       ],
-      "assignments": 3
+      "assignments": 4
     },
     {
-      "fi": 39,
+      "fi": 40,
       "faculty_id": "43",
       "name": "Mr. IC Ramzil P. Ruiz",
       "role": "PT",
@@ -9909,26 +9761,25 @@
       "assignments": 3
     },
     {
-      "fi": 40,
+      "fi": 41,
       "faculty_id": "44",
       "name": "Miss Krby Zyryll G. Perez",
       "role": "FT",
       "dept_id": 6,
-      "units_loaded": 15.0,
+      "units_loaded": 12.0,
       "max_units": 24.0,
-      "prep_count": 5,
-      "prep_units": 9.0,
+      "prep_count": 4,
+      "prep_units": 6.0,
       "preps": [
         "4218|CPE ELECT. 2",
         "4219|CPE 5A5",
-        "4730|PELECT3",
-        "4732|CC105",
+        "4721|DS-102",
         "4740|CC105"
       ],
-      "assignments": 5
+      "assignments": 4
     },
     {
-      "fi": 41,
+      "fi": 42,
       "faculty_id": "45",
       "name": "Mr. Ferdinand D. Molina",
       "role": "FT",
@@ -9940,14 +9791,14 @@
       "preps": [
         "4192|CPE 221",
         "4703|PELECT1",
-        "4721|DS-102",
+        "4711|PELECT1",
         "4749|CC106",
         "4754|CS-106"
       ],
       "assignments": 3
     },
     {
-      "fi": 42,
+      "fi": 43,
       "faculty_id": "46",
       "name": "Mr. June Delmar A. Labitoria",
       "role": "PT",
@@ -9965,7 +9816,7 @@
       "assignments": 3
     },
     {
-      "fi": 43,
+      "fi": 44,
       "faculty_id": "47",
       "name": "Mr. JC Ron Miguel D. James",
       "role": "PT",
@@ -9982,7 +9833,7 @@
       "assignments": 3
     },
     {
-      "fi": 44,
+      "fi": 45,
       "faculty_id": "48",
       "name": "Dr. Adonis V. Garces",
       "role": "Graduate Program Head",
@@ -10000,31 +9851,30 @@
       "assignments": 2
     },
     {
-      "fi": 45,
+      "fi": 46,
       "faculty_id": "49",
       "name": "Mrs. Milagros S. Constantino",
       "role": "FT",
       "dept_id": 6,
-      "units_loaded": 12.0,
+      "units_loaded": 9.0,
       "max_units": 24.0,
-      "prep_count": 5,
-      "prep_units": 12.0,
+      "prep_count": 4,
+      "prep_units": 9.0,
       "preps": [
-        "4711|PELECT1",
+        "4730|PELECT3",
         "4737|PELECT 3",
-        "4752|CAP101",
         "4757|SP-101",
         "4758|MRCS101"
       ],
-      "assignments": 4
+      "assignments": 3
     },
     {
-      "fi": 46,
+      "fi": 47,
       "faculty_id": "50",
       "name": "Mrs. Essel T. Ca\u00f1aberal",
       "role": "Director, CICT",
       "dept_id": 6,
-      "units_loaded": 6.0,
+      "units_loaded": 9.0,
       "max_units": 12.0,
       "prep_count": 4,
       "prep_units": 6.0,
@@ -10034,10 +9884,10 @@
         "4732|CC105",
         "4733|NET101"
       ],
-      "assignments": 2
+      "assignments": 3
     },
     {
-      "fi": 47,
+      "fi": 48,
       "faculty_id": "51",
       "name": "Mr. Scott Dominic T. Bautista",
       "role": "PT",
@@ -10053,7 +9903,7 @@
       "assignments": 2
     },
     {
-      "fi": 48,
+      "fi": 49,
       "faculty_id": "52",
       "name": "Miss Rhodora M. Aquino",
       "role": "Research Center Statistician",
@@ -10070,7 +9920,7 @@
       "assignments": 1
     },
     {
-      "fi": 49,
+      "fi": 50,
       "faculty_id": "53",
       "name": "Miss Evelyn J. Rizardo",
       "role": "FT",
@@ -10086,7 +9936,7 @@
       "assignments": 2
     },
     {
-      "fi": 50,
+      "fi": 51,
       "faculty_id": "54",
       "name": "Mrs. Rhenalyn B. Pimentel",
       "role": "FT",
@@ -10104,7 +9954,7 @@
       "assignments": 2
     },
     {
-      "fi": 51,
+      "fi": 52,
       "faculty_id": "55",
       "name": "Mrs. Marjorie M. Lucquiao",
       "role": "FT",
@@ -10122,7 +9972,7 @@
       "assignments": 2
     },
     {
-      "fi": 52,
+      "fi": 53,
       "faculty_id": "56",
       "name": "Mrs. Rachelle Joy T. Lazo",
       "role": "FT",
@@ -10139,7 +9989,7 @@
       "assignments": 2
     },
     {
-      "fi": 53,
+      "fi": 54,
       "faculty_id": "57",
       "name": "Mr. Mark Paul G. Camonayan",
       "role": "FT",
@@ -10157,7 +10007,7 @@
       "assignments": 2
     },
     {
-      "fi": 54,
+      "fi": 55,
       "faculty_id": "58",
       "name": "Mr. David A. Cabonero",
       "role": "Director, ULRC",
@@ -10173,7 +10023,7 @@
       "assignments": 1
     },
     {
-      "fi": 55,
+      "fi": 56,
       "faculty_id": "59",
       "name": "Dr. Dominga C. Valtoribio",
       "role": "Guest Lecturer",
@@ -10188,7 +10038,7 @@
       "assignments": 0
     },
     {
-      "fi": 56,
+      "fi": 57,
       "faculty_id": "60",
       "name": "Miss Donna Bee R. Tominez",
       "role": "FT",
@@ -10203,7 +10053,7 @@
       "assignments": 1
     },
     {
-      "fi": 57,
+      "fi": 58,
       "faculty_id": "61",
       "name": "Dr. Melanie G. Gurat",
       "role": "Director, Research",
@@ -10219,7 +10069,7 @@
       "assignments": 0
     },
     {
-      "fi": 58,
+      "fi": 59,
       "faculty_id": "62",
       "name": "Mr. Domingo T. Guntalilib Jr.",
       "role": "Head, NSTP",
@@ -10235,7 +10085,7 @@
       "assignments": 0
     },
     {
-      "fi": 59,
+      "fi": 60,
       "faculty_id": "63",
       "name": "Dr. Analyn A. Guevara",
       "role": "FT",
@@ -10251,7 +10101,7 @@
       "assignments": 1
     },
     {
-      "fi": 60,
+      "fi": 61,
       "faculty_id": "64",
       "name": "Dr. Adelina C. Erfe",
       "role": "Guest Lecturer",
@@ -10264,7 +10114,7 @@
       "assignments": 0
     },
     {
-      "fi": 61,
+      "fi": 62,
       "faculty_id": "65",
       "name": "Ar. Giancarlo Cenon C. Mendoza",
       "role": "Department Head",
@@ -10280,7 +10130,7 @@
       "assignments": 1
     },
     {
-      "fi": 62,
+      "fi": 63,
       "faculty_id": "132",
       "name": "Ar. Bobby U. Argote ",
       "role": "PT",
@@ -10297,18 +10147,18 @@
       "assignments": 3
     },
     {
-      "fi": 63,
+      "fi": 64,
       "faculty_id": "134",
       "name": "Ar. Romeo C. Romero Jr.",
       "role": "FT",
       "dept_id": 1,
-      "units_loaded": 15.0,
+      "units_loaded": 14.0,
       "max_units": 24.0,
       "prep_count": 5,
-      "prep_units": 12.0,
+      "prep_units": 11.0,
       "preps": [
         "4024|AR A221",
-        "4035|AR A221",
+        "4039|AR A323",
         "4042|AR A321",
         "4048|AR A323",
         "4050|AR A421"
@@ -10322,7 +10172,7 @@
     "hard": 100.0,
     "soft": 100.0,
     "generations": 20,
-    "runtime_ms": 54408
+    "runtime_ms": 60620
   },
   "final_assignments_by_code": {
     "4000": [
@@ -10439,9 +10289,9 @@
       {
         "offering_id": 50863,
         "section": "2B",
-        "faculty_id": "134",
-        "faculty_name": "Ar. Romeo C. Romero Jr.",
-        "faculty_role": "FT",
+        "faculty_id": "5",
+        "faculty_name": "Ar. Joshua Eliz P. Hernandez",
+        "faculty_role": "PT",
         "faculty_dept_id": 1
       }
     ],
@@ -10449,8 +10299,8 @@
       {
         "offering_id": 50865,
         "section": "2B",
-        "faculty_id": "14",
-        "faculty_name": "Engr. Mark Lester B. Tallungan",
+        "faculty_id": "17",
+        "faculty_name": "Engr. Rovic Jay S. Pi\u00f1on",
         "faculty_role": "PT",
         "faculty_dept_id": 2
       }
@@ -10469,9 +10319,9 @@
       {
         "offering_id": 50867,
         "section": "3A",
-        "faculty_id": "5",
-        "faculty_name": "Ar. Joshua Eliz P. Hernandez",
-        "faculty_role": "PT",
+        "faculty_id": "134",
+        "faculty_name": "Ar. Romeo C. Romero Jr.",
+        "faculty_role": "FT",
         "faculty_dept_id": 1
       }
     ],
@@ -10659,8 +10509,8 @@
       {
         "offering_id": 50904,
         "section": "1B",
-        "faculty_id": "17",
-        "faculty_name": "Engr. Rovic Jay S. Pi\u00f1on",
+        "faculty_id": "24",
+        "faculty_name": "Engr. Vince Alex V. Cabagay",
         "faculty_role": "PT",
         "faculty_dept_id": 2
       }
@@ -10679,8 +10529,8 @@
       {
         "offering_id": 50906,
         "section": "1B",
-        "faculty_id": "20",
-        "faculty_name": "Engr. John Philip M. Garces",
+        "faculty_id": "23",
+        "faculty_name": "Engr. Christopher John P. De Vera",
         "faculty_role": "FT",
         "faculty_dept_id": 2
       }
@@ -10709,8 +10559,8 @@
       {
         "offering_id": 50916,
         "section": "1C",
-        "faculty_id": "20",
-        "faculty_name": "Engr. John Philip M. Garces",
+        "faculty_id": "23",
+        "faculty_name": "Engr. Christopher John P. De Vera",
         "faculty_role": "FT",
         "faculty_dept_id": 2
       }
@@ -10739,8 +10589,8 @@
       {
         "offering_id": 50926,
         "section": "1D",
-        "faculty_id": "24",
-        "faculty_name": "Engr. Vince Alex V. Cabagay",
+        "faculty_id": "14",
+        "faculty_name": "Engr. Mark Lester B. Tallungan",
         "faculty_role": "PT",
         "faculty_dept_id": 2
       }
@@ -10749,8 +10599,8 @@
       {
         "offering_id": 50927,
         "section": "1D",
-        "faculty_id": "13",
-        "faculty_name": "Engr. Aurus Jodeo C. Tiam",
+        "faculty_id": "20",
+        "faculty_name": "Engr. John Philip M. Garces",
         "faculty_role": "FT",
         "faculty_dept_id": 2
       }
@@ -10819,9 +10669,9 @@
       {
         "offering_id": 50947,
         "section": "2B",
-        "faculty_id": "25",
-        "faculty_name": "Engr. Jim Frell B. Buenafe",
-        "faculty_role": "PT",
+        "faculty_id": "13",
+        "faculty_name": "Engr. Aurus Jodeo C. Tiam",
+        "faculty_role": "FT",
         "faculty_dept_id": 2
       }
     ],
@@ -10889,9 +10739,9 @@
       {
         "offering_id": 50970,
         "section": "3A",
-        "faculty_id": "23",
-        "faculty_name": "Engr. Christopher John P. De Vera",
-        "faculty_role": "FT",
+        "faculty_id": "18",
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
+        "faculty_role": "PT",
         "faculty_dept_id": 2
       }
     ],
@@ -10909,9 +10759,9 @@
       {
         "offering_id": 50973,
         "section": "3B",
-        "faculty_id": "28",
-        "faculty_name": "Engr. Jefrie T. Alindayu",
-        "faculty_role": "FT",
+        "faculty_id": "18",
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
+        "faculty_role": "PT",
         "faculty_dept_id": 2
       }
     ],
@@ -10919,9 +10769,9 @@
       {
         "offering_id": 50974,
         "section": "3B",
-        "faculty_id": "16",
-        "faculty_name": "Engr. Joy B. Pimentel",
-        "faculty_role": "FT",
+        "faculty_id": "18",
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
+        "faculty_role": "PT",
         "faculty_dept_id": 2
       }
     ],
@@ -10969,8 +10819,8 @@
       {
         "offering_id": 50991,
         "section": "Res",
-        "faculty_id": "23",
-        "faculty_name": "Engr. Christopher John P. De Vera",
+        "faculty_id": "28",
+        "faculty_name": "Engr. Jefrie T. Alindayu",
         "faculty_role": "FT",
         "faculty_dept_id": 2
       }
@@ -11127,8 +10977,8 @@
       {
         "offering_id": 51036,
         "section": "2A",
-        "faculty_id": "37",
-        "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
+        "faculty_id": "38",
+        "faculty_name": "Engr. Angelino A. Pimentel",
         "faculty_role": "FT",
         "faculty_dept_id": 5
       }
@@ -11307,8 +11157,8 @@
       {
         "offering_id": 51089,
         "section": "4A",
-        "faculty_id": "38",
-        "faculty_name": "Engr. Angelino A. Pimentel",
+        "faculty_id": "37",
+        "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
         "faculty_role": "FT",
         "faculty_dept_id": 5
       }
@@ -11377,8 +11227,8 @@
       {
         "offering_id": 51106,
         "section": "1B",
-        "faculty_id": "49",
-        "faculty_name": "Mrs. Milagros S. Constantino",
+        "faculty_id": "45",
+        "faculty_name": "Mr. Ferdinand D. Molina",
         "faculty_role": "FT",
         "faculty_dept_id": 6
       }
@@ -11407,8 +11257,8 @@
       {
         "offering_id": 51114,
         "section": "1A",
-        "faculty_id": "45",
-        "faculty_name": "Mr. Ferdinand D. Molina",
+        "faculty_id": "44",
+        "faculty_name": "Miss Krby Zyryll G. Perez",
         "faculty_role": "FT",
         "faculty_dept_id": 6
       }
@@ -11457,8 +11307,8 @@
       {
         "offering_id": 51134,
         "section": "2A",
-        "faculty_id": "44",
-        "faculty_name": "Miss Krby Zyryll G. Perez",
+        "faculty_id": "49",
+        "faculty_name": "Mrs. Milagros S. Constantino",
         "faculty_role": "FT",
         "faculty_dept_id": 6
       }
@@ -11467,9 +11317,9 @@
       {
         "offering_id": 51137,
         "section": "2A",
-        "faculty_id": "44",
-        "faculty_name": "Miss Krby Zyryll G. Perez",
-        "faculty_role": "FT",
+        "faculty_id": "50",
+        "faculty_name": "Mrs. Essel T. Ca\u00f1aberal",
+        "faculty_role": "Director, CICT",
         "faculty_dept_id": 6
       }
     ],
@@ -11615,8 +11465,8 @@
       {
         "offering_id": 51171,
         "section": "3A",
-        "faculty_id": "49",
-        "faculty_name": "Mrs. Milagros S. Constantino",
+        "faculty_id": "42",
+        "faculty_name": "Mr. Kim Paolo C. Salgado",
         "faculty_role": "FT",
         "faculty_dept_id": 6
       }
@@ -11786,7 +11636,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 3,
@@ -11800,7 +11650,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 2.0,
-      "imbalance_score": 5.11
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 4,
@@ -11814,21 +11664,21 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 5,
       "faculty_name": "Ar. Joshua Eliz P. Hernandez",
       "faculty_role": "PT",
       "department_id": 1,
-      "total_units": 4.0,
+      "total_units": 5.0,
       "max_units": 24.0,
-      "usage_ratio": 0.1667,
-      "free_units": 20.0,
+      "usage_ratio": 0.2083,
+      "free_units": 19.0,
       "class_count": 2,
       "preparations": 2,
-      "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "prep_units": 5.0,
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 6,
@@ -11842,7 +11692,7 @@
       "class_count": 5,
       "preparations": 5,
       "prep_units": 13.0,
-      "imbalance_score": 5.89
+      "imbalance_score": 6.0
     },
     {
       "faculty_id": 7,
@@ -11856,7 +11706,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 8,
@@ -11870,7 +11720,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 5.0,
-      "imbalance_score": 2.11
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 9,
@@ -11884,7 +11734,7 @@
       "class_count": 4,
       "preparations": 4,
       "prep_units": 13.0,
-      "imbalance_score": 5.89
+      "imbalance_score": 6.0
     },
     {
       "faculty_id": 11,
@@ -11898,7 +11748,7 @@
       "class_count": 5,
       "preparations": 5,
       "prep_units": 14.0,
-      "imbalance_score": 6.89
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 12,
@@ -11912,21 +11762,21 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 13,
       "faculty_name": "Engr. Aurus Jodeo C. Tiam",
       "faculty_role": "FT",
       "department_id": 2,
-      "total_units": 16.0,
+      "total_units": 14.0,
       "max_units": 24.0,
-      "usage_ratio": 0.6667,
-      "free_units": 8.0,
+      "usage_ratio": 0.5833,
+      "free_units": 10.0,
       "class_count": 5,
       "preparations": 5,
-      "prep_units": 16.0,
-      "imbalance_score": 8.89
+      "prep_units": 14.0,
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 14,
@@ -11940,7 +11790,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 15,
@@ -11954,21 +11804,21 @@
       "class_count": 0,
       "preparations": 0,
       "prep_units": 0.0,
-      "imbalance_score": 7.11
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 16,
       "faculty_name": "Engr. Joy B. Pimentel",
       "faculty_role": "FT",
       "department_id": 2,
-      "total_units": 20.0,
+      "total_units": 17.0,
       "max_units": 24.0,
-      "usage_ratio": 0.8333,
-      "free_units": 4.0,
-      "class_count": 5,
-      "preparations": 5,
-      "prep_units": 20.0,
-      "imbalance_score": 12.89
+      "usage_ratio": 0.7083,
+      "free_units": 7.0,
+      "class_count": 4,
+      "preparations": 4,
+      "prep_units": 17.0,
+      "imbalance_score": 10.0
     },
     {
       "faculty_id": 17,
@@ -11982,7 +11832,21 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
+    },
+    {
+      "faculty_id": 18,
+      "faculty_name": "Engr. Rod Kline M. Perpetua",
+      "faculty_role": "PT",
+      "department_id": 2,
+      "total_units": 12.0,
+      "max_units": 12.0,
+      "usage_ratio": 1.0,
+      "free_units": 0.0,
+      "class_count": 3,
+      "preparations": 3,
+      "prep_units": 12.0,
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 19,
@@ -11996,21 +11860,21 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 20,
       "faculty_name": "Engr. John Philip M. Garces",
       "faculty_role": "FT",
       "department_id": 2,
-      "total_units": 7.0,
+      "total_units": 6.0,
       "max_units": 24.0,
-      "usage_ratio": 0.2917,
-      "free_units": 17.0,
-      "class_count": 4,
-      "preparations": 4,
-      "prep_units": 7.0,
-      "imbalance_score": 0.11
+      "usage_ratio": 0.25,
+      "free_units": 18.0,
+      "class_count": 3,
+      "preparations": 3,
+      "prep_units": 6.0,
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 21,
@@ -12024,7 +11888,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 22,
@@ -12038,21 +11902,21 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 23,
       "faculty_name": "Engr. Christopher John P. De Vera",
       "faculty_role": "FT",
       "department_id": 2,
-      "total_units": 8.0,
+      "total_units": 6.0,
       "max_units": 24.0,
-      "usage_ratio": 0.3333,
-      "free_units": 16.0,
+      "usage_ratio": 0.25,
+      "free_units": 18.0,
       "class_count": 3,
       "preparations": 3,
-      "prep_units": 8.0,
-      "imbalance_score": 0.89
+      "prep_units": 6.0,
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 24,
@@ -12066,21 +11930,21 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 25,
       "faculty_name": "Engr. Jim Frell B. Buenafe",
       "faculty_role": "PT",
       "department_id": 2,
-      "total_units": 2.0,
+      "total_units": 0.0,
       "max_units": 12.0,
-      "usage_ratio": 0.1667,
-      "free_units": 10.0,
-      "class_count": 1,
-      "preparations": 1,
-      "prep_units": 2.0,
-      "imbalance_score": 5.11
+      "usage_ratio": 0.0,
+      "free_units": 12.0,
+      "class_count": 0,
+      "preparations": 0,
+      "prep_units": 0.0,
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 26,
@@ -12094,7 +11958,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 10.0,
-      "imbalance_score": 2.89
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 27,
@@ -12108,21 +11972,21 @@
       "class_count": 4,
       "preparations": 4,
       "prep_units": 14.0,
-      "imbalance_score": 6.89
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 28,
       "faculty_name": "Engr. Jefrie T. Alindayu",
       "faculty_role": "FT",
       "department_id": 2,
-      "total_units": 7.0,
+      "total_units": 5.0,
       "max_units": 24.0,
-      "usage_ratio": 0.2917,
-      "free_units": 17.0,
+      "usage_ratio": 0.2083,
+      "free_units": 19.0,
       "class_count": 2,
       "preparations": 2,
-      "prep_units": 7.0,
-      "imbalance_score": 0.11
+      "prep_units": 5.0,
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 29,
@@ -12136,7 +12000,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 30,
@@ -12150,7 +12014,7 @@
       "class_count": 5,
       "preparations": 5,
       "prep_units": 16.0,
-      "imbalance_score": 8.89
+      "imbalance_score": 9.0
     },
     {
       "faculty_id": 31,
@@ -12164,7 +12028,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 32,
@@ -12178,7 +12042,7 @@
       "class_count": 4,
       "preparations": 4,
       "prep_units": 12.0,
-      "imbalance_score": 4.89
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 33,
@@ -12192,7 +12056,7 @@
       "class_count": 4,
       "preparations": 4,
       "prep_units": 12.0,
-      "imbalance_score": 4.89
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 34,
@@ -12206,7 +12070,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 35,
@@ -12220,7 +12084,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 36,
@@ -12234,35 +12098,35 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 8.0,
-      "imbalance_score": 0.89
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 37,
       "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
       "faculty_role": "FT",
       "department_id": 5,
-      "total_units": 6.0,
+      "total_units": 9.0,
       "max_units": 24.0,
-      "usage_ratio": 0.25,
-      "free_units": 18.0,
+      "usage_ratio": 0.375,
+      "free_units": 15.0,
       "class_count": 2,
       "preparations": 2,
-      "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "prep_units": 9.0,
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 38,
       "faculty_name": "Engr. Angelino A. Pimentel",
       "faculty_role": "FT",
       "department_id": 5,
-      "total_units": 9.0,
+      "total_units": 6.0,
       "max_units": 24.0,
-      "usage_ratio": 0.375,
-      "free_units": 15.0,
+      "usage_ratio": 0.25,
+      "free_units": 18.0,
       "class_count": 3,
       "preparations": 3,
-      "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "prep_units": 6.0,
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 39,
@@ -12276,7 +12140,7 @@
       "class_count": 5,
       "preparations": 5,
       "prep_units": 19.0,
-      "imbalance_score": 11.89
+      "imbalance_score": 12.0
     },
     {
       "faculty_id": 40,
@@ -12290,7 +12154,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 41,
@@ -12304,21 +12168,21 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 42,
       "faculty_name": "Mr. Kim Paolo C. Salgado",
       "faculty_role": "FT",
       "department_id": 6,
-      "total_units": 9.0,
+      "total_units": 12.0,
       "max_units": 24.0,
-      "usage_ratio": 0.375,
-      "free_units": 15.0,
-      "class_count": 3,
-      "preparations": 3,
-      "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "usage_ratio": 0.5,
+      "free_units": 12.0,
+      "class_count": 4,
+      "preparations": 4,
+      "prep_units": 12.0,
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 43,
@@ -12332,21 +12196,21 @@
       "class_count": 3,
       "preparations": 3,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 44,
       "faculty_name": "Miss Krby Zyryll G. Perez",
       "faculty_role": "FT",
       "department_id": 6,
-      "total_units": 15.0,
+      "total_units": 12.0,
       "max_units": 24.0,
-      "usage_ratio": 0.625,
-      "free_units": 9.0,
-      "class_count": 5,
-      "preparations": 4,
-      "prep_units": 12.0,
-      "imbalance_score": 7.89
+      "usage_ratio": 0.5,
+      "free_units": 12.0,
+      "class_count": 4,
+      "preparations": 3,
+      "prep_units": 9.0,
+      "imbalance_score": 5.0
     },
     {
       "faculty_id": 45,
@@ -12360,7 +12224,7 @@
       "class_count": 3,
       "preparations": 3,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 46,
@@ -12374,7 +12238,7 @@
       "class_count": 3,
       "preparations": 3,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 47,
@@ -12388,7 +12252,7 @@
       "class_count": 3,
       "preparations": 3,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 48,
@@ -12402,35 +12266,35 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 49,
       "faculty_name": "Mrs. Milagros S. Constantino",
       "faculty_role": "FT",
       "department_id": 6,
-      "total_units": 12.0,
+      "total_units": 9.0,
       "max_units": 24.0,
-      "usage_ratio": 0.5,
-      "free_units": 12.0,
-      "class_count": 4,
-      "preparations": 4,
-      "prep_units": 12.0,
-      "imbalance_score": 4.89
+      "usage_ratio": 0.375,
+      "free_units": 15.0,
+      "class_count": 3,
+      "preparations": 3,
+      "prep_units": 9.0,
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 50,
       "faculty_name": "Mrs. Essel T. Ca\u00f1aberal",
       "faculty_role": "Director, CICT",
       "department_id": 6,
-      "total_units": 6.0,
+      "total_units": 9.0,
       "max_units": 12.0,
-      "usage_ratio": 0.5,
-      "free_units": 6.0,
-      "class_count": 2,
-      "preparations": 2,
-      "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "usage_ratio": 0.75,
+      "free_units": 3.0,
+      "class_count": 3,
+      "preparations": 3,
+      "prep_units": 9.0,
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 51,
@@ -12444,7 +12308,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 52,
@@ -12458,7 +12322,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 53,
@@ -12472,7 +12336,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 54,
@@ -12486,7 +12350,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 55,
@@ -12500,7 +12364,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 56,
@@ -12514,7 +12378,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 57,
@@ -12528,7 +12392,7 @@
       "class_count": 2,
       "preparations": 2,
       "prep_units": 6.0,
-      "imbalance_score": 1.11
+      "imbalance_score": 1.0
     },
     {
       "faculty_id": 58,
@@ -12542,7 +12406,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 59,
@@ -12556,7 +12420,7 @@
       "class_count": 0,
       "preparations": 0,
       "prep_units": 0.0,
-      "imbalance_score": 7.11
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 60,
@@ -12570,7 +12434,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 4.0,
-      "imbalance_score": 3.11
+      "imbalance_score": 3.0
     },
     {
       "faculty_id": 61,
@@ -12584,7 +12448,7 @@
       "class_count": 0,
       "preparations": 0,
       "prep_units": 0.0,
-      "imbalance_score": 7.11
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 62,
@@ -12598,7 +12462,7 @@
       "class_count": 0,
       "preparations": 0,
       "prep_units": 0.0,
-      "imbalance_score": 7.11
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 63,
@@ -12612,7 +12476,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 5.0,
-      "imbalance_score": 2.11
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 64,
@@ -12626,7 +12490,7 @@
       "class_count": 0,
       "preparations": 0,
       "prep_units": 0.0,
-      "imbalance_score": 7.11
+      "imbalance_score": 7.0
     },
     {
       "faculty_id": 65,
@@ -12640,7 +12504,7 @@
       "class_count": 1,
       "preparations": 1,
       "prep_units": 3.0,
-      "imbalance_score": 4.11
+      "imbalance_score": 4.0
     },
     {
       "faculty_id": 132,
@@ -12654,21 +12518,21 @@
       "class_count": 3,
       "preparations": 3,
       "prep_units": 9.0,
-      "imbalance_score": 1.89
+      "imbalance_score": 2.0
     },
     {
       "faculty_id": 134,
       "faculty_name": "Ar. Romeo C. Romero Jr.",
       "faculty_role": "FT",
       "department_id": 1,
-      "total_units": 15.0,
+      "total_units": 14.0,
       "max_units": 24.0,
-      "usage_ratio": 0.625,
-      "free_units": 9.0,
+      "usage_ratio": 0.5833,
+      "free_units": 10.0,
       "class_count": 4,
       "preparations": 4,
-      "prep_units": 15.0,
-      "imbalance_score": 7.89
+      "prep_units": 14.0,
+      "imbalance_score": 7.0
     }
   ],
   "sat_only_excluded": [

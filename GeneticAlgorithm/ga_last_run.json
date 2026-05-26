@@ -45,8 +45,8 @@
         "subject_status": "active",
         "source": "subject",
         "source_subject_id": 50831,
-        "locked": false,
-        "existing_faculty_id": null
+        "locked": true,
+        "existing_faculty_id": 7
       },
       "matched_subject": {
         "subject_id": 50831,
@@ -68,7 +68,7 @@
         "department_name": "Architecture"
       },
       "schedule_blocks": [],
-      "status": null
+      "status": "Locked"
     },
     {
       "faculty": {
@@ -537,8 +537,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Architecture",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 50852,
@@ -808,17 +808,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 134,
-        "faculty_name": "Ar. Romeo C. Romero Jr.",
+        "faculty_id": 5,
+        "faculty_name": "Ar. Joshua Eliz P. Hernandez",
         "department_id": 1,
-        "faculty_email": "hed-roromero@smu.edu.ph",
-        "faculty_specialization": "COMPUTER AIDED DESIGN DRAFTING FOR ARCHRE 2 3D, ARCH L DESIGN 8 DESIGN OF COMPLEX STRUCTURES, ARCHITECTURE DESIGN 4 SPACE PLANNING 1",
+        "faculty_email": "hed-jehernandez@smu.edu.ph",
+        "faculty_specialization": "COMPREHENSIVE MODULE A, DIFFERENTIAL AND INTEGRAL CALCULUS, ARCHITECTURAL DESIGN 4 - SPACE PLANNING 1, ARCHITECTURE DESIGN 4 SPACE PLANNING 1",
         "faculty_max_units": 24,
-        "faculty_role": "FT",
-        "faculty_status": "Active",
+        "faculty_role": "PT",
+        "faculty_status": "active",
         "department_name": "Architecture",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 4,
+        "available_units": 20
       },
       "offering": {
         "id": 50863,
@@ -878,11 +878,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 14,
-        "faculty_name": "Engr. Mark Lester B. Tallungan",
+        "faculty_id": 17,
+        "faculty_name": "Engr. Rovic Jay S. Pi\u00f1on",
         "department_id": 2,
-        "faculty_email": "hed-mltallungan@smu.edu.ph",
-        "faculty_specialization": "SPECIALIZED 4 COMPUTER APPLICATIONS IN CIVIL ENGINEERING, BUILDING SYSTEMS DESIGN, ENGINEERING DATA ANALYSIS",
+        "faculty_email": "hed-rjpion@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING DATA ANALYSIS, DATA, NUMERICAL METHODS AND ANALYSIS, NUMERICAL, BUILDING SYSTEMS DESIGN, BUILDING",
         "faculty_max_units": 12,
         "faculty_role": "PT",
         "faculty_status": "Active",
@@ -1018,17 +1018,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 5,
-        "faculty_name": "Ar. Joshua Eliz P. Hernandez",
+        "faculty_id": 134,
+        "faculty_name": "Ar. Romeo C. Romero Jr.",
         "department_id": 1,
-        "faculty_email": "hed-jehernandez@smu.edu.ph",
-        "faculty_specialization": "COMPREHENSIVE MODULE A, DIFFERENTIAL AND INTEGRAL CALCULUS, ARCHITECTURAL DESIGN 4 - SPACE PLANNING 1, ARCHITECTURE DESIGN 4 SPACE PLANNING 1",
+        "faculty_email": "hed-roromero@smu.edu.ph",
+        "faculty_specialization": "COMPUTER AIDED DESIGN DRAFTING FOR ARCHRE 2 3D, ARCH L DESIGN 8 DESIGN OF COMPLEX STRUCTURES, ARCHITECTURE DESIGN 4 SPACE PLANNING 1",
         "faculty_max_units": 24,
-        "faculty_role": "PT",
-        "faculty_status": "active",
+        "faculty_role": "FT",
+        "faculty_status": "Active",
         "department_name": "Architecture",
-        "already_assigned_units": 5,
-        "available_units": 19
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 50867,
@@ -1249,8 +1249,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Architecture",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 50870,
@@ -1483,8 +1483,8 @@
         "faculty_role": "PT",
         "faculty_status": "active",
         "department_name": "Architecture",
-        "already_assigned_units": 5,
-        "available_units": 19
+        "already_assigned_units": 4,
+        "available_units": 20
       },
       "offering": {
         "id": 50876,
@@ -1647,8 +1647,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Architecture",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 50878,
@@ -2114,8 +2114,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 17,
-        "available_units": 7
+        "already_assigned_units": 20,
+        "available_units": 4
       },
       "offering": {
         "id": 50892,
@@ -2348,8 +2348,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 7,
+        "available_units": 17
       },
       "offering": {
         "id": 50895,
@@ -2418,8 +2418,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 17,
-        "available_units": 7
+        "already_assigned_units": 20,
+        "available_units": 4
       },
       "offering": {
         "id": 50903,
@@ -2491,11 +2491,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 17,
-        "faculty_name": "Engr. Rovic Jay S. Pi\u00f1on",
+        "faculty_id": 24,
+        "faculty_name": "Engr. Vince Alex V. Cabagay",
         "department_id": 2,
-        "faculty_email": "hed-rjpion@smu.edu.ph",
-        "faculty_specialization": "ENGINEERING DATA ANALYSIS, DATA, NUMERICAL METHODS AND ANALYSIS, NUMERICAL, BUILDING SYSTEMS DESIGN, BUILDING",
+        "faculty_email": "hed-vacabagay@smu.edu.ph",
+        "faculty_specialization": "HYDROLOGY, ENGINEERING DATA ANALYSIS, GEOTECHNICAL ENGINEERING 1 (SOIL MECHANICS), GEOTECHNICAL ENGINEERING 1 SOIL MECHANICS",
         "faculty_max_units": 12,
         "faculty_role": "PT",
         "faculty_status": "Active",
@@ -2631,17 +2631,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 20,
-        "faculty_name": "Engr. John Philip M. Garces",
+        "faculty_id": 23,
+        "faculty_name": "Engr. Christopher John P. De Vera",
         "department_id": 2,
-        "faculty_email": "hed-jpgarces@smu.edu.ph",
-        "faculty_specialization": "ENGINEERING ECONOMICS, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, ENGINEERING DRAWING AND PLANS",
+        "faculty_email": "hed-cjvera@smu.edu.ph",
+        "faculty_specialization": "CE PROJECT 2, CE REVIEW 2, ENGINEERING DRAWING AND PLANS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "Active",
+        "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 8,
+        "available_units": 16
       },
       "offering": {
         "id": 50906,
@@ -2853,17 +2853,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 20,
-        "faculty_name": "Engr. John Philip M. Garces",
+        "faculty_id": 23,
+        "faculty_name": "Engr. Christopher John P. De Vera",
         "department_id": 2,
-        "faculty_email": "hed-jpgarces@smu.edu.ph",
-        "faculty_specialization": "ENGINEERING ECONOMICS, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, ENGINEERING DRAWING AND PLANS",
+        "faculty_email": "hed-cjvera@smu.edu.ph",
+        "faculty_specialization": "CE PROJECT 2, CE REVIEW 2, ENGINEERING DRAWING AND PLANS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "Active",
+        "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 8,
+        "available_units": 16
       },
       "offering": {
         "id": 50916,
@@ -2944,8 +2944,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 7,
+        "available_units": 17
       },
       "offering": {
         "id": 50917,
@@ -3075,11 +3075,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 24,
-        "faculty_name": "Engr. Vince Alex V. Cabagay",
+        "faculty_id": 14,
+        "faculty_name": "Engr. Mark Lester B. Tallungan",
         "department_id": 2,
-        "faculty_email": "hed-vacabagay@smu.edu.ph",
-        "faculty_specialization": "HYDROLOGY, ENGINEERING DATA ANALYSIS, GEOTECHNICAL ENGINEERING 1 (SOIL MECHANICS), GEOTECHNICAL ENGINEERING 1 SOIL MECHANICS",
+        "faculty_email": "hed-mltallungan@smu.edu.ph",
+        "faculty_specialization": "SPECIALIZED 4 COMPUTER APPLICATIONS IN CIVIL ENGINEERING, BUILDING SYSTEMS DESIGN, ENGINEERING DATA ANALYSIS",
         "faculty_max_units": 12,
         "faculty_role": "PT",
         "faculty_status": "Active",
@@ -3157,17 +3157,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 13,
-        "faculty_name": "Engr. Aurus Jodeo C. Tiam",
+        "faculty_id": 20,
+        "faculty_name": "Engr. John Philip M. Garces",
         "department_id": 2,
-        "faculty_email": "hed-ajtiam@smu.edu.ph",
-        "faculty_specialization": "HYDROLOGY, GEOTECHNICAL ENGINEERING 1 SOIL MECHANICS, PRINCIPLES OF TRANSPORTATION ENGINEERING",
+        "faculty_email": "hed-jpgarces@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING ECONOMICS, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, ENGINEERING DRAWING AND PLANS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "active",
+        "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 7,
+        "available_units": 17
       },
       "offering": {
         "id": 50927,
@@ -3248,8 +3248,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 8,
+        "available_units": 16
       },
       "offering": {
         "id": 50928,
@@ -3318,8 +3318,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 5,
-        "available_units": 19
+        "already_assigned_units": 7,
+        "available_units": 17
       },
       "offering": {
         "id": 50936,
@@ -3695,17 +3695,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 25,
-        "faculty_name": "Engr. Jim Frell B. Buenafe",
+        "faculty_id": 13,
+        "faculty_name": "Engr. Aurus Jodeo C. Tiam",
         "department_id": 2,
-        "faculty_email": "hed-jfbuenafe@smu.edu.ph",
-        "faculty_specialization": "HYDROLOGY, CE PROJECT 2, CALCULUS 1 DIFFERENTIAL CALCULUS",
-        "faculty_max_units": 12,
-        "faculty_role": "PT",
-        "faculty_status": "Active",
+        "faculty_email": "hed-ajtiam@smu.edu.ph",
+        "faculty_specialization": "HYDROLOGY, GEOTECHNICAL ENGINEERING 1 SOIL MECHANICS, PRINCIPLES OF TRANSPORTATION ENGINEERING",
+        "faculty_max_units": 24,
+        "faculty_role": "FT",
+        "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 0,
-        "available_units": 12
+        "already_assigned_units": 16,
+        "available_units": 8
       },
       "offering": {
         "id": 50947,
@@ -4171,8 +4171,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 17,
-        "available_units": 7
+        "already_assigned_units": 20,
+        "available_units": 4
       },
       "offering": {
         "id": 50960,
@@ -4244,17 +4244,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 23,
-        "faculty_name": "Engr. Christopher John P. De Vera",
+        "faculty_id": 18,
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
         "department_id": 2,
-        "faculty_email": "hed-cjvera@smu.edu.ph",
-        "faculty_specialization": "CE PROJECT 2, CE REVIEW 2, ENGINEERING DRAWING AND PLANS",
-        "faculty_max_units": 24,
-        "faculty_role": "FT",
-        "faculty_status": "active",
+        "faculty_email": "hed-rkperpetua@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING UTILITIES 1, UTILITIES, PRINCIPLES OF TRANSPORTATION ENGINEERING, PRINCIPLES, TRANSPORTATION, BUILDING SYSTEMS DESIGN, BUILDING",
+        "faculty_max_units": 12,
+        "faculty_role": "PT",
+        "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 0,
+        "available_units": 12
       },
       "offering": {
         "id": 50970,
@@ -4323,8 +4323,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 16,
+        "available_units": 8
       },
       "offering": {
         "id": 50972,
@@ -4396,17 +4396,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 28,
-        "faculty_name": "Engr. Jefrie T. Alindayu",
+        "faculty_id": 18,
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
         "department_id": 2,
-        "faculty_email": "hed-jtalindayu@smu.edu.ph",
-        "faculty_specialization": "CE PROJECT 2, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, ENGINEERING ECONOMICS",
-        "faculty_max_units": 24,
-        "faculty_role": "FT",
+        "faculty_email": "hed-rkperpetua@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING UTILITIES 1, UTILITIES, PRINCIPLES OF TRANSPORTATION ENGINEERING, PRINCIPLES, TRANSPORTATION, BUILDING SYSTEMS DESIGN, BUILDING",
+        "faculty_max_units": 12,
+        "faculty_role": "PT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 5,
-        "available_units": 19
+        "already_assigned_units": 0,
+        "available_units": 12
       },
       "offering": {
         "id": 50973,
@@ -4466,17 +4466,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 16,
-        "faculty_name": "Engr. Joy B. Pimentel",
+        "faculty_id": 18,
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
         "department_id": 2,
-        "faculty_email": "hed-jbpimentel@smu.edu.ph",
-        "faculty_specialization": "ENGINEERING DATA ANALYSIS, PHYSICS FOR ENGINEERS 1, BUILDING SYSTEMS DESIGN, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, CALCULUS, ENGINEERING UTILITIES 1",
-        "faculty_max_units": 24,
-        "faculty_role": "FT",
+        "faculty_email": "hed-rkperpetua@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING UTILITIES 1, UTILITIES, PRINCIPLES OF TRANSPORTATION ENGINEERING, PRINCIPLES, TRANSPORTATION, BUILDING SYSTEMS DESIGN, BUILDING",
+        "faculty_max_units": 12,
+        "faculty_role": "PT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 17,
-        "available_units": 7
+        "already_assigned_units": 0,
+        "available_units": 12
       },
       "offering": {
         "id": 50974,
@@ -4545,8 +4545,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 16,
+        "available_units": 8
       },
       "offering": {
         "id": 50975,
@@ -4615,8 +4615,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 16,
+        "available_units": 8
       },
       "offering": {
         "id": 50979,
@@ -4685,8 +4685,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 14,
-        "available_units": 10
+        "already_assigned_units": 16,
+        "available_units": 8
       },
       "offering": {
         "id": 50980,
@@ -4816,17 +4816,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 23,
-        "faculty_name": "Engr. Christopher John P. De Vera",
+        "faculty_id": 28,
+        "faculty_name": "Engr. Jefrie T. Alindayu",
         "department_id": 2,
-        "faculty_email": "hed-cjvera@smu.edu.ph",
-        "faculty_specialization": "CE PROJECT 2, CE REVIEW 2, ENGINEERING DRAWING AND PLANS",
+        "faculty_email": "hed-jtalindayu@smu.edu.ph",
+        "faculty_specialization": "CE PROJECT 2, CONSTRUCTION METHODS AND PROJECT MANAGEMENT, ENGINEERING ECONOMICS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "active",
+        "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 7,
+        "available_units": 17
       },
       "offering": {
         "id": 50991,
@@ -4907,8 +4907,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Civil Engineering",
-        "already_assigned_units": 17,
-        "available_units": 7
+        "already_assigned_units": 20,
+        "available_units": 4
       },
       "offering": {
         "id": 50994,
@@ -5661,8 +5661,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 9,
+        "available_units": 15
       },
       "offering": {
         "id": 51024,
@@ -6108,14 +6108,14 @@
     },
     {
       "faculty": {
-        "faculty_id": 37,
-        "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
+        "faculty_id": 38,
+        "faculty_name": "Engr. Angelino A. Pimentel",
         "department_id": 5,
-        "faculty_email": "hed-jjraquipo@smu.edu.ph",
-        "faculty_specialization": "ENGINEERING UTILITIES 1, ADVANCE ENGNIEERING MATHEMATICS, ADVANCE ENGNIEERING MATH, SPECIALIZED 5 FOUNDATION AND RETAINING WALL",
+        "faculty_email": "hed-aapimentel@smu.edu.ph",
+        "faculty_specialization": "CODES AND PROFESSIONAL ETHICS, EE LAWS CODES AND PROFESSIONAL ETHICS, ECE ELECTIVE 6: ADVANCED NETWORKING, FUNDAMENTALS OF POWER PLANT ENGINEERING DESIGN, BASIC OCCUPATIONAL SAFETY AND HEALTH",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "Active",
+        "faculty_status": "active",
         "department_name": "Electronics Engineering",
         "already_assigned_units": 9,
         "available_units": 15
@@ -6187,8 +6187,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Electronics Engineering",
-        "already_assigned_units": 9,
-        "available_units": 15
+        "already_assigned_units": 6,
+        "available_units": 18
       },
       "offering": {
         "id": 51041,
@@ -6421,8 +6421,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 51051,
@@ -6573,8 +6573,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Electronics Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 9,
+        "available_units": 15
       },
       "offering": {
         "id": 51062,
@@ -7169,8 +7169,8 @@
         "faculty_role": "FT",
         "faculty_status": "active",
         "department_name": "Electronics Engineering",
-        "already_assigned_units": 6,
-        "available_units": 18
+        "already_assigned_units": 9,
+        "available_units": 15
       },
       "offering": {
         "id": 51086,
@@ -7394,14 +7394,14 @@
     },
     {
       "faculty": {
-        "faculty_id": 38,
-        "faculty_name": "Engr. Angelino A. Pimentel",
+        "faculty_id": 37,
+        "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
         "department_id": 5,
-        "faculty_email": "hed-aapimentel@smu.edu.ph",
-        "faculty_specialization": "CODES AND PROFESSIONAL ETHICS, EE LAWS CODES AND PROFESSIONAL ETHICS, ECE ELECTIVE 6: ADVANCED NETWORKING, FUNDAMENTALS OF POWER PLANT ENGINEERING DESIGN, BASIC OCCUPATIONAL SAFETY AND HEALTH",
+        "faculty_email": "hed-jjraquipo@smu.edu.ph",
+        "faculty_specialization": "ENGINEERING UTILITIES 1, ADVANCE ENGNIEERING MATHEMATICS, ADVANCE ENGNIEERING MATH, SPECIALIZED 5 FOUNDATION AND RETAINING WALL",
         "faculty_max_units": 24,
         "faculty_role": "FT",
-        "faculty_status": "active",
+        "faculty_status": "Active",
         "department_name": "Electronics Engineering",
         "already_assigned_units": 6,
         "available_units": 18
@@ -7555,8 +7555,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 9,
+        "available_units": 15
       },
       "offering": {
         "id": 51094,
@@ -7765,8 +7765,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 9,
+        "available_units": 15
       },
       "offering": {
         "id": 51103,
@@ -7896,11 +7896,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 49,
-        "faculty_name": "Mrs. Milagros S. Constantino",
+        "faculty_id": 45,
+        "faculty_name": "Mr. Ferdinand D. Molina",
         "department_id": 6,
-        "faculty_email": "hed-msconstantino@smu.edu.ph",
-        "faculty_specialization": "OPERATING SYSTEMS, SOCIAL AND PROFESSIONAL ISSUES IN CS",
+        "faculty_email": "hed-fdmolina@smu.edu.ph",
+        "faculty_specialization": "APPLICATION DEVELOPMENT AND EMERGING TECHNOLOGIES, SYSTEM INTEGRATION AND ARCHITECTURE, OPERATING SYSTEM",
         "faculty_max_units": 24,
         "faculty_role": "FT",
         "faculty_status": "Active",
@@ -8121,17 +8121,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 45,
-        "faculty_name": "Mr. Ferdinand D. Molina",
+        "faculty_id": 44,
+        "faculty_name": "Miss Krby Zyryll G. Perez",
         "department_id": 6,
-        "faculty_email": "hed-fdmolina@smu.edu.ph",
-        "faculty_specialization": "APPLICATION DEVELOPMENT AND EMERGING TECHNOLOGIES, SYSTEM INTEGRATION AND ARCHITECTURE, OPERATING SYSTEM",
+        "faculty_email": "hed-kzperez@smu.edu.ph",
+        "faculty_specialization": "COMPUTER NETWORKS AND SECURITY, ELECTIVE 2: SOFTWARE DEVELOPMENT 2, ELECTIVE 2 SOFTWARE DEVELOPMENT 2, INFORMATION MANAGEMENT 1, INFORMATION MANAGEMENT",
         "faculty_max_units": 24,
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 9,
-        "available_units": 15
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 51114,
@@ -8364,8 +8364,8 @@
         "faculty_role": "Director, CICT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 9,
-        "available_units": 3
+        "already_assigned_units": 6,
+        "available_units": 6
       },
       "offering": {
         "id": 51130,
@@ -8495,11 +8495,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 44,
-        "faculty_name": "Miss Krby Zyryll G. Perez",
+        "faculty_id": 49,
+        "faculty_name": "Mrs. Milagros S. Constantino",
         "department_id": 6,
-        "faculty_email": "hed-kzperez@smu.edu.ph",
-        "faculty_specialization": "COMPUTER NETWORKS AND SECURITY, ELECTIVE 2: SOFTWARE DEVELOPMENT 2, ELECTIVE 2 SOFTWARE DEVELOPMENT 2, INFORMATION MANAGEMENT 1, INFORMATION MANAGEMENT",
+        "faculty_email": "hed-msconstantino@smu.edu.ph",
+        "faculty_specialization": "OPERATING SYSTEMS, SOCIAL AND PROFESSIONAL ISSUES IN CS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
         "faculty_status": "Active",
@@ -8565,17 +8565,17 @@
     },
     {
       "faculty": {
-        "faculty_id": 44,
-        "faculty_name": "Miss Krby Zyryll G. Perez",
+        "faculty_id": 50,
+        "faculty_name": "Mrs. Essel T. Ca\u00f1aberal",
         "department_id": 6,
-        "faculty_email": "hed-kzperez@smu.edu.ph",
-        "faculty_specialization": "COMPUTER NETWORKS AND SECURITY, ELECTIVE 2: SOFTWARE DEVELOPMENT 2, ELECTIVE 2 SOFTWARE DEVELOPMENT 2, INFORMATION MANAGEMENT 1, INFORMATION MANAGEMENT",
-        "faculty_max_units": 24,
-        "faculty_role": "FT",
+        "faculty_email": "hed-etcaaberal@smu.edu.ph",
+        "faculty_specialization": "CAPSTONE PROJECT 2, INFORMATION MANAGEMENT 1, NETWORKING",
+        "faculty_max_units": 12,
+        "faculty_role": "Director, CICT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 6,
+        "available_units": 6
       },
       "offering": {
         "id": 51137,
@@ -8656,8 +8656,8 @@
         "faculty_role": "Director, CICT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 9,
-        "available_units": 3
+        "already_assigned_units": 6,
+        "available_units": 6
       },
       "offering": {
         "id": 51138,
@@ -8796,8 +8796,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 9,
-        "available_units": 15
+        "already_assigned_units": 12,
+        "available_units": 12
       },
       "offering": {
         "id": 51142,
@@ -8878,8 +8878,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 51145,
@@ -8948,8 +8948,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 12,
-        "available_units": 12
+        "already_assigned_units": 15,
+        "available_units": 9
       },
       "offering": {
         "id": 51148,
@@ -9675,11 +9675,11 @@
     },
     {
       "faculty": {
-        "faculty_id": 49,
-        "faculty_name": "Mrs. Milagros S. Constantino",
+        "faculty_id": 42,
+        "faculty_name": "Mr. Kim Paolo C. Salgado",
         "department_id": 6,
-        "faculty_email": "hed-msconstantino@smu.edu.ph",
-        "faculty_specialization": "OPERATING SYSTEMS, SOCIAL AND PROFESSIONAL ISSUES IN CS",
+        "faculty_email": "hed-kpsalgado@smu.edu.ph",
+        "faculty_specialization": "INTELLIGENT SYSTEMS, OPERATING SYSTEM, INTRODUCTION TO HUMAN COMPUTER INTERACTIONS",
         "faculty_max_units": 24,
         "faculty_role": "FT",
         "faculty_status": "Active",
@@ -10432,8 +10432,8 @@
         "faculty_role": "FT",
         "faculty_status": "Active",
         "department_name": "Information Technology",
-        "already_assigned_units": 9,
-        "available_units": 15
+        "already_assigned_units": 12,
+        "available_units": 12
       },
       "offering": {
         "id": 51184,
@@ -10896,7 +10896,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 3,
@@ -10910,7 +10910,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 2.0,
-        "imbalance_score": 5.11
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 4,
@@ -10924,21 +10924,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 5,
         "faculty_name": "Ar. Joshua Eliz P. Hernandez",
         "faculty_role": "PT",
         "department_id": 1,
-        "total_units": 4.0,
+        "total_units": 5.0,
         "max_units": 24.0,
-        "usage_ratio": 0.1667,
-        "free_units": 20.0,
+        "usage_ratio": 0.2083,
+        "free_units": 19.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "prep_units": 5.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 6,
@@ -10952,7 +10952,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 13.0,
-        "imbalance_score": 5.89
+        "imbalance_score": 6.0
       },
       {
         "faculty_id": 7,
@@ -10966,7 +10966,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 8,
@@ -10980,7 +10980,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 5.0,
-        "imbalance_score": 2.11
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 9,
@@ -10994,7 +10994,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 13.0,
-        "imbalance_score": 5.89
+        "imbalance_score": 6.0
       },
       {
         "faculty_id": 11,
@@ -11008,7 +11008,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 14.0,
-        "imbalance_score": 6.89
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 12,
@@ -11022,21 +11022,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 13,
         "faculty_name": "Engr. Aurus Jodeo C. Tiam",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 16.0,
+        "total_units": 14.0,
         "max_units": 24.0,
-        "usage_ratio": 0.6667,
-        "free_units": 8.0,
+        "usage_ratio": 0.5833,
+        "free_units": 10.0,
         "class_count": 5,
         "preparations": 5,
-        "prep_units": 16.0,
-        "imbalance_score": 8.89
+        "prep_units": 14.0,
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 14,
@@ -11050,7 +11050,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 15,
@@ -11064,21 +11064,21 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 16,
         "faculty_name": "Engr. Joy B. Pimentel",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 20.0,
+        "total_units": 17.0,
         "max_units": 24.0,
-        "usage_ratio": 0.8333,
-        "free_units": 4.0,
-        "class_count": 5,
-        "preparations": 5,
-        "prep_units": 20.0,
-        "imbalance_score": 12.89
+        "usage_ratio": 0.7083,
+        "free_units": 7.0,
+        "class_count": 4,
+        "preparations": 4,
+        "prep_units": 17.0,
+        "imbalance_score": 10.0
       },
       {
         "faculty_id": 17,
@@ -11092,7 +11092,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
+      },
+      {
+        "faculty_id": 18,
+        "faculty_name": "Engr. Rod Kline M. Perpetua",
+        "faculty_role": "PT",
+        "department_id": 2,
+        "total_units": 12.0,
+        "max_units": 12.0,
+        "usage_ratio": 1.0,
+        "free_units": 0.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 12.0,
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 19,
@@ -11106,21 +11120,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 20,
         "faculty_name": "Engr. John Philip M. Garces",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 7.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.2917,
-        "free_units": 17.0,
-        "class_count": 4,
-        "preparations": 4,
-        "prep_units": 7.0,
-        "imbalance_score": 0.11
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 21,
@@ -11134,7 +11148,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 22,
@@ -11148,21 +11162,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 23,
         "faculty_name": "Engr. Christopher John P. De Vera",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 8.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.3333,
-        "free_units": 16.0,
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
         "class_count": 3,
         "preparations": 3,
-        "prep_units": 8.0,
-        "imbalance_score": 0.89
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 24,
@@ -11176,21 +11190,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 25,
         "faculty_name": "Engr. Jim Frell B. Buenafe",
         "faculty_role": "PT",
         "department_id": 2,
-        "total_units": 2.0,
+        "total_units": 0.0,
         "max_units": 12.0,
-        "usage_ratio": 0.1667,
-        "free_units": 10.0,
-        "class_count": 1,
-        "preparations": 1,
-        "prep_units": 2.0,
-        "imbalance_score": 5.11
+        "usage_ratio": 0.0,
+        "free_units": 12.0,
+        "class_count": 0,
+        "preparations": 0,
+        "prep_units": 0.0,
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 26,
@@ -11204,7 +11218,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 10.0,
-        "imbalance_score": 2.89
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 27,
@@ -11218,21 +11232,21 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 14.0,
-        "imbalance_score": 6.89
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 28,
         "faculty_name": "Engr. Jefrie T. Alindayu",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 7.0,
+        "total_units": 5.0,
         "max_units": 24.0,
-        "usage_ratio": 0.2917,
-        "free_units": 17.0,
+        "usage_ratio": 0.2083,
+        "free_units": 19.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 7.0,
-        "imbalance_score": 0.11
+        "prep_units": 5.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 29,
@@ -11246,7 +11260,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 30,
@@ -11260,7 +11274,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 16.0,
-        "imbalance_score": 8.89
+        "imbalance_score": 9.0
       },
       {
         "faculty_id": 31,
@@ -11274,7 +11288,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 32,
@@ -11288,7 +11302,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 33,
@@ -11302,7 +11316,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 34,
@@ -11316,7 +11330,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 35,
@@ -11330,7 +11344,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 36,
@@ -11344,35 +11358,35 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 8.0,
-        "imbalance_score": 0.89
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 37,
         "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
         "faculty_role": "FT",
         "department_id": 5,
-        "total_units": 6.0,
+        "total_units": 9.0,
         "max_units": 24.0,
-        "usage_ratio": 0.25,
-        "free_units": 18.0,
+        "usage_ratio": 0.375,
+        "free_units": 15.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 38,
         "faculty_name": "Engr. Angelino A. Pimentel",
         "faculty_role": "FT",
         "department_id": 5,
-        "total_units": 9.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.375,
-        "free_units": 15.0,
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
         "class_count": 3,
         "preparations": 3,
-        "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 39,
@@ -11386,7 +11400,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 19.0,
-        "imbalance_score": 11.89
+        "imbalance_score": 12.0
       },
       {
         "faculty_id": 40,
@@ -11400,7 +11414,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 41,
@@ -11414,21 +11428,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 42,
         "faculty_name": "Mr. Kim Paolo C. Salgado",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 9.0,
+        "total_units": 12.0,
         "max_units": 24.0,
-        "usage_ratio": 0.375,
-        "free_units": 15.0,
-        "class_count": 3,
-        "preparations": 3,
-        "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "usage_ratio": 0.5,
+        "free_units": 12.0,
+        "class_count": 4,
+        "preparations": 4,
+        "prep_units": 12.0,
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 43,
@@ -11442,21 +11456,21 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 44,
         "faculty_name": "Miss Krby Zyryll G. Perez",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 15.0,
+        "total_units": 12.0,
         "max_units": 24.0,
-        "usage_ratio": 0.625,
-        "free_units": 9.0,
-        "class_count": 5,
-        "preparations": 4,
-        "prep_units": 12.0,
-        "imbalance_score": 7.89
+        "usage_ratio": 0.5,
+        "free_units": 12.0,
+        "class_count": 4,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 45,
@@ -11470,7 +11484,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 46,
@@ -11484,7 +11498,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 47,
@@ -11498,7 +11512,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 48,
@@ -11512,35 +11526,35 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 49,
         "faculty_name": "Mrs. Milagros S. Constantino",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 12.0,
+        "total_units": 9.0,
         "max_units": 24.0,
-        "usage_ratio": 0.5,
-        "free_units": 12.0,
-        "class_count": 4,
-        "preparations": 4,
-        "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "usage_ratio": 0.375,
+        "free_units": 15.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 50,
         "faculty_name": "Mrs. Essel T. Ca\u00f1aberal",
         "faculty_role": "Director, CICT",
         "department_id": 6,
-        "total_units": 6.0,
+        "total_units": 9.0,
         "max_units": 12.0,
-        "usage_ratio": 0.5,
-        "free_units": 6.0,
-        "class_count": 2,
-        "preparations": 2,
-        "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "usage_ratio": 0.75,
+        "free_units": 3.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 51,
@@ -11554,7 +11568,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 52,
@@ -11568,7 +11582,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 53,
@@ -11582,7 +11596,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 54,
@@ -11596,7 +11610,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 55,
@@ -11610,7 +11624,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 56,
@@ -11624,7 +11638,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 57,
@@ -11638,7 +11652,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 58,
@@ -11652,7 +11666,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 59,
@@ -11666,7 +11680,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 60,
@@ -11680,7 +11694,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 61,
@@ -11694,7 +11708,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 62,
@@ -11708,7 +11722,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 63,
@@ -11722,7 +11736,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 5.0,
-        "imbalance_score": 2.11
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 64,
@@ -11736,7 +11750,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 65,
@@ -11750,7 +11764,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 132,
@@ -11764,21 +11778,21 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 134,
         "faculty_name": "Ar. Romeo C. Romero Jr.",
         "faculty_role": "FT",
         "department_id": 1,
-        "total_units": 15.0,
+        "total_units": 14.0,
         "max_units": 24.0,
-        "usage_ratio": 0.625,
-        "free_units": 9.0,
+        "usage_ratio": 0.5833,
+        "free_units": 10.0,
         "class_count": 4,
         "preparations": 4,
-        "prep_units": 15.0,
-        "imbalance_score": 7.89
+        "prep_units": 14.0,
+        "imbalance_score": 7.0
       }
     ],
     "faculty_free_units": [
@@ -11794,7 +11808,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 3,
@@ -11808,7 +11822,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 2.0,
-        "imbalance_score": 5.11
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 4,
@@ -11822,21 +11836,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 5,
         "faculty_name": "Ar. Joshua Eliz P. Hernandez",
         "faculty_role": "PT",
         "department_id": 1,
-        "total_units": 4.0,
+        "total_units": 5.0,
         "max_units": 24.0,
-        "usage_ratio": 0.1667,
-        "free_units": 20.0,
+        "usage_ratio": 0.2083,
+        "free_units": 19.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "prep_units": 5.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 6,
@@ -11850,7 +11864,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 13.0,
-        "imbalance_score": 5.89
+        "imbalance_score": 6.0
       },
       {
         "faculty_id": 7,
@@ -11864,7 +11878,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 8,
@@ -11878,7 +11892,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 5.0,
-        "imbalance_score": 2.11
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 9,
@@ -11892,7 +11906,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 13.0,
-        "imbalance_score": 5.89
+        "imbalance_score": 6.0
       },
       {
         "faculty_id": 11,
@@ -11906,7 +11920,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 14.0,
-        "imbalance_score": 6.89
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 12,
@@ -11920,21 +11934,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 13,
         "faculty_name": "Engr. Aurus Jodeo C. Tiam",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 16.0,
+        "total_units": 14.0,
         "max_units": 24.0,
-        "usage_ratio": 0.6667,
-        "free_units": 8.0,
+        "usage_ratio": 0.5833,
+        "free_units": 10.0,
         "class_count": 5,
         "preparations": 5,
-        "prep_units": 16.0,
-        "imbalance_score": 8.89
+        "prep_units": 14.0,
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 14,
@@ -11948,7 +11962,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 15,
@@ -11962,21 +11976,21 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 16,
         "faculty_name": "Engr. Joy B. Pimentel",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 20.0,
+        "total_units": 17.0,
         "max_units": 24.0,
-        "usage_ratio": 0.8333,
-        "free_units": 4.0,
-        "class_count": 5,
-        "preparations": 5,
-        "prep_units": 20.0,
-        "imbalance_score": 12.89
+        "usage_ratio": 0.7083,
+        "free_units": 7.0,
+        "class_count": 4,
+        "preparations": 4,
+        "prep_units": 17.0,
+        "imbalance_score": 10.0
       },
       {
         "faculty_id": 17,
@@ -11990,7 +12004,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 19,
@@ -12004,21 +12018,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 20,
         "faculty_name": "Engr. John Philip M. Garces",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 7.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.2917,
-        "free_units": 17.0,
-        "class_count": 4,
-        "preparations": 4,
-        "prep_units": 7.0,
-        "imbalance_score": 0.11
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 21,
@@ -12032,7 +12046,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 22,
@@ -12046,21 +12060,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 23,
         "faculty_name": "Engr. Christopher John P. De Vera",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 8.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.3333,
-        "free_units": 16.0,
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
         "class_count": 3,
         "preparations": 3,
-        "prep_units": 8.0,
-        "imbalance_score": 0.89
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 24,
@@ -12074,21 +12088,21 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 25,
         "faculty_name": "Engr. Jim Frell B. Buenafe",
         "faculty_role": "PT",
         "department_id": 2,
-        "total_units": 2.0,
+        "total_units": 0.0,
         "max_units": 12.0,
-        "usage_ratio": 0.1667,
-        "free_units": 10.0,
-        "class_count": 1,
-        "preparations": 1,
-        "prep_units": 2.0,
-        "imbalance_score": 5.11
+        "usage_ratio": 0.0,
+        "free_units": 12.0,
+        "class_count": 0,
+        "preparations": 0,
+        "prep_units": 0.0,
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 26,
@@ -12102,7 +12116,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 10.0,
-        "imbalance_score": 2.89
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 27,
@@ -12116,21 +12130,21 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 14.0,
-        "imbalance_score": 6.89
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 28,
         "faculty_name": "Engr. Jefrie T. Alindayu",
         "faculty_role": "FT",
         "department_id": 2,
-        "total_units": 7.0,
+        "total_units": 5.0,
         "max_units": 24.0,
-        "usage_ratio": 0.2917,
-        "free_units": 17.0,
+        "usage_ratio": 0.2083,
+        "free_units": 19.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 7.0,
-        "imbalance_score": 0.11
+        "prep_units": 5.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 29,
@@ -12144,7 +12158,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 30,
@@ -12158,7 +12172,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 16.0,
-        "imbalance_score": 8.89
+        "imbalance_score": 9.0
       },
       {
         "faculty_id": 31,
@@ -12172,7 +12186,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 32,
@@ -12186,7 +12200,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 33,
@@ -12200,7 +12214,7 @@
         "class_count": 4,
         "preparations": 4,
         "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 34,
@@ -12214,7 +12228,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 35,
@@ -12228,7 +12242,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 36,
@@ -12242,35 +12256,35 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 8.0,
-        "imbalance_score": 0.89
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 37,
         "faculty_name": "Engr. Jan Joseph Karlo B. Raquipo",
         "faculty_role": "FT",
         "department_id": 5,
-        "total_units": 6.0,
+        "total_units": 9.0,
         "max_units": 24.0,
-        "usage_ratio": 0.25,
-        "free_units": 18.0,
+        "usage_ratio": 0.375,
+        "free_units": 15.0,
         "class_count": 2,
         "preparations": 2,
-        "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 38,
         "faculty_name": "Engr. Angelino A. Pimentel",
         "faculty_role": "FT",
         "department_id": 5,
-        "total_units": 9.0,
+        "total_units": 6.0,
         "max_units": 24.0,
-        "usage_ratio": 0.375,
-        "free_units": 15.0,
+        "usage_ratio": 0.25,
+        "free_units": 18.0,
         "class_count": 3,
         "preparations": 3,
-        "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "prep_units": 6.0,
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 39,
@@ -12284,7 +12298,7 @@
         "class_count": 5,
         "preparations": 5,
         "prep_units": 19.0,
-        "imbalance_score": 11.89
+        "imbalance_score": 12.0
       },
       {
         "faculty_id": 40,
@@ -12298,7 +12312,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 41,
@@ -12312,21 +12326,21 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 42,
         "faculty_name": "Mr. Kim Paolo C. Salgado",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 9.0,
+        "total_units": 12.0,
         "max_units": 24.0,
-        "usage_ratio": 0.375,
-        "free_units": 15.0,
-        "class_count": 3,
-        "preparations": 3,
-        "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "usage_ratio": 0.5,
+        "free_units": 12.0,
+        "class_count": 4,
+        "preparations": 4,
+        "prep_units": 12.0,
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 43,
@@ -12340,21 +12354,21 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 44,
         "faculty_name": "Miss Krby Zyryll G. Perez",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 15.0,
+        "total_units": 12.0,
         "max_units": 24.0,
-        "usage_ratio": 0.625,
-        "free_units": 9.0,
-        "class_count": 5,
-        "preparations": 4,
-        "prep_units": 12.0,
-        "imbalance_score": 7.89
+        "usage_ratio": 0.5,
+        "free_units": 12.0,
+        "class_count": 4,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 5.0
       },
       {
         "faculty_id": 45,
@@ -12368,7 +12382,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 46,
@@ -12382,7 +12396,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 47,
@@ -12396,7 +12410,7 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 48,
@@ -12410,35 +12424,35 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 49,
         "faculty_name": "Mrs. Milagros S. Constantino",
         "faculty_role": "FT",
         "department_id": 6,
-        "total_units": 12.0,
+        "total_units": 9.0,
         "max_units": 24.0,
-        "usage_ratio": 0.5,
-        "free_units": 12.0,
-        "class_count": 4,
-        "preparations": 4,
-        "prep_units": 12.0,
-        "imbalance_score": 4.89
+        "usage_ratio": 0.375,
+        "free_units": 15.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 50,
         "faculty_name": "Mrs. Essel T. Ca\u00f1aberal",
         "faculty_role": "Director, CICT",
         "department_id": 6,
-        "total_units": 6.0,
+        "total_units": 9.0,
         "max_units": 12.0,
-        "usage_ratio": 0.5,
-        "free_units": 6.0,
-        "class_count": 2,
-        "preparations": 2,
-        "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "usage_ratio": 0.75,
+        "free_units": 3.0,
+        "class_count": 3,
+        "preparations": 3,
+        "prep_units": 9.0,
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 51,
@@ -12452,7 +12466,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 52,
@@ -12466,7 +12480,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 53,
@@ -12480,7 +12494,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 54,
@@ -12494,7 +12508,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 55,
@@ -12508,7 +12522,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 56,
@@ -12522,7 +12536,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 57,
@@ -12536,7 +12550,7 @@
         "class_count": 2,
         "preparations": 2,
         "prep_units": 6.0,
-        "imbalance_score": 1.11
+        "imbalance_score": 1.0
       },
       {
         "faculty_id": 58,
@@ -12550,7 +12564,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 59,
@@ -12564,7 +12578,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 60,
@@ -12578,7 +12592,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 4.0,
-        "imbalance_score": 3.11
+        "imbalance_score": 3.0
       },
       {
         "faculty_id": 61,
@@ -12592,7 +12606,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 62,
@@ -12606,7 +12620,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 63,
@@ -12620,7 +12634,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 5.0,
-        "imbalance_score": 2.11
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 64,
@@ -12634,7 +12648,7 @@
         "class_count": 0,
         "preparations": 0,
         "prep_units": 0.0,
-        "imbalance_score": 7.11
+        "imbalance_score": 7.0
       },
       {
         "faculty_id": 65,
@@ -12648,7 +12662,7 @@
         "class_count": 1,
         "preparations": 1,
         "prep_units": 3.0,
-        "imbalance_score": 4.11
+        "imbalance_score": 4.0
       },
       {
         "faculty_id": 132,
@@ -12662,21 +12676,21 @@
         "class_count": 3,
         "preparations": 3,
         "prep_units": 9.0,
-        "imbalance_score": 1.89
+        "imbalance_score": 2.0
       },
       {
         "faculty_id": 134,
         "faculty_name": "Ar. Romeo C. Romero Jr.",
         "faculty_role": "FT",
         "department_id": 1,
-        "total_units": 15.0,
+        "total_units": 14.0,
         "max_units": 24.0,
-        "usage_ratio": 0.625,
-        "free_units": 9.0,
+        "usage_ratio": 0.5833,
+        "free_units": 10.0,
         "class_count": 4,
         "preparations": 4,
-        "prep_units": 15.0,
-        "imbalance_score": 7.89
+        "prep_units": 14.0,
+        "imbalance_score": 7.0
       }
     ],
     "unassigned_subjects": [],
@@ -12690,13 +12704,14 @@
         11,
         13,
         16,
+        18,
         27,
         30,
         32,
         33,
         39,
+        42,
         44,
-        49,
         134
       ]
     },
@@ -12712,10 +12727,10 @@
       "Ar. Nicole Robles: 4025 History of Architecture 3",
       "Engr. Mark Lester B. Tallungan: 4026 Building Technology 2 - Construction Drawings in Wood, Steel & Concrete",
       "Ar. Tomas B. Binbinon Jr.: 4027 Arch'l Interiors",
-      "Ar. Romeo C. Romero Jr.: 4035 Architectural Design 4 - Space Planning 1",
-      "Engr. Mark Lester B. Tallungan: 4037 Building Technology 2 - Construction Drawings in Wood, Steel & Concrete",
+      "Ar. Joshua Eliz P. Hernandez: 4035 Architectural Design 4 - Space Planning 1",
+      "Engr. Rovic Jay S. Pi\u00f1on: 4037 Building Technology 2 - Construction Drawings in Wood, Steel & Concrete",
       "Ar. Vincent T. Degamo: 4038 Arch'l Interiors",
-      "Ar. Joshua Eliz P. Hernandez: 4039 Computer-Aided Design & Drafting for Archre 2 (3D)",
+      "Ar. Romeo C. Romero Jr.: 4039 Computer-Aided Design & Drafting for Archre 2 (3D)",
       "Ar. Bobby U. Argote : 4040 Theory of Structures"
     ],
     "conflicts": [],
@@ -13055,7 +13070,7 @@
     ]
   },
   "generations": 20,
-  "runtime_ms": 54408,
+  "runtime_ms": 60620,
   "run_id": "feb6051739e18c73",
   "constraints": {
     "population_size": 120,

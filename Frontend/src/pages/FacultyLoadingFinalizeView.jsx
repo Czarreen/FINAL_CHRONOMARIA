@@ -440,12 +440,24 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
         if (!mounted || dbRows.length === 0) return;
 
         setRows((current) => {
-          // Build a map of facloading_id → { locked, facloading_id } from DB
-          const dbMap = new Map();
+          // Primary lookup: facloading_id → { locked, facloading_id }
+          const dbById = new Map();
           dbRows.forEach((r) => {
             if (r?.facloading_id != null) {
-              dbMap.set(r.facloading_id, { locked: Boolean(r.locked), facloading_id: r.facloading_id });
+              dbById.set(r.facloading_id, { locked: Boolean(r.locked), facloading_id: r.facloading_id });
             }
+          });
+
+          // Fallback lookup: "code|course_no|section" → { locked, facloading_id }
+          // Handles rows loaded from the GA result (assignments) that lack facloading_id.
+          const dbByKey = new Map();
+          dbRows.forEach((r) => {
+            const key = [
+              String(r.code ?? '').trim().toUpperCase(),
+              String(r.course_no ?? '').trim().toUpperCase(),
+              String(r.section ?? '').trim().toUpperCase(),
+            ].join('|');
+            if (key !== '||') dbByKey.set(key, { locked: Boolean(r.locked), facloading_id: r.facloading_id });
           });
 
           if (current.length === 0) {
@@ -455,10 +467,24 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
 
           // Rows already loaded (from localStorage) — sync locked + facloading_id from DB
           return current.map((r) => {
-            if (r.facloading_id != null && dbMap.has(r.facloading_id)) {
-              const db = dbMap.get(r.facloading_id);
+            // 1️⃣ Match by facloading_id (fast path — rows that already have a DB id)
+            if (r.facloading_id != null && dbById.has(r.facloading_id)) {
+              const db = dbById.get(r.facloading_id);
               return { ...r, locked: db.locked };
             }
+
+            // 2️⃣ Fallback: match by composite key (rows from GA result without facloading_id)
+            const compositeKey = [
+              String(r.code ?? '').trim().toUpperCase(),
+              String(r.course_no ?? '').trim().toUpperCase(),
+              String(r.section ?? '').trim().toUpperCase(),
+            ].join('|');
+            if (compositeKey !== '||' && dbByKey.has(compositeKey)) {
+              const db = dbByKey.get(compositeKey);
+              // Patch facloading_id so the next sync uses the faster ID path
+              return { ...r, locked: db.locked, facloading_id: r.facloading_id ?? db.facloading_id };
+            }
+
             return r;
           });
         });

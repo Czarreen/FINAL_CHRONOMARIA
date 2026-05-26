@@ -268,8 +268,9 @@ export default function FacultyLoadingView() {
   const [activeQualityTab, setActiveQualityTab] = useState('quality'); // 'quality' | 'issues'
   const [showUnresolvedModal, setShowUnresolvedModal] = useState(false);
 
-  // Load Balance: department sub-tab + faculty detail modal
-  const [activeDeptTab, setActiveDeptTab]   = useState('all');
+  // Load Balance: department sub-tab + search + faculty detail modal
+  const [activeDeptTab, setActiveDeptTab]     = useState('all');
+  const [balanceSearch, setBalanceSearch]     = useState('');
   const [flvModalFaculty, setFlvModalFaculty] = useState(null);
   const [showFlvModal, setShowFlvModal]       = useState(false);
 
@@ -430,11 +431,15 @@ export default function FacultyLoadingView() {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  const uniqueLoadBalance = [...dedupeFacultyRows(loadBalance)].sort((left, right) => {
-    const delta = toNumber(right.imbalance_score) - toNumber(left.imbalance_score);
-    if (delta !== 0) return delta;
-    return toNumber(right.total_units) - toNumber(left.total_units);
-  });
+  const uniqueLoadBalance = useMemo(
+    () =>
+      [...dedupeFacultyRows(loadBalance)].sort((left, right) => {
+        const delta = toNumber(right.imbalance_score) - toNumber(left.imbalance_score);
+        if (delta !== 0) return delta;
+        return toNumber(right.total_units) - toNumber(left.total_units);
+      }),
+    [loadBalance]
+  );
 
   // Department sub-tabs — sorted unique department names from load balance
   const deptTabs = useMemo(() => {
@@ -454,15 +459,27 @@ export default function FacultyLoadingView() {
     return map;
   }, [uniqueLoadBalance]);
 
-  // Filtered card grid rows
+  // Filtered card grid rows (by dept tab)
   const filteredLoadBalance = useMemo(() => {
     if (activeDeptTab === 'all') return uniqueLoadBalance;
     return uniqueLoadBalance.filter((row) => row.department_name === activeDeptTab);
   }, [uniqueLoadBalance, activeDeptTab]);
 
+  // Further filtered by search text (faculty name, role, department)
+  const searchedLoadBalance = useMemo(() => {
+    const q = balanceSearch.trim().toLowerCase();
+    if (!q) return filteredLoadBalance;
+    return filteredLoadBalance.filter((row) =>
+      (row.faculty_name || '').toLowerCase().includes(q) ||
+      (row.faculty_role || '').toLowerCase().includes(q) ||
+      (row.department_name || '').toLowerCase().includes(q)
+    );
+  }, [filteredLoadBalance, balanceSearch]);
+
   // Reset to "all" whenever load balance data refreshes
   useEffect(() => {
     setActiveDeptTab('all');
+    setBalanceSearch('');
   }, [uniqueLoadBalance]);
 
   function handleSort(key) {
@@ -812,11 +829,36 @@ export default function FacultyLoadingView() {
         {/* Tab: Load Balance — landscape 2-col grid */}
         {activeQualityTab === 'balance' && (
           <div className="p-4">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface">Faculty Load Balance</span>
-              <span className="rounded-full border border-white/60 bg-white/80 px-2 py-1 text-xs font-semibold text-on-surface-variant">
-                {uniqueLoadBalance.length} faculty
-              </span>
+            <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface shrink-0">Faculty Load Balance</span>
+              <div className="flex items-center gap-2 flex-1 sm:justify-end">
+                {/* Search input */}
+                {uniqueLoadBalance.length > 0 && (
+                  <div className="relative flex-1 sm:max-w-xs">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/60 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search faculty, role, department…"
+                      value={balanceSearch}
+                      onChange={(e) => setBalanceSearch(e.target.value)}
+                      className="w-full rounded-lg border border-white/40 bg-white/70 py-1.5 pl-7 pr-7 text-xs text-on-surface placeholder-on-surface-variant/50 outline-none transition hover:bg-white focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+                    />
+                    {balanceSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setBalanceSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/50 hover:text-on-surface transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <span className="rounded-full border border-white/60 bg-white/80 px-2 py-1 text-xs font-semibold text-on-surface-variant shrink-0">
+                  {searchedLoadBalance.length}{balanceSearch ? ` / ${uniqueLoadBalance.length}` : ''} faculty
+                </span>
+              </div>
             </div>
             {/* Department sub-tabs — only shown when there is more than one department */}
             {uniqueLoadBalance.length > 0 && deptTabs.length > 1 && (
@@ -862,9 +904,20 @@ export default function FacultyLoadingView() {
               <p className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-4 text-xs text-on-surface-variant">
                 Run GA to see faculty load balance.
               </p>
+            ) : searchedLoadBalance.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-outline-variant/60 bg-white/60 p-6 text-center">
+                <p className="text-xs font-semibold text-on-surface-variant">No faculty match &ldquo;{balanceSearch}&rdquo;</p>
+                <button
+                  type="button"
+                  onClick={() => setBalanceSearch('')}
+                  className="mt-2 text-xs text-primary hover:underline"
+                >
+                  Clear search
+                </button>
+              </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                {filteredLoadBalance.map((row, idx) => {
+                {searchedLoadBalance.map((row, idx) => {
                   const pct = Math.max(6, Math.min(100, (toNumber(row.total_units) / Math.max(1, toNumber(row.max_units))) * 100));
                   const prepUnits = toNumber(row.prep_units) || 0;
                   const total = toNumber(row.total_units) || 0;

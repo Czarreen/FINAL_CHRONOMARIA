@@ -324,7 +324,7 @@ function buildFacultyLoadingDisplayRows(snapshot, assignments, preflight) {
       faculty_id: assignedFaculty ? assignedFaculty.faculty_id ?? null : null,
       faculty_name: assignedFaculty ? normalizeText(assignedFaculty.faculty_name) || null : null,
       faculty_role: assignedFaculty ? normalizeText(assignedFaculty.faculty_role) || null : null,
-      load_status: isGeneral ? 'general' : assignment ? 'loaded' : problematic ? 'needs_attention' : 'unassigned',
+      load_status: isGeneral ? 'general' : assignment?.status === 'Locked' ? 'Locked' : assignment ? 'loaded' : problematic ? 'needs_attention' : 'unassigned',
       issue_reasons: problematic?.reasons || [],
       is_general: isGeneral,
       source: 'subject',
@@ -1043,7 +1043,10 @@ async function fetchSnapshot() {
              fl.tfs_schedule, fl.tfs_room_id, fl.merged, fl.locked,
              f.faculty_name,
              d.department_name,
-             CASE WHEN fl.faculty_id IS NOT NULL THEN 'assigned' ELSE 'unassigned' END AS load_status
+             CASE WHEN fl.locked = true AND fl.faculty_id IS NOT NULL THEN 'Locked'
+                  WHEN fl.faculty_id IS NOT NULL THEN 'assigned'
+                  ELSE 'unassigned'
+             END AS load_status
       from public.faculty_loading fl
       left join public.faculty f on f.faculty_id = fl.faculty_id
       left join public.departments d on d.department_id = fl.department_id
