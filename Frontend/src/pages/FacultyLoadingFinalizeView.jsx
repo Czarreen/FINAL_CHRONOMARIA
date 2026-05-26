@@ -25,6 +25,7 @@ import { formatScheduleTimeDisplay } from '../utils/scheduleUtils';
 import { fetchGaPreFlight } from '../services/gaApi';
 import { fetchRooms } from '../services/roomsApi';
 import { updateFacultyLoadingLock } from '../services/facultyApi';
+import FacultyAssignModal from '../components/FacultyAssignModal.jsx';
 
 let ROOMS_MAP = {};
 
@@ -122,6 +123,7 @@ function normalizeRow(row, index) {
     tfs_room: row?.tfs_room ?? row?.tfs_room_id ?? row?.tfs_room_label ?? '',
     department_name: row?.department_name ?? '',
     faculty_name: row?.faculty_name ?? '',
+    faculty_id: row?.faculty_id ?? null,     // needed for conflict detection in FacultyAssignModal
     merged: Boolean(row?.merged),
     locked: Boolean(row?.locked),
     load_status: row?.load_status ?? '',
@@ -612,20 +614,15 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     setEditDraft(null);
   };
 
-  const handleEditDraftChange = (columnKey, value) => {
-    setEditDraft((current) => ({
-      ...current,
-      [columnKey]: value,
-    }));
-  };
+  const handleModalSave = (patch) => {
+    if (!editingRowId) return;
 
-  const applyRowEdit = () => {
-    if (!editingRowId || !editDraft) return;
-
-    setRows((current) => current.map((row) => {
-      if (row.id !== editingRowId) return row;
-      return normalizeRow({ ...row, ...editDraft }, 0);
-    }));
+    setRows((current) =>
+      current.map((row) => {
+        if (row.id !== editingRowId) return row;
+        return normalizeRow({ ...row, ...patch }, 0);
+      })
+    );
 
     setStatusMessage('Row updated.');
     closeRowEditor();
@@ -1013,66 +1010,13 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
       ) : null}
 
       {editingRowId && editDraft ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/35 p-4">
-          <div className="w-full max-w-4xl rounded-2xl border border-white/60 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-lg font-bold text-on-surface">Edit Row</h4>
-                <p className="mt-1 text-sm text-on-surface-variant">Update the selected row fields then apply changes.</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeRowEditor}
-                className="rounded-lg border border-outline-variant bg-white p-1.5 text-on-surface-variant transition-colors hover:text-on-surface"
-                aria-label="Close edit modal"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {orderedColumns.map((column) => (
-                <label key={`editor-${column.key}`} className="block text-sm">
-                  <span className="mb-1 block font-semibold text-on-surface">{column.label}</span>
-                  {column.type === 'boolean' ? (
-                    <select
-                      value={editDraft[column.key] ? 'yes' : 'no'}
-                      onChange={(event) => handleEditDraftChange(column.key, event.target.value === 'yes')}
-                      className="w-full rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary"
-                    >
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
-                  ) : (
-                    <input
-                      type={column.type === 'number' ? 'number' : 'text'}
-                      value={editDraft[column.key] ?? ''}
-                      onChange={(event) => handleEditDraftChange(column.key, event.target.value)}
-                      className="w-full rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary"
-                    />
-                  )}
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeRowEditor}
-                className="rounded-xl border border-outline-variant bg-white px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={applyRowEdit}
-                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary transition-colors hover:bg-primary/90"
-              >
-                Apply Edit
-              </button>
-            </div>
-          </div>
-        </div>
+        <FacultyAssignModal
+          row={editDraft}
+          allRows={rows}
+          onClose={closeRowEditor}
+          onSave={handleModalSave}
+          orderedColumns={orderedColumns}
+        />
       ) : null}
     </div>
   );
