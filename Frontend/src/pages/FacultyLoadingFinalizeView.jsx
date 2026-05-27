@@ -20,7 +20,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Document, Packer, Paragraph, Table as DocTable, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { AlignmentType, Document, Packer, Paragraph, Table as DocTable, TableCell, TableRow, TextRun, WidthType } from 'docx';
 import { formatScheduleTimeDisplay } from '../utils/scheduleUtils';
 import { fetchGaPreFlight } from '../services/gaApi';
 import { fetchRooms } from '../services/roomsApi';
@@ -75,6 +75,7 @@ const COLUMN_MIN_WIDTHS = {
   load_status: '10rem',
 };
 
+
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -94,6 +95,18 @@ function downloadBlob(blob, filename) {
 function timestampForFileName(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
+
+// Format: "Mar 14, 2026, 02:25 PM" — matches the official document header.
+function formatExportDateDisplay(date = new Date()) {
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 function parseJson(raw) {
@@ -273,90 +286,241 @@ function toExportColumns(columns) {
   return result;
 }
 
-function exportCsv(filename, rows, columns) {
+
+function exportCsv(filename, rows, columns, metadata = {}) {
+  const { semester = '', printedAt = new Date() } = metadata;
   const { headers, body } = buildExportMatrix(rows, columns);
-  const lines = [headers.map((header) => JSON.stringify(header)).join(',')];
 
-  for (const row of body) {
-    lines.push(row.map((value) => JSON.stringify(String(value ?? ''))).join(','));
-  }
+  const metaLines = [
+    JSON.stringify("SAINT MARY'S UNIVERSITY"),
+    JSON.stringify('OFFICE OF THE UNIVERSITY REGISTRAR'),
+    JSON.stringify('MASTER LIST'),
+    JSON.stringify(`Date and Time Printed: ${formatExportDateDisplay(printedAt)}`),
+    semester ? JSON.stringify(`${semester} Semester`) : '""',
+    '',
+    headers.map((h) => JSON.stringify(h)).join(','),
+  ];
 
-  downloadBlob(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
+  const dataLines = body.map((row) =>
+    row.map((value) => JSON.stringify(String(value ?? ''))).join(','),
+  );
+
+  downloadBlob(
+    new Blob([[...metaLines, ...dataLines].join('\r\n')], { type: 'text/csv;charset=utf-8' }),
+    filename,
+  );
 }
 
-function exportXlsx(filename, rows, columns) {
+function exportXlsx(filename, rows, columns, metadata = {}) {
+  const { semester = '', printedAt = new Date() } = metadata;
   const { headers, body } = buildExportMatrix(rows, columns);
-  const worksheetData = [headers, ...body];
+
+  const worksheetData = [
+    ["SAINT MARY'S UNIVERSITY"],
+    ['OFFICE OF THE UNIVERSITY REGISTRAR'],
+    ['MASTER LIST'],
+    [`Date and Time Printed: ${formatExportDateDisplay(printedAt)}`],
+    [semester ? `${semester} Semester` : ''],
+    [],
+    headers,
+    ...body,
+  ];
+
   const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Faculty Loading');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Master List');
   XLSX.writeFile(workbook, filename);
 }
 
-async function exportWord(filename, rows, columns) {
+async function exportWord(filename, rows, columns, metadata = {}) {
+  const { semester = '', printedAt = new Date() } = metadata;
   const { headers, body } = buildExportMatrix(rows, columns);
+
+  // Table with dark-navy header row + alternating body rows
   const table = new DocTable({
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
+    width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       new TableRow({
-        children: headers.map((header) => (
+        tableHeader: true,
+        children: headers.map((header) =>
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: header, bold: true })] })],
-          })
-        )),
+            shading: { fill: '1E2D5A', color: 'auto' },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                children: [
+                  new TextRun({ text: header, bold: true, color: 'FFFFFF', size: 16 }),
+                ],
+              }),
+            ],
+          }),
+        ),
       }),
-      ...body.map((row) => (
+      ...body.map((row, rowIndex) =>
         new TableRow({
-          children: row.map((value) => (
+          children: row.map((value) =>
             new TableCell({
-              children: [new Paragraph({ text: String(value ?? '') })],
-            })
-          )),
-        })
-      )),
+              shading: rowIndex % 2 !== 0 ? { fill: 'F6F8FC', color: 'auto' } : undefined,
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: String(value ?? ''), size: 16 })],
+                }),
+              ],
+            }),
+          ),
+        }),
+      ),
     ],
   });
 
-  const document = new Document({
+  const letterheadChildren = [
+    // SAINT MARY'S UNIVERSITY — bold, large, centered
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 40 },
+      children: [
+        new TextRun({ text: "SAINT MARY'S UNIVERSITY", bold: true, size: 28 }),
+      ],
+    }),
+    // OFFICE OF THE UNIVERSITY REGISTRAR — small, spaced, centered
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 120 },
+      children: [
+        new TextRun({
+          text: 'OFFICE OF THE UNIVERSITY REGISTRAR',
+          size: 18,
+          characterSpacing: 40,
+        }),
+      ],
+    }),
+    // MASTER LIST — bold, very large, centered
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80 },
+      children: [
+        new TextRun({ text: 'MASTER LIST', bold: true, size: 40 }),
+      ],
+    }),
+    // Date and Time Printed — small, centered, gray
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: semester ? 40 : 160 },
+      children: [
+        new TextRun({
+          text: `Date and Time Printed: ${formatExportDateDisplay(printedAt)}`,
+          size: 16,
+          color: '666666',
+        }),
+      ],
+    }),
+  ];
+
+  if (semester) {
+    letterheadChildren.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 160 },
+        children: [
+          new TextRun({ text: `${semester} Semester`, size: 16, color: '666666' }),
+        ],
+      }),
+    );
+  }
+
+  const doc = new Document({
     sections: [
       {
         children: [
-          new Paragraph({ children: [new TextRun({ text: 'Faculty Loading Finalized List', bold: true, size: 30 })] }),
-          new Paragraph({ children: [new TextRun({ text: `Rows exported: ${rows.length}` })] }),
+          ...letterheadChildren,
           table,
         ],
       },
     ],
   });
 
-  const blob = await Packer.toBlob(document);
+  const blob = await Packer.toBlob(doc);
   downloadBlob(blob, filename);
 }
 
-function exportPdf(filename, rows, columns) {
+function exportPdf(filename, rows, columns, metadata = {}) {
+  const { semester = '', printedAt = new Date() } = metadata;
   const { headers, body } = buildExportMatrix(rows, columns);
-  const doc = new jsPDF({ orientation: columns.length > 5 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
-  doc.setFontSize(16);
-  doc.text('Faculty Loading Finalized List', 40, 40);
-  doc.setFontSize(10);
-  doc.text(`Rows exported: ${rows.length}`, 40, 58);
 
+  const doc = new jsPDF({ orientation: columns.length > 5 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const cx = pageWidth / 2;
+
+  // ── Letterhead ──────────────────────────────────────────────────────────────
+
+  // SAINT MARY'S UNIVERSITY
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(30, 45, 90);
+  doc.text("SAINT MARY'S UNIVERSITY", cx, 34, { align: 'center' });
+
+  // OFFICE OF THE UNIVERSITY REGISTRAR
+  // Note: no setCharSpace — it shifts jsPDF's center-alignment calculation.
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  doc.text('OFFICE OF THE UNIVERSITY REGISTRAR', cx, 47, { align: 'center' });
+
+  // MASTER LIST
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(30, 45, 90);
+  doc.text('MASTER LIST', cx, 70, { align: 'center' });
+
+  // Date and Time Printed
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(110, 110, 110);
+  const dateY = 83;
+  doc.text(`Date and Time Printed: ${formatExportDateDisplay(printedAt)}`, cx, dateY, { align: 'center' });
+
+  // Semester (optional)
+  let startY = dateY + 13;
+  if (semester) {
+    doc.text(`${semester} Semester`, cx, startY, { align: 'center' });
+    startY += 13;
+  }
+
+  // Thin divider line beneath letterhead
+  doc.setDrawColor(200, 208, 220);
+  doc.setLineWidth(0.5);
+  doc.line(30, startY + 2, pageWidth - 30, startY + 2);
+  startY += 10;
+
+  doc.setTextColor(0, 0, 0);
+
+  // ── Table — columns are dynamic (respect column manager + lec/lab merge) ────
   autoTable(doc, {
     head: [headers],
     body,
-    startY: 74,
+    startY,
+    margin: { top: 20, right: 28, bottom: 28, left: 28 },
     styles: {
-      fontSize: 8,
-      cellPadding: 3,
+      fontSize: 7.5,
+      cellPadding: { top: 4, right: 5, bottom: 4, left: 5 },
       overflow: 'linebreak',
       valign: 'middle',
+      font: 'helvetica',
+      textColor: [30, 30, 30],
+      lineColor: [210, 215, 225],
+      lineWidth: 0.3,
     },
     headStyles: {
-      fillColor: [32, 44, 90],
-      textColor: 255,
+      fillColor: [30, 45, 90],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'left',
+      cellPadding: { top: 5, right: 5, bottom: 5, left: 5 },
+      lineWidth: 0,
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
     },
     alternateRowStyles: {
       fillColor: [246, 248, 252],
@@ -385,7 +549,9 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
   const [pageSize, setPageSize] = useState(initialState.pageSize ?? 25);
   const [statusMessage, setStatusMessage] = useState('');
   const [showColumnManager, setShowColumnManager] = useState(false);
-  const [showExportPopup, setShowExportPopup] = useState(false);
+  const [showExportSetup, setShowExportSetup] = useState(false);
+  const [exportSemester, setExportSemester] = useState('');
+  const [exportDateTime, setExportDateTime] = useState(null);
   const [editingRowId, setEditingRowId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
 
@@ -676,28 +842,29 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
 
     // Merge lec_hrs + lab_hrs → "Total Contact Hrs" for all export formats
     const resolvedExportColumns = toExportColumns(exportColumns);
-    const filenameBase = `faculty_loading_finalized_${timestampForFileName()}`;
+    const metadata = { semester: exportSemester, printedAt: exportDateTime ?? new Date() };
+    const filenameBase = `master_list_${timestampForFileName()}`;
 
     if (type === 'csv') {
-      exportCsv(`${filenameBase}.csv`, exportRows, resolvedExportColumns);
+      exportCsv(`${filenameBase}.csv`, exportRows, resolvedExportColumns, metadata);
       setStatusMessage('CSV export downloaded.');
       return;
     }
 
     if (type === 'xlsx') {
-      exportXlsx(`${filenameBase}.xlsx`, exportRows, resolvedExportColumns);
+      exportXlsx(`${filenameBase}.xlsx`, exportRows, resolvedExportColumns, metadata);
       setStatusMessage('Excel export downloaded.');
       return;
     }
 
     if (type === 'word') {
-      await exportWord(`${filenameBase}.docx`, exportRows, resolvedExportColumns);
+      await exportWord(`${filenameBase}.docx`, exportRows, resolvedExportColumns, metadata);
       setStatusMessage('Word export downloaded.');
       return;
     }
 
     if (type === 'pdf') {
-      exportPdf(`${filenameBase}.pdf`, exportRows, resolvedExportColumns);
+      exportPdf(`${filenameBase}.pdf`, exportRows, resolvedExportColumns, metadata);
       setStatusMessage('PDF export downloaded.');
     }
   };
@@ -789,7 +956,7 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowExportPopup(true)}
+                  onClick={() => { setExportDateTime(new Date()); setShowExportSetup(true); }}
                   disabled={!exportRows.length || !exportColumns.length}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -972,39 +1139,87 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
         </div>
       ) : null}
 
-      {showExportPopup ? (
+      {showExportSetup ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/35 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
+          <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
+
+            {/* ── Header ── */}
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h4 className="text-lg font-bold text-on-surface">Choose Export Format</h4>
-                <p className="mt-1 text-sm text-on-surface-variant">Select one format to download the current filtered list.</p>
+                <h4 className="text-lg font-bold text-on-surface">Export Master List</h4>
+                <p className="mt-0.5 text-sm text-on-surface-variant">Configure the document before downloading.</p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowExportPopup(false)}
+                onClick={() => setShowExportSetup(false)}
                 className="rounded-lg border border-outline-variant bg-white p-1.5 text-on-surface-variant transition-colors hover:text-on-surface"
-                aria-label="Close export popup"
+                aria-label="Close"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="mt-4 space-y-2">
-              {exportFormats.map((format) => (
-                <button
-                  key={format.key}
-                  type="button"
-                  onClick={async () => {
-                    await handleExport(format.key);
-                    setShowExportPopup(false);
-                  }}
-                  className="w-full rounded-xl border border-outline-variant bg-white/90 px-4 py-3 text-left text-sm font-semibold text-on-surface transition-colors hover:bg-primary-container/15"
-                >
-                  {format.label}
-                </button>
-              ))}
+            {/* ── Preview letterhead ── */}
+            <div className="mt-4 rounded-xl border border-outline-variant/50 bg-[#f8f9fc] px-5 py-4 text-center">
+              <p className="text-[11px] font-bold tracking-[0.25em] text-[#1e2d5a]">SAINT MARY&apos;S UNIVERSITY</p>
+              <p className="mt-0.5 text-[9px] tracking-[0.18em] text-slate-500">OFFICE OF THE UNIVERSITY REGISTRAR</p>
+              <p className="mt-2 text-base font-extrabold tracking-[0.12em] text-[#1e2d5a]">MASTER LIST</p>
+              <p className="mt-1 text-[9px] text-slate-400">
+                Date and Time Printed:&nbsp;
+                <span className="text-slate-500">{exportDateTime ? formatExportDateDisplay(exportDateTime) : '—'}</span>
+              </p>
+              {exportSemester ? (
+                <p className="mt-0.5 text-[9px] text-slate-500">{exportSemester} Semester</p>
+              ) : null}
             </div>
+
+            {/* ── Semester selector ── */}
+            <div className="mt-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">Semester</p>
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
+                {['First', 'Second', 'Midyear'].map((sem) => (
+                  <button
+                    key={sem}
+                    type="button"
+                    onClick={() => setExportSemester(sem)}
+                    className={`rounded-xl border px-2 py-2.5 text-xs font-bold transition-all ${
+                      exportSemester === sem
+                        ? 'border-primary bg-primary text-on-primary shadow-md shadow-primary/25'
+                        : 'border-outline-variant bg-white text-on-surface hover:bg-primary-container/15'
+                    }`}
+                  >
+                    {sem === 'Midyear' ? 'Midyear' : `${sem} Sem`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Format selector ── */}
+            <div className="mt-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+                Export Format
+                {!exportSemester ? (
+                  <span className="ml-1 font-normal normal-case text-rose-400">— select a semester first</span>
+                ) : null}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {exportFormats.map((format) => (
+                  <button
+                    key={format.key}
+                    type="button"
+                    disabled={!exportSemester}
+                    onClick={async () => {
+                      await handleExport(format.key);
+                      setShowExportSetup(false);
+                    }}
+                    className="rounded-xl border border-outline-variant bg-white/90 px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-primary-container/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {format.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
           </div>
         </div>
       ) : null}

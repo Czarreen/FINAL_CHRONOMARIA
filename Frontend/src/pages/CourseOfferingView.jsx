@@ -49,7 +49,7 @@ import { isFormValid, getDisabledReason } from '../utils/courseOfferingValidatio
 import { NOTIFICATION_FIELD_TO_KEY } from '../utils/notificationTransform';
 import ScheduleCardInput from '../components/ScheduleCardInput';
 import RoomConflictsPanel from '../components/RoomConflictsPanel';
-import { buildScheduleString, parseScheduleString, emptyCardState, getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils';
+import { buildScheduleString, parseScheduleString, emptyCardState, splitMthAndWed, getScheduleAmPm, formatScheduleDisplay, isSimpleSchedule } from '../utils/scheduleUtils';
 
 const PAGE_SIZE = 50;
 
@@ -121,8 +121,11 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
   // Structured schedule card state — drives mth_schedule / tfs_schedule strings
   const [mthCard, setMthCard] = useState(emptyCardState('mth'));
   const [tfsCard, setTfsCard] = useState(emptyCardState('tfs'));
+  // Wednesday is stored in mth_schedule with "W" suffix; separate card for rare cases
+  const [wedCard, setWedCard] = useState(emptyCardState('wed'));
   const [mthCardModified, setMthCardModified] = useState(false);
   const [tfsCardModified, setTfsCardModified] = useState(false);
+  const [wedCardModified, setWedCardModified] = useState(false);
 
   const { setHighlight, clearHighlight } = useRowHighlight();
   const skipNextFilterResetRef = useRef(false);
@@ -449,7 +452,10 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     // Derive schedule strings from structured card state (null for disabled cards)
     const mthStr = mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null;
     const tfsStr = tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null;
-    const dataForValidation = { ...editingData, mth_schedule: mthStr || null, tfs_schedule: tfsStr || null };
+    // Wednesday is stored in mth_schedule, appended with a comma and "W" day suffix
+    const wedStr = wedCard.enabled ? buildScheduleString('wed', 'wed', wedCard.startH, wedCard.startM, wedCard.endH, wedCard.endM, wedCard.type, wedCard.hasSec, wedCard.startH2, wedCard.startM2, wedCard.endH2, wedCard.endM2, wedCard.type2) : null;
+    const combinedMthStr = [mthStr, wedStr].filter(Boolean).join(', ') || null;
+    const dataForValidation = { ...editingData, mth_schedule: combinedMthStr, tfs_schedule: tfsStr || null };
 
     if (!isFormValid(dataForValidation)) {
       setOfferingError(getDisabledReason(dataForValidation) || 'Please fill in all required fields');
@@ -470,7 +476,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
       const payload = {
         ...editingData,
-        mth_schedule: mthStr || null,
+        mth_schedule: combinedMthStr,
         tfs_schedule: tfsStr || null,
         mth_room_id: mthRoomId,
         tfs_room_id: tfsRoomId,
@@ -482,6 +488,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setEditingData({});
       setMthCard(emptyCardState('mth'));
       setTfsCard(emptyCardState('tfs'));
+      setWedCard(emptyCardState('wed'));
       setDuplicateCodeSuggestions([]);
       await loadInitialPage();
     } catch (err) {
@@ -510,13 +517,18 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       tfs_schedule: offering.tfs_schedule || '',
       tfs_room_id: tfsRoomIds,
     });
-    // Pre-populate structured card state from existing schedule strings
-    const mthParsed = parseScheduleString(offering.mth_schedule || '', 'mth');
+    // Pre-populate structured card state from existing schedule strings.
+    // mth_schedule may contain both Mon/Thu and Wednesday entries; split them first.
+    const { mthPart, wedPart } = splitMthAndWed(offering.mth_schedule || '');
+    const mthParsed = parseScheduleString(mthPart, 'mth');
     setMthCard(mthParsed ? { enabled: true, ...mthParsed } : emptyCardState('mth'));
     const tfsParsed = parseScheduleString(offering.tfs_schedule || '', 'tfs');
     setTfsCard(tfsParsed ? { enabled: true, ...tfsParsed } : emptyCardState('tfs'));
+    const wedParsed = parseScheduleString(wedPart, 'wed');
+    setWedCard(wedParsed ? { enabled: true, ...wedParsed } : emptyCardState('wed'));
     setMthCardModified(false);
     setTfsCardModified(false);
+    setWedCardModified(false);
     setEditingFromNotification(!!notifItem);
     setNotificationMissingFields(
       notifItem
@@ -531,13 +543,21 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setSavingOffering(true);
       setOfferingError(null);
 
-      // Preserve original complex schedule strings when the card was not touched by the user
+      // Preserve original complex schedule strings when the card was not touched by the user.
+      // For mth_schedule, split into MTH and Wednesday parts to preserve each independently.
+      const originalMthPart = splitMthAndWed(editingData.mth_schedule || '').mthPart;
+      const originalWedPart = splitMthAndWed(editingData.mth_schedule || '').wedPart;
+
       const mthStr = mthCardModified
         ? (mthCard.enabled ? buildScheduleString('mth', mthCard.mode, mthCard.startH, mthCard.startM, mthCard.endH, mthCard.endM, mthCard.type, mthCard.hasSec, mthCard.startH2, mthCard.startM2, mthCard.endH2, mthCard.endM2, mthCard.type2) : null)
-        : (editingData.mth_schedule || null);
+        : (originalMthPart || null);
       const tfsStr = tfsCardModified
         ? (tfsCard.enabled ? buildScheduleString('tfs', tfsCard.mode, tfsCard.startH, tfsCard.startM, tfsCard.endH, tfsCard.endM, tfsCard.type, tfsCard.hasSec, tfsCard.startH2, tfsCard.startM2, tfsCard.endH2, tfsCard.endM2, tfsCard.type2) : null)
         : (editingData.tfs_schedule || null);
+      const wedStr = wedCardModified
+        ? (wedCard.enabled ? buildScheduleString('wed', 'wed', wedCard.startH, wedCard.startM, wedCard.endH, wedCard.endM, wedCard.type, wedCard.hasSec, wedCard.startH2, wedCard.startM2, wedCard.endH2, wedCard.endM2, wedCard.type2) : null)
+        : (originalWedPart || null);
+      const combinedMthStr = [mthStr, wedStr].filter(Boolean).join(', ') || null;
 
       const mthRoomId = mthCard.enabled
         ? buildCombinedRoomId(editingData.mth_room_id)
@@ -549,7 +569,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
 
       const payload = {
         ...editingData,
-        mth_schedule: mthStr || null,
+        mth_schedule: combinedMthStr,
         tfs_schedule: tfsStr || null,
         mth_room_id: mthRoomId,
         tfs_room_id: tfsRoomId,
@@ -562,6 +582,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       setEditingData({});
       setMthCard(emptyCardState('mth'));
       setTfsCard(emptyCardState('tfs'));
+      setWedCard(emptyCardState('wed'));
+      setWedCardModified(false);
       setEditingFromNotification(false);
       setNotificationMissingFields(new Set());
       // Re-sync notifications for this offering in the background then refresh both
@@ -575,6 +597,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         setEditingData({});
         setMthCard(emptyCardState('mth'));
         setTfsCard(emptyCardState('tfs'));
+        setWedCard(emptyCardState('wed'));
+        setWedCardModified(false);
         setEditingFromNotification(false);
         setNotificationMissingFields(new Set());
         await loadInitialPage();
@@ -1370,6 +1394,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               setEditingData({ mth_room_id: [], tfs_room_id: [] });
               setMthCard(emptyCardState('mth'));
               setTfsCard(emptyCardState('tfs'));
+              setWedCard(emptyCardState('wed'));
+              setWedCardModified(false);
               setOfferingError(null);
             }}
             type="button"
@@ -2136,6 +2162,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   setEditingId(null);
                   setMthCard(emptyCardState('mth'));
                   setTfsCard(emptyCardState('tfs'));
+                  setWedCard(emptyCardState('wed'));
+                  setWedCardModified(false);
                   setEditingFromNotification(false);
                   setNotificationMissingFields(new Set());
                 }}
@@ -2307,6 +2335,17 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     isMissing={editableKeys !== null && (editableKeys.has('tfs_schedule') || editableKeys.has('tfs_room_id'))}
                     disabled={editableKeys !== null && !editableKeys.has('tfs_schedule') && !editableKeys.has('tfs_room_id')}
                   />
+                  {/* Wednesday card — optional, rare use. Shares MTH room. */}
+                  <ScheduleCardInput
+                    slot="wed"
+                    value={wedCard}
+                    onChange={(v) => { setWedCard(v); setWedCardModified(true); }}
+                    onToggle={() => { setWedCard((c) => ({ ...c, enabled: !c.enabled })); setWedCardModified(true); }}
+                    canDisable={true}
+                    rooms={rooms}
+                    getConflictingOfferings={getConflictingOfferings}
+                    editingId={editingId}
+                  />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
@@ -2359,6 +2398,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                       setEditingId(null);
                       setMthCard(emptyCardState('mth'));
                       setTfsCard(emptyCardState('tfs'));
+                      setWedCard(emptyCardState('wed'));
+                      setWedCardModified(false);
                       setEditingFromNotification(false);
                       setNotificationMissingFields(new Set());
                     }}
@@ -2393,6 +2434,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   setEditingData({});
                   setMthCard(emptyCardState('mth'));
                   setTfsCard(emptyCardState('tfs'));
+                  setWedCard(emptyCardState('wed'));
+                  setWedCardModified(false);
                   setOfferingError(null);
                   setDuplicateCodeSuggestions([]);
                 }}
@@ -2628,6 +2671,18 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                   getConflictingOfferings={getConflictingOfferings}
                   editingId={editingId}
                 />
+
+                {/* Wednesday card — optional, rare use. Shares MTH room. */}
+                <ScheduleCardInput
+                  slot="wed"
+                  value={wedCard}
+                  onChange={(v) => { setWedCard(v); setWedCardModified(true); }}
+                  onToggle={() => { setWedCard((c) => ({ ...c, enabled: !c.enabled })); setWedCardModified(true); }}
+                  canDisable={true}
+                  rooms={rooms}
+                  getConflictingOfferings={getConflictingOfferings}
+                  editingId={null}
+                />
               </div>
 
               {/* Buttons */}
@@ -2638,6 +2693,8 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
                     setEditingData({});
                     setMthCard(emptyCardState('mth'));
                     setTfsCard(emptyCardState('tfs'));
+                    setWedCard(emptyCardState('wed'));
+                    setWedCardModified(false);
                     setOfferingError(null);
                     setDuplicateCodeSuggestions([]);
                   }}

@@ -1,5 +1,5 @@
 import { Lock, Plus, AlertTriangle, CheckCircle } from 'lucide-react';
-import { PAIR_DAY_NAMES, buildScheduleString, getScheduleTimeRange, timesOverlap } from '../utils/scheduleUtils';
+import { PAIR_DAY_NAMES, buildScheduleString, getScheduleTimeRange, timesOverlap, splitMthAndWed } from '../utils/scheduleUtils';
 
 const MODES = {
   mth: [
@@ -13,12 +13,17 @@ const MODES = {
     { value: 'fri', label: 'Fri only', short: 'F' },
     { value: 'sat', label: 'Sat only', short: 'S' },
   ],
+  wed: [
+    { value: 'wed', label: 'Wednesday', short: 'W' },
+  ],
 };
 
-const EARLIEST_START = 6 * 60;
+// Minimum start time is 7:30 AM — earlier slots are not allowed.
+const EARLIEST_START = 7 * 60 + 30;
 const LATEST_END = 20 * 60;
 
-const START_HOURS = Array.from({ length: 14 }, (_, i) => String(i + 6).padStart(2, '0'));
+// Start hours from 7 AM (minutes restricted to :30/:45 when hour is 07)
+const START_HOURS = Array.from({ length: 13 }, (_, i) => String(i + 7).padStart(2, '0'));
 const END_HOURS = Array.from({ length: 15 }, (_, i) => String(i + 6).padStart(2, '0'));
 const MINUTES = ['00', '15', '30', '45'];
 
@@ -33,6 +38,7 @@ const h24ToLabel = (h24str) => {
 const SLOT_LABELS = {
   mth: 'Monday / Thursday',
   tfs: 'Tuesday / Friday / Saturday',
+  wed: 'Wednesday',
 };
 
 const selectClass = `rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed`;
@@ -127,10 +133,23 @@ export default function ScheduleCardInput({
         return editingId == null || eid == null || String(eid) !== String(editingId);
       })
       .flatMap((o) => {
-        const schedField = slot === 'mth' ? o.mth_schedule : o.tfs_schedule;
-        const range = getScheduleTimeRange(schedField);
+        let schedStr;
+        if (slot === 'tfs') {
+          schedStr = o.tfs_schedule;
+        } else if (slot === 'wed') {
+          schedStr = splitMthAndWed(o.mth_schedule || '').wedPart;
+        } else {
+          schedStr = o.mth_schedule;
+        }
+        const range = getScheduleTimeRange(schedStr);
         return range ? [{ start: range.start, end: range.end, label: o.code || o.subject_code || '' }] : [];
       });
+  };
+
+  const getSchedStr = (o) => {
+    if (slot === 'tfs') return o.tfs_schedule;
+    if (slot === 'wed') return splitMthAndWed(o.mth_schedule || '').wedPart;
+    return o.mth_schedule;
   };
 
   const getRoomConflictInfo = (rid) => {
@@ -139,8 +158,7 @@ export default function ScheduleCardInput({
     const realConflicts = conflicting.filter((o) => {
       const eid = o.id ?? o.subject_id;
       if (editingId != null && eid != null && String(eid) === String(editingId)) return false;
-      const schedField = slot === 'mth' ? o.mth_schedule : o.tfs_schedule;
-      const range = getScheduleTimeRange(schedField);
+      const range = getScheduleTimeRange(getSchedStr(o));
       if (!range) return false;
       return timesOverlap(currentStart, currentEnd, range.start, range.end);
     });
@@ -158,8 +176,7 @@ export default function ScheduleCardInput({
     const realConflicts = conflicting.filter((o) => {
       const eid = o.id ?? o.subject_id;
       if (editingId != null && eid != null && String(eid) === String(editingId)) return false;
-      const schedField = slot === 'mth' ? o.mth_schedule : o.tfs_schedule;
-      const range = getScheduleTimeRange(schedField);
+      const range = getScheduleTimeRange(getSchedStr(o));
       if (!range) return false;
       return timesOverlap(currentStart2, currentEnd2, range.start, range.end);
     });
@@ -172,7 +189,10 @@ export default function ScheduleCardInput({
   };
 
   const isPair = (value.mode || 'pair') === 'pair';
-  const block1Label = isPair ? (PAIR_DAY_NAMES[slot]?.block1 || 'Block 1') : 'Block 1';
+  // For 'wed' slot always show day name; for pair modes use PAIR_DAY_NAMES; otherwise generic
+  const block1Label = slot === 'wed'
+    ? (PAIR_DAY_NAMES.wed?.block1 || 'Wednesday')
+    : (isPair ? (PAIR_DAY_NAMES[slot]?.block1 || 'Block 1') : 'Block 1');
   const block2Label = isPair ? (PAIR_DAY_NAMES[slot]?.block2 || 'Block 2') : 'Block 2';
 
   const schedulePreview = enabled
@@ -299,7 +319,7 @@ export default function ScheduleCardInput({
         )}
       </div>
       <div className="flex justify-between px-0.5 text-[9px] text-slate-400">
-        {[6, 8, 10, 12, 14, 16, 18, 20].map((h) => (
+        {[8, 10, 12, 14, 16, 18, 20].map((h) => (
           <span key={h}>{h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`}</span>
         ))}
       </div>
@@ -441,7 +461,13 @@ export default function ScheduleCardInput({
               <select
                 value={value.startH || '07'}
                 disabled={disabled}
-                onChange={(e) => update({ startH: e.target.value, startM: value.startM || '00' })}
+                onChange={(e) => {
+                  const h = e.target.value;
+                  // If hour is 07, only :30 and :45 are valid — correct if needed
+                  let m = value.startM || '30';
+                  if (h === '07' && (m === '00' || m === '15')) m = '30';
+                  update({ startH: h, startM: m });
+                }}
                 className={selectClass}
                 aria-label="Block 1 start hour"
               >
@@ -457,7 +483,7 @@ export default function ScheduleCardInput({
                 className={selectClass}
                 aria-label="Block 1 start minute"
               >
-                {MINUTES.map((m) => (
+                {MINUTES.filter((m) => !(value.startH === '07' && parseInt(m, 10) < 30)).map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
@@ -502,13 +528,22 @@ export default function ScheduleCardInput({
           {renderTypeButtons({ field: 'type', currentType: value.type || 'lec', isDisabled: disabled })}
 
           {/* Block 1 — Room */}
-          {renderRoomDropdown({
-            rid: roomId,
-            onSelect: onRoomChange,
-            getConflict: getRoomConflictInfo,
-            timeReady: timeIsSet,
-            label: `Block 1 room for ${slot.toUpperCase()}`,
-          })}
+          {slot === 'wed' ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant/60">Room</p>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-on-surface-variant/70 italic">
+                Uses same room as Mon / Thu schedule
+              </div>
+            </div>
+          ) : (
+            renderRoomDropdown({
+              rid: roomId,
+              onSelect: onRoomChange,
+              getConflict: getRoomConflictInfo,
+              timeReady: timeIsSet,
+              label: `Block 1 room for ${slot.toUpperCase()}`,
+            })
+          )}
         </div>
 
         {/* Block 2 */}
@@ -541,7 +576,12 @@ export default function ScheduleCardInput({
               <select
                 value={value.startH2 || '13'}
                 disabled={disabled || !hasSec}
-                onChange={(e) => update({ startH2: e.target.value, startM2: value.startM2 || '00' })}
+                onChange={(e) => {
+                  const h = e.target.value;
+                  let m = value.startM2 || '00';
+                  if (h === '07' && (m === '00' || m === '15')) m = '30';
+                  update({ startH2: h, startM2: m });
+                }}
                 className={selectClass}
                 aria-label="Block 2 start hour"
               >
@@ -557,7 +597,7 @@ export default function ScheduleCardInput({
                 className={selectClass}
                 aria-label="Block 2 start minute"
               >
-                {MINUTES.map((m) => (
+                {MINUTES.filter((m) => !(value.startH2 === '07' && parseInt(m, 10) < 30)).map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
@@ -606,13 +646,22 @@ export default function ScheduleCardInput({
           {renderTypeButtons({ field: 'type2', currentType: value.type2 || 'lec', isDisabled: disabled || !hasSec })}
 
           {/* Block 2 — Room (always selectable for "1 sched / 2 rooms") */}
-          {renderRoomDropdown({
-            rid: roomId2,
-            onSelect: onRoomChange2 || (() => {}),
-            getConflict: hasSec ? getRoomConflictInfo2 : getRoomConflictInfo,
-            timeReady: hasSec ? timeIsSet2 : timeIsSet,
-            label: `Block 2 room for ${slot.toUpperCase()}`,
-          })}
+          {slot === 'wed' ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant/60">Room</p>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-on-surface-variant/70 italic">
+                Uses same room as Mon / Thu schedule
+              </div>
+            </div>
+          ) : (
+            renderRoomDropdown({
+              rid: roomId2,
+              onSelect: onRoomChange2 || (() => {}),
+              getConflict: hasSec ? getRoomConflictInfo2 : getRoomConflictInfo,
+              timeReady: hasSec ? timeIsSet2 : timeIsSet,
+              label: `Block 2 room for ${slot.toUpperCase()}`,
+            })
+          )}
         </div>
 
       </div>

@@ -1,10 +1,11 @@
 // Day abbreviations for single-day modes (pair mode emits no day prefix)
-const SINGLE_DAY_ABBREV = { mon: 'M', thu: 'Th', tue: 'T', fri: 'F', sat: 'Sat' };
+const SINGLE_DAY_ABBREV = { mon: 'M', thu: 'Th', tue: 'T', fri: 'F', sat: 'Sat', wed: 'W' };
 
 // Full day names per slot for block labels in the UI
 export const PAIR_DAY_NAMES = {
   mth: { block1: 'Monday', block2: 'Thursday' },
   tfs: { block1: 'Tuesday', block2: 'Friday' },
+  wed: { block1: 'Wednesday', block2: 'Block 2' },
 };
 
 /**
@@ -106,13 +107,16 @@ export function parseScheduleString(str, slot = null) {
   const padH = (n) => String(n).padStart(2, '0');
 
   const DAY_MAP = {
-    M:       { slot: 'mth', mode: 'mon' },
-    Th:      { slot: 'mth', mode: 'thu' },
-    T:       { slot: 'tfs', mode: 'tue' },
-    F:       { slot: 'tfs', mode: 'fri' },
-    Sat:     { slot: 'tfs', mode: 'sat' },
-    S:       { slot: 'tfs', mode: 'sat' },
-    Saturday:{ slot: 'tfs', mode: 'sat' },
+    M:        { slot: 'mth', mode: 'mon' },
+    Th:       { slot: 'mth', mode: 'thu' },
+    T:        { slot: 'tfs', mode: 'tue' },
+    F:        { slot: 'tfs', mode: 'fri' },
+    Sat:      { slot: 'tfs', mode: 'sat' },
+    S:        { slot: 'tfs', mode: 'sat' },
+    Saturday: { slot: 'tfs', mode: 'sat' },
+    W:        { slot: 'wed', mode: 'wed' },
+    Wed:      { slot: 'wed', mode: 'wed' },
+    Wednesday:{ slot: 'wed', mode: 'wed' },
   };
 
   const normalized = normMeridiem(trimmed);
@@ -400,13 +404,62 @@ export function formatScheduleTimeDisplay(scheduleStr) {
 /**
  * Default empty card state for a given slot.
  * Includes block-2 fields (hasSec = false by default).
+ * For 'wed' slot, mode is fixed to 'wed' (no pair option).
  */
 export function emptyCardState(slot) {
+  if (slot === 'wed') {
+    return {
+      enabled: false,
+      mode: 'wed',
+      startH: '07', startM: '30', endH: '10', endM: '00', type: 'lec',
+      hasSec: false,
+      startH2: '13', startM2: '00', endH2: '16', endM2: '00', type2: 'lec',
+    };
+  }
   return {
     enabled: false,
     mode: 'pair',
     startH: '07', startM: '30', endH: '10', endM: '00', type: 'lec',
     hasSec: false,
     startH2: '13', startM2: '00', endH2: '16', endM2: '00', type2: 'lec',
+  };
+}
+
+/**
+ * Split a combined mth_schedule string into its Mon/Thu (MTH) and Wednesday parts.
+ * Wednesday entries are identified by a standalone "W" day token.
+ *
+ * Examples:
+ *   "7:30-9:00 Lec"                       → { mthPart: "7:30-9:00 Lec", wedPart: "" }
+ *   "10:00-11:30 W Lec"                   → { mthPart: "", wedPart: "10:00-11:30 W Lec" }
+ *   "7:30-9:00 Lec, 10:00-11:30 W Lec"   → { mthPart: "7:30-9:00 Lec", wedPart: "10:00-11:30 W Lec" }
+ *
+ * @param {string} mthScheduleStr
+ * @returns {{ mthPart: string, wedPart: string }}
+ */
+export function splitMthAndWed(mthScheduleStr) {
+  if (!mthScheduleStr || typeof mthScheduleStr !== 'string') {
+    return { mthPart: '', wedPart: '' };
+  }
+  const trimmed = mthScheduleStr.trim();
+  if (!trimmed) return { mthPart: '', wedPart: '' };
+
+  const rawParts = trimmed.split(',');
+  const mthSegs = [];
+  const wedSegs = [];
+
+  for (const part of rawParts) {
+    const p = part.trim();
+    // Wednesday entries contain a standalone "W" day token
+    if (/(?:^|\s)W(?:\s|$)/.test(p)) {
+      wedSegs.push(p);
+    } else {
+      mthSegs.push(p);
+    }
+  }
+
+  return {
+    mthPart: mthSegs.join(', '),
+    wedPart: wedSegs.join(', '),
   };
 }

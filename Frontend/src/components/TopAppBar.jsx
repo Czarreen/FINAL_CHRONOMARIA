@@ -1,4 +1,4 @@
-import { Bell, Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 export default function TopAppBar({ title, onLogout, onSettings }) {
   return (
@@ -6,9 +6,6 @@ export default function TopAppBar({ title, onLogout, onSettings }) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-4">
-        <button className="flex items-center justify-center rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
-          <Bell size={20} />
-        </button>
         <button
           type="button"
           onClick={onSettings}

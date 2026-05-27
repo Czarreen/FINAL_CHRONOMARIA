@@ -1,28 +1,31 @@
-// Day aliases — Wednesday intentionally excluded (not a scheduling day).
+// Day aliases — includes Wednesday (W suffix in schedule strings).
 const DAY_ALIASES = new Map([
-  ['M',        'MON'],
-  ['MON',      'MON'],
-  ['MONDAY',   'MON'],
-  ['T',        'TUE'],
-  ['TU',       'TUE'],
-  ['TUE',      'TUE'],
-  ['TUES',     'TUE'],
-  ['TUESDAY',  'TUE'],
-  ['TH',       'THU'],
-  ['THU',      'THU'],
-  ['THUR',     'THU'],
-  ['THURS',    'THU'],
-  ['THURSDAY', 'THU'],
-  ['F',        'FRI'],
-  ['FRI',      'FRI'],
-  ['FRIDAY',   'FRI'],
-  ['SAT',      'SAT'],
-  ['SATURDAY', 'SAT'],
-  ['S',        'SAT'],
+  ['M',         'MON'],
+  ['MON',       'MON'],
+  ['MONDAY',    'MON'],
+  ['T',         'TUE'],
+  ['TU',        'TUE'],
+  ['TUE',       'TUE'],
+  ['TUES',      'TUE'],
+  ['TUESDAY',   'TUE'],
+  ['W',         'WED'],
+  ['WED',       'WED'],
+  ['WEDNESDAY', 'WED'],
+  ['TH',        'THU'],
+  ['THU',       'THU'],
+  ['THUR',      'THU'],
+  ['THURS',     'THU'],
+  ['THURSDAY',  'THU'],
+  ['F',         'FRI'],
+  ['FRI',       'FRI'],
+  ['FRIDAY',    'FRI'],
+  ['SAT',       'SAT'],
+  ['SATURDAY',  'SAT'],
+  ['S',         'SAT'],
 ]);
 
 // Sorted canonical day order (used to keep outputs deterministic).
-const DAY_ORDER = ['MON', 'TUE', 'THU', 'FRI', 'SAT'];
+const DAY_ORDER = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 // Saturday conflict window: only SAT schedule overlaps within 2:00–4:30 PM generate conflicts.
 // 2:00 PM = 840 min, 4:30 PM = 990 min. Covers both defined Saturday slots (2:00–3:30, 3:00–4:30).

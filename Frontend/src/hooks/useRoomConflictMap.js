@@ -1,5 +1,24 @@
 import { useMemo } from 'react';
-import { getScheduleTimeRange, timesOverlap } from '../utils/scheduleUtils';
+import { getScheduleTimeRange, timesOverlap, splitMthAndWed } from '../utils/scheduleUtils';
+
+// Detect standalone "W" day token in a schedule string (Wednesday indicator)
+function hasWedToken(schedStr) {
+  return /(?:^|\s)W(?:\s|$)/.test(String(schedStr || ''));
+}
+
+// Extract the Mon/Thu time range from mth_schedule (ignoring Wednesday entries)
+function extractMthOnlyTimeRange(schedStr) {
+  if (!schedStr) return null;
+  const { mthPart } = splitMthAndWed(String(schedStr));
+  return mthPart ? getScheduleTimeRange(mthPart) : null;
+}
+
+// Extract the Wednesday time range from mth_schedule
+function extractWedTimeRange(schedStr) {
+  if (!schedStr) return null;
+  const { wedPart } = splitMthAndWed(String(schedStr));
+  return wedPart ? getScheduleTimeRange(wedPart) : null;
+}
 
 export function useRoomConflictMap(bookings) {
   const conflictMap = useMemo(() => {
@@ -16,6 +35,11 @@ export function useRoomConflictMap(bookings) {
 
   const getConflictingOfferings = (roomId, slot) => {
     if (!roomId) return [];
+    if (slot === 'wed') {
+      // Wednesday uses the MTH room; return mth-slot bookings that have a Wed schedule entry
+      const mthBookings = conflictMap.get(`${String(roomId).trim()}:mth`) || [];
+      return mthBookings.filter((b) => hasWedToken(b.mth_schedule));
+    }
     return conflictMap.get(`${String(roomId).trim()}:${slot}`) || [];
   };
 
@@ -90,12 +114,33 @@ export function useConflictingIdSets(bookings, gymRoomIds = new Set()) {
         for (let j = i + 1; j < group.length; j++) {
           const a = group[i];
           const b = group[j];
-          const schedA = a.slot === 'mth' ? a.mth_schedule : a.tfs_schedule;
-          const schedB = b.slot === 'mth' ? b.mth_schedule : b.tfs_schedule;
-          const rangeA = getScheduleTimeRange(schedA);
-          const rangeB = getScheduleTimeRange(schedB);
-          if (!rangeA || !rangeB) continue;
-          if (!timesOverlap(rangeA.start, rangeA.end, rangeB.start, rangeB.end)) continue;
+
+          let hasConflict = false;
+
+          if (a.slot === 'mth') {
+            // For mth-slot bookings, compare MTH-day ranges and Wednesday ranges separately
+            // to avoid false positives between Mon/Thu and Wednesday (different days).
+            const mthRangeA = extractMthOnlyTimeRange(a.mth_schedule);
+            const mthRangeB = extractMthOnlyTimeRange(b.mth_schedule);
+            const wedRangeA = extractWedTimeRange(a.mth_schedule);
+            const wedRangeB = extractWedTimeRange(b.mth_schedule);
+
+            const mthConflict = mthRangeA && mthRangeB &&
+              timesOverlap(mthRangeA.start, mthRangeA.end, mthRangeB.start, mthRangeB.end);
+            const wedConflict = wedRangeA && wedRangeB &&
+              timesOverlap(wedRangeA.start, wedRangeA.end, wedRangeB.start, wedRangeB.end);
+
+            hasConflict = !!(mthConflict || wedConflict);
+          } else {
+            const schedA = a.tfs_schedule;
+            const schedB = b.tfs_schedule;
+            const rangeA = getScheduleTimeRange(schedA);
+            const rangeB = getScheduleTimeRange(schedB);
+            if (!rangeA || !rangeB) continue;
+            hasConflict = timesOverlap(rangeA.start, rangeA.end, rangeB.start, rangeB.end);
+          }
+
+          if (!hasConflict) continue;
           if (isBookingMerged(a, b)) continue;
           if (a.id != null) offeringIds.add(Number(a.id));
           if (b.id != null) offeringIds.add(Number(b.id));
