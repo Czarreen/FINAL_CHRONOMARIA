@@ -2937,8 +2937,6 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
   `);
   const roomLookup = buildRoomLookup(roomResp.rows || []);
 
-  await query('DELETE FROM public.subjects');
-
   let backup = null;
 
   await withPgClient(async (client) => {
@@ -3006,21 +3004,34 @@ async function updateCourseOfferingFromAutomaticScheduler({ backupFirst = false 
       );
 
       // Write generated schedules back to subjects so faculty loading can read them.
-      // Match by (code, course_no, department_id, section); join rooms to resolve room name.
+      // Delete all subjects first (inside the transaction for atomicity), then re-insert
+      // from automatic_scheduler so schedule/room data is always fresh and consistent.
+      await client.query('DELETE FROM public.subjects');
+
       await client.query(`
-        UPDATE public.subjects s
-        SET
-          mth_schedule = asch.mth_schedule,
-          tfs_schedule = asch.tfs_schedule,
-          mth_room     = COALESCE(rm.room_name, asch.mth_room_id),
-          tfs_room     = COALESCE(rf.room_name, asch.tfs_room_id)
+        INSERT INTO public.subjects
+          (subject_code, subject_course_no, department_id, subject_section,
+           subject_descriptive_title, subject_units, subject_lec_hrs, subject_lab_hrs,
+           mth_schedule, mth_room, tfs_schedule, tfs_room, curr_id, subject_status, is_general)
+        SELECT
+          asch.code,
+          asch.course_no,
+          asch.department_id,
+          asch.section,
+          asch.descriptive_title,
+          asch.units,
+          asch.lec_hrs,
+          asch.lab_hrs,
+          asch.mth_schedule,
+          COALESCE(rm.room_name, asch.mth_room_id),
+          asch.tfs_schedule,
+          COALESCE(rf.room_name, asch.tfs_room_id),
+          asch.curr_id,
+          'active',
+          false
         FROM public.automatic_scheduler asch
         LEFT JOIN public.rooms rm ON rm.room_id::text = asch.mth_room_id
         LEFT JOIN public.rooms rf ON rf.room_id::text = asch.tfs_room_id
-        WHERE lower(trim(s.subject_code))     = lower(trim(asch.code))
-          AND lower(trim(s.subject_course_no)) = lower(trim(asch.course_no))
-          AND s.department_id                  = asch.department_id
-          AND lower(trim(s.subject_section))   = lower(trim(asch.section))
       `);
 
       await client.query('COMMIT');
@@ -3113,6 +3124,7 @@ function toOptimizerSubject(subject, roomLookup) {
     tfs_room: tfsRoom,
     is_general: Boolean(subject.is_general),
     merged_with: normalizeText(subject.merged_with) || null,
+    subject_status: normalizeUpper(subject.subject_status) || null,
   };
 }
 
@@ -3199,10 +3211,12 @@ export async function postRunAutomaticScheduler(req, res) {
         .filter((c) => c.merge_representative_id != null)
         .map((c) => [c.subject_id, c.merge_representative_id])
     );
-    const optimizerSubjects = (snapshot.subjects || []).map((s) => ({
-      ...toOptimizerSubject(s, roomLookup),
-      merge_group_id: mergeGroupMap.get(Number(s.subject_id)) ?? null,
-    }));
+    const optimizerSubjects = (snapshot.subjects || [])
+      .filter((s) => !s.subject_status || normalizeUpper(s.subject_status) === 'ACTIVE') // exclude inactive subjects from scheduling pipeline
+      .map((s) => ({
+        ...toOptimizerSubject(s, roomLookup),
+        merge_group_id: mergeGroupMap.get(Number(s.subject_id)) ?? null,
+      }));
     const optimizerRooms = activeRooms.map((r) => ({
       room_id: String(r.room_id),
       room_name: r.room_name || '',

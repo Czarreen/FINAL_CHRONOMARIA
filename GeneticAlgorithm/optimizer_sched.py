@@ -65,6 +65,13 @@ def main():
         raw = json.load(sys.stdin)
         subjects, rooms, constraints = parse_input(raw)
 
+        # Filter out inactive subjects — only ACTIVE subjects enter the scheduling pipeline.
+        # subject_status is None when not provided (backward-compat); treat None as active.
+        subjects = [
+            s for s in subjects
+            if s.subject_status is None or s.subject_status.strip().upper() == 'ACTIVE'
+        ]
+
         global_budget_s = float(constraints.get('global_budget_seconds', 150.0))
         global_start = time.perf_counter()
         run_id = str(uuid.uuid4())

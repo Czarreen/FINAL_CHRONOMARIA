@@ -76,6 +76,9 @@ class Subject(BaseModel):
     # Flag passed from DB/Node side; takes priority over course_no pattern matching
     is_general: Optional[bool] = None
 
+    # Active/inactive status passed from DB via Node; only ACTIVE subjects should be scheduled
+    subject_status: Optional[str] = None
+
     # Computed at PRE-FLIGHT
     subject_type: Optional[SubjectType] = None
     subject_state: Optional[SubjectState] = None

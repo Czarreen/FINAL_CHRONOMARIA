@@ -85,6 +85,7 @@ SPECIALIZATION_STOP_WORDS = {
 }
 
 SPECIALIZATION_SYNONYMS = {
+    'ARCHL': 'ARCHITECTURE',       # "Arch'l" abbreviation used in subject titles
     'ARCHITECTURAL': 'ARCHITECTURE',
     'ARCHITECTURE': 'ARCHITECTURE',
     'MATHEMATICS': 'MATH',
@@ -864,12 +865,28 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                             })
                         break  # one reservation per subject code is enough
 
+    # 2-tier priority sort.
+    #
+    # Tier 0 — subjects in departments with zero faculty (e.g. CS → needs IT
+    #   fallback via Pass C/E). Processing these first ensures the fallback
+    #   pool (IT faculty) is at full capacity before any same-dept IT subjects
+    #   consume it. Confirmed effective: resolves CS OS101, CC103, CS-106.
+    #
+    # Tier 1 — everything else. Original −units order is fully preserved so
+    #   cross-dept Pass A matches (e.g. Math/Physics faculty → CE subjects)
+    #   fire at the same relative position as before this change. Avoids the
+    #   CE regression caused by the previous full-MRV / 3-tier approaches.
     ordering = sorted(
         enumerate(offerings),
-        key=lambda x: -(
-            to_number(x[1].get("units"))
-            or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
-            or 0.0
+        key=lambda x: (
+            0 if int(department_faculty_counts.get(
+                int(to_number(x[1].get("department_id")) or 0), 0
+            )) == 0 else 1,
+            -(
+                to_number(x[1].get("units"))
+                or (to_number(x[1].get("lec_hrs")) or 0.0) + (to_number(x[1].get("lab_hrs")) or 0.0)
+                or 0.0
+            ),
         ),
     )
 
@@ -892,15 +909,20 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
         # Pass C: cross-department no-spec fallback (IT->CS zero-faculty only).
         # First non-empty pass wins.
 
-        def _hard_eligible(fi_: int) -> bool:
+        def _hard_eligible(fi_: int, skip_prep_limit: bool = False) -> bool:
             fac_ = faculties[fi_]
             max_u = max(0.0, to_number(fac_.get("faculty_max_units")) or 0.0)
             if max_u > 0 and loads[fi_] + units > max_u:
                 return False
             if faculty_has_conflict(blocks[fi_], off_blocks):
                 return False
-            if any(consecutive_minutes_for_day(blocks[fi_] + off_blocks, d) > 240.0
-                   for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
+            # Only enforce the 4-hour consecutive limit when the new offering
+            # actually adds schedule blocks. If off_blocks is empty (OJT,
+            # Practicum, Seminars, etc. have no classroom schedule), the
+            # faculty's existing consecutive hours are irrelevant — assigning
+            # a no-schedule subject cannot make any day worse.
+            if off_blocks and any(consecutive_minutes_for_day(blocks[fi_] + off_blocks, d) > 240.0
+                                  for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")):
                 return False
             # Room double-booking guard: reject if any off_block would collide
             # with an already-occupied room slot (room_blocks is in closure scope).
@@ -913,7 +935,9 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                         if overlaps(_ex, _blk):
                             return False
             prep_key_ = f"{normalize_upper(offering.get('code'))}|{normalize_upper(offering.get('course_no'))}"
-            # Count-based prep cap — always enforced.
+            # Count-based prep cap — enforced in Passes A/B/C but waived in last-resort
+            # Passes D/E (skip_prep_limit=True) so departments with few faculty can still
+            # cover all offerings even after faculty hit the normal prep ceiling.
             # Only block when the prep key is genuinely new: already-reserved keys
             # (from P2/P3 reservations) don't increase the prep count, so those
             # subjects bypass this gate and honour the reservation "promise".
@@ -921,10 +945,11 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
             # removed. Since preps_units == loads after the P2/P3 reservation fix,
             # that formula collapsed to "2*loads + units > max_units" — a false gate
             # that blocked every faculty above 50% load. The loads+units > max_u
-            # check on line 840 is the correct and sufficient unit-capacity guard.
-            if prep_key_ not in preps_keys[fi_]:
-                if len(preps_keys[fi_]) >= prep_limit_for_faculty(faculties[fi_]):
-                    return False
+            # check above is the correct and sufficient unit-capacity guard.
+            if not skip_prep_limit:
+                if prep_key_ not in preps_keys[fi_]:
+                    if len(preps_keys[fi_]) >= prep_limit_for_faculty(faculties[fi_]):
+                        return False
             return True
 
         def _score(fi_: int, spec_: float, dept_match_: bool) -> float:
@@ -1031,6 +1056,43 @@ def build_initial_candidate(faculties, offerings, subject_index, rng, department
                 candidates.append((_score(fi, spec, False), _explicit_pref_usage_ratio(fi), fi))
             if candidates and pass_used is None:
                 pass_used = "C"
+
+        # Pass D — same-department, prep-limit waived (last resort).
+        # Fires only when Passes A/B/C all found zero candidates. Keeps all other
+        # hard constraints (unit load, time conflict, consecutive hours, room booking)
+        # fully active — only the prep-count ceiling is lifted. This handles departments
+        # with few faculty where every member has hit their prep cap but still has unit
+        # capacity (the most common cause of "unresolved" offerings in small depts).
+        if not candidates:
+            for fi, faculty in enumerate(faculties):
+                if to_number(faculty.get("department_id")) != to_number(offering.get("department_id")):
+                    continue
+                if not _hard_eligible(fi, skip_prep_limit=True):
+                    continue
+                spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
+                candidates.append((_score(fi, spec, True), _explicit_pref_usage_ratio(fi), fi))
+            if candidates:
+                pass_used = "D"
+
+        # Pass E — IT→CS cross-department fallback, prep-limit waived (last resort).
+        # Mirrors Pass C's IT→CS gate but with prep-limit waived for IT faculty that
+        # have remaining unit capacity yet have already hit their IT prep ceiling.
+        if not candidates:
+            for fi, faculty in enumerate(faculties):
+                if not is_cross_department_no_spec_allowed(
+                    to_number(offering.get("department_id")),
+                    to_number(faculty.get("department_id")),
+                    department_faculty_counts,
+                ):
+                    continue
+                if to_number(faculty.get("department_id")) == to_number(offering.get("department_id")):
+                    continue  # already covered by Pass D
+                if not _hard_eligible(fi, skip_prep_limit=True):
+                    continue
+                spec = match_specialization_score(faculty, offering, subject, faculty_preferences)
+                candidates.append((_score(fi, spec, False), _explicit_pref_usage_ratio(fi), fi))
+            if candidates and pass_used is None:
+                pass_used = "E"
 
         if pass_used is None:
             pass_used = "NONE"  # no candidates found in any pass
@@ -1192,7 +1254,50 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             elif available_faculty == 0:
                 reason = "All faculty units in this department are fully used."
             else:
-                reason = "No eligible faculty matched specialization, department rules, and load constraints."
+                # Distinguish unit-exhaustion vs schedule/consecutive-hours conflict.
+                # Compare the subject's unit cost against the maximum remaining unit
+                # capacity across all same-dept faculty at this point in the run.
+                subject_units = (
+                    to_number(offering.get("units"))
+                    or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+                    or 0.0
+                )
+                max_remaining = max(
+                    (
+                        max(0.0, to_number(f.get("faculty_max_units")) or 0.0)
+                        - loads.get(int(to_number(f.get("faculty_id")) or 0), 0.0)
+                        for f in faculties
+                        if int(to_number(f.get("department_id")) or 0) == off_dept
+                    ),
+                    default=0.0,
+                )
+                if subject_units > 0 and max_remaining < subject_units:
+                    reason = (
+                        f"All faculty in this department have insufficient remaining unit capacity "
+                        f"for this subject ({subject_units:.0f} units needed, "
+                        f"max available: {max_remaining:.0f} units)."
+                    )
+                else:
+                    # If the offering has no schedule at all, the "schedule conflict"
+                    # message is misleading.  Check whether a schedule exists.
+                    off_blocks_check = build_schedule_blocks(offering)
+                    if not off_blocks_check:
+                        # No schedule on the offering → consecutive-hours and time-conflict
+                        # checks are bypassed.  The real gate is unit capacity, but that
+                        # is consumed by other subjects processed later in the run.
+                        reason = (
+                            "Subject has no schedule (mth_schedule / tfs_schedule) set "
+                            "on this offering. Faculty unit capacity appears available at "
+                            "this point in the run but gets fully consumed by other "
+                            "subjects. Set a time slot for this subject so the GA can "
+                            "check for real conflicts, or increase faculty max units."
+                        )
+                    else:
+                        reason = (
+                            "No eligible faculty matched — likely due to schedule conflict or "
+                            "consecutive-hours limit. Faculty with remaining unit capacity "
+                            "have conflicting time blocks on this subject's scheduled days."
+                        )
 
             recommendations: List[str] = []
             if total_faculty == 0 and pass_c_attempted:
@@ -1204,8 +1309,39 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
             elif available_faculty == 0:
                 recommendations.append("All department faculty are at max units. Add faculty or reduce current loads.")
                 recommendations.append("Optionally review cross-department candidates manually based on specialization.")
+            elif subject_units > 0 and max_remaining < subject_units:
+                recommendations.append(
+                    f"Increase faculty_max_units for one or more faculty in this department "
+                    f"(subject needs {subject_units:.0f} units; max remaining is {max_remaining:.0f})."
+                )
+                recommendations.append("Alternatively, add additional faculty to the department.")
             else:
-                recommendations.append("Review specialization tags and faculty max units for this subject.")
+                recommendations.append(
+                    "Review this subject's mth_schedule / tfs_schedule against active "
+                    "faculty schedules in this department for time-slot conflicts."
+                )
+                recommendations.append(
+                    "If a faculty member is already at the 4-hour consecutive teaching "
+                    "limit on this subject's day, adjust the subject's time slot or "
+                    "redistribute a conflicting subject to another faculty member."
+                )
+
+            # Schedule fallback: if the course offering has no schedule, try the
+            # matched subject from the subjects master list.
+            off_subject = subject_index.get(build_offering_key(offering))
+            off_mth = normalize_text(offering.get("mth_schedule")) or (
+                normalize_text(off_subject.get("mth_schedule")) if off_subject else None
+            ) or None
+            off_tfs = normalize_text(offering.get("tfs_schedule")) or (
+                normalize_text(off_subject.get("tfs_schedule")) if off_subject else None
+            ) or None
+            # Track where the schedule came from so the frontend can label it
+            if normalize_text(offering.get("mth_schedule")) or normalize_text(offering.get("tfs_schedule")):
+                schedule_source = "offering"
+            elif off_mth or off_tfs:
+                schedule_source = "subject"
+            else:
+                schedule_source = None
 
             unresolved_details.append(
                 {
@@ -1215,6 +1351,14 @@ def summarize_candidate(candidate, faculties, offerings, subject_index, departme
                     "section": offering.get("section"),
                     "department_id": offering.get("department_id"),
                     "descriptive_title": offering.get("descriptive_title"),
+                    "units": (
+                        to_number(offering.get("units"))
+                        or (to_number(offering.get("lec_hrs")) or 0.0) + (to_number(offering.get("lab_hrs")) or 0.0)
+                        or None
+                    ),
+                    "mth_schedule": off_mth,
+                    "tfs_schedule": off_tfs,
+                    "schedule_source": schedule_source,
                     "reason": reason,
                     "recommendations": recommendations,
                 }

@@ -98,6 +98,16 @@ function qualityTone(quality) {
   }
 }
 
+function getReasonLabel(reasonTypes) {
+  if (reasonTypes.has('schedule_conflict')) {
+    return 'Faculty have remaining units but their time blocks conflict with these subjects. This is NOT a capacity problem — add new faculty with open schedules, or adjust subject time slots.';
+  }
+  if (reasonTypes.has('unit_exhaustion')) {
+    return 'Unit capacity exhausted — no faculty have enough remaining units. Increase faculty_max_units or add new faculty.';
+  }
+  return 'No eligible faculty found — additional faculty with the required specializations may be needed in this department.';
+}
+
 function getSpecialDayOnlyScheduleLabel(mthSchedule, tfsSchedule) {
   const hasSat = (s) => /\bsat(urday)?\b/i.test(s || '');
   const hasWed = (s) => /\b(wed(nesday)?|w)\b/i.test(s || '');
@@ -273,6 +283,7 @@ export default function FacultyLoadingView() {
   const [balanceSearch, setBalanceSearch]     = useState('');
   const [flvModalFaculty, setFlvModalFaculty] = useState(null);
   const [showFlvModal, setShowFlvModal]       = useState(false);
+  const [expandedDeptGaps, setExpandedDeptGaps] = useState(new Set());
 
   const columns = [
     { key: 'section', label: 'Section' },
@@ -458,6 +469,65 @@ export default function FacultyLoadingView() {
     }
     return map;
   }, [uniqueLoadBalance]);
+
+  // Cross-reference: departments that have BOTH free faculty capacity AND unresolved subjects.
+  // This is what the user sees as confusing — faculty have units available but subjects are still unresolved.
+  const deptGapMap = useMemo(() => {
+    const map = new Map(); // dept_id → { dept_name, total_free, faculty_count, unresolved[], reasonTypes }
+    for (const row of uniqueLoadBalance) {
+      const id = Number(row.department_id || 0);
+      if (!id) continue;
+      if (!map.has(id)) {
+        map.set(id, {
+          dept_name: row.department_name || `Dept ${id}`,
+          total_free: 0,
+          faculty_count: 0,
+          unresolved: [],
+          reasonTypes: new Set(),
+        });
+      }
+      const entry = map.get(id);
+      entry.total_free += Math.max(0, toNumber(row.max_units) - toNumber(row.total_units));
+      entry.faculty_count += 1;
+    }
+    for (const o of unresolved_offerings) {
+      const id = Number(o.department_id || 0);
+      if (!id) continue;
+      if (!map.has(id)) {
+        map.set(id, {
+          dept_name: o.department_name || `Dept ${id}`,
+          total_free: 0,
+          faculty_count: 0,
+          unresolved: [],
+          reasonTypes: new Set(),
+        });
+      }
+      const entry = map.get(id);
+      entry.unresolved.push(o);
+      const r = (o.reason || '').toLowerCase();
+      if (r.includes('schedule') || r.includes('conflict') || r.includes('consecutive')) {
+        entry.reasonTypes.add('schedule_conflict');
+      } else if (r.includes('insufficient') || r.includes('capacity') || r.includes('unit')) {
+        entry.reasonTypes.add('unit_exhaustion');
+      } else {
+        entry.reasonTypes.add('no_faculty');
+      }
+    }
+    return Array.from(map.entries())
+      .filter(([, v]) => v.total_free > 0 && v.unresolved.length > 0)
+      .map(([id, v]) => ({ dept_id: id, ...v }))
+      .sort((a, b) => b.unresolved.length - a.unresolved.length);
+  }, [uniqueLoadBalance, unresolved_offerings]);
+
+  // Per-dept-name unresolved count — used for tab badges
+  const deptUnresolvedCount = useMemo(() => {
+    const m = new Map();
+    for (const o of unresolved_offerings) {
+      const name = o.department_name || '';
+      if (name) m.set(name, (m.get(name) || 0) + 1);
+    }
+    return m;
+  }, [unresolved_offerings]);
 
   // Filtered card grid rows (by dept tab)
   const filteredLoadBalance = useMemo(() => {
@@ -713,7 +783,7 @@ export default function FacultyLoadingView() {
           {[
             { key: 'quality', label: 'Quality',       badge: null },
             { key: 'issues',  label: 'Issues',         badge: issueSubjects.length },
-            { key: 'balance', label: 'Load Balance',   badge: uniqueLoadBalance.length },
+            { key: 'balance', label: 'Load Balance',   badge: uniqueLoadBalance.length, gapAlert: deptGapMap.length > 0 },
           ].map((tab) => {
             const isActive = activeQualityTab === tab.key;
             return (
@@ -730,10 +800,13 @@ export default function FacultyLoadingView() {
                 {tab.label}
                 {tab.badge !== null && (
                   <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
-                    tab.badge > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
+                    tab.gapAlert ? 'bg-amber-200 text-amber-800' : tab.badge > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
                   }`}>
                     {tab.badge}
                   </span>
+                )}
+                {tab.gapAlert && (
+                  <AlertTriangle size={10} className="text-amber-600" />
                 )}
               </button>
             );
@@ -860,6 +933,123 @@ export default function FacultyLoadingView() {
                 </span>
               </div>
             </div>
+            {/* ── Coverage Gap Banner ── */}
+            {/* Shows when faculty have remaining units BUT subjects are still unresolved.          */}
+            {/* This surfaces the confusing "why weren't these available faculty assigned?" issue.  */}
+            {deptGapMap.length > 0 && unresolved_offerings.length > 0 && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertTriangle size={14} className="text-amber-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">
+                      Faculty capacity available — but {deptGapMap.reduce((s, g) => s + g.unresolved.length, 0)} subject{deptGapMap.reduce((s, g) => s + g.unresolved.length, 0) !== 1 ? 's' : ''} across {deptGapMap.length} dept{deptGapMap.length !== 1 ? 's' : ''} remain unresolved
+                    </p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      These faculty have free units but couldn't be auto-assigned. Expand a row to see why.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  {deptGapMap.map((gap) => {
+                    const isExpanded = expandedDeptGaps.has(gap.dept_id);
+                    const reasonLabel = getReasonLabel(gap.reasonTypes);
+                    return (
+                      <div key={gap.dept_id} className="rounded-lg border border-amber-200 bg-white overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedDeptGaps((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(gap.dept_id)) next.delete(gap.dept_id);
+                              else next.add(gap.dept_id);
+                              return next;
+                            })
+                          }
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-amber-50/60 transition-colors"
+                        >
+                          <span className="flex items-center gap-2 flex-wrap text-xs">
+                            <span className="font-semibold text-on-surface">{gap.dept_name}</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                              {gap.unresolved.length} unresolved
+                            </span>
+                            <span className="text-on-surface-variant">
+                              {Math.round(gap.total_free)} free unit{Math.round(gap.total_free) !== 1 ? 's' : ''} · {gap.faculty_count} faculty
+                            </span>
+                          </span>
+                          <ChevronRight size={12} className={`text-amber-600 transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                        </button>
+                        <div className="px-3 pb-2">
+                          <p className="text-[11px] text-amber-700 leading-5">↳ {reasonLabel}</p>
+                        </div>
+                        {isExpanded && (
+                          <div className="border-t border-amber-100 bg-amber-50/40 max-h-52 overflow-y-auto px-3 py-2 space-y-2">
+                            {gap.unresolved.map((o, i) => {
+                              const mthDisplay = formatScheduleTimeDisplay(o.mth_schedule);
+                              const mthAmPm   = getScheduleAmPm(o.mth_schedule);
+                              const tfsDisplay = formatScheduleTimeDisplay(o.tfs_schedule);
+                              const tfsAmPm   = getScheduleAmPm(o.tfs_schedule);
+                              const hasSchedule = mthDisplay || tfsDisplay;
+                              const schedFromSubject = o.schedule_source === 'subject';
+                              return (
+                              <div key={i} className="rounded-lg border border-amber-100 bg-white p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-semibold text-on-surface">
+                                    {o.code || '—'} §{o.section || '—'}
+                                    {o.units != null && (
+                                      <span className="ml-1 font-normal text-on-surface-variant">{o.units}u</span>
+                                    )}
+                                    {o.descriptive_title && (
+                                      <span className="font-normal text-on-surface-variant ml-1">— {o.descriptive_title}</span>
+                                    )}
+                                  </p>
+                                </div>
+                                {hasSchedule && (
+                                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
+                                    {mthDisplay && (
+                                      <span className="flex items-center gap-1">
+                                        <span className="font-semibold text-on-surface">MTH:</span>
+                                        {mthDisplay}
+                                        {mthAmPm && (
+                                          <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${mthAmPm === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                            {mthAmPm}
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+                                    {tfsDisplay && (
+                                      <span className="flex items-center gap-1">
+                                        <span className="font-semibold text-on-surface">TFS:</span>
+                                        {tfsDisplay}
+                                        {tfsAmPm && (
+                                          <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${tfsAmPm === 'AM' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                                            {tfsAmPm}
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+                                    {schedFromSubject && (
+                                      <span className="text-[9px] italic text-on-surface-variant/70">(from subject master)</span>
+                                    )}
+                                  </div>
+                                )}
+                                {!hasSchedule && (
+                                  <p className="mt-1 text-[11px] text-slate-400 italic">No schedule on this offering or subject master</p>
+                                )}
+                                {o.reason && (
+                                  <p className="mt-1 text-[11px] text-amber-800 leading-4">{o.reason}</p>
+                                )}
+                              </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Department sub-tabs — only shown when there is more than one department */}
             {uniqueLoadBalance.length > 0 && deptTabs.length > 1 && (
               <div className="flex items-end gap-0.5 mb-3 overflow-x-auto border-b border-slate-200">
@@ -894,6 +1084,12 @@ export default function FacultyLoadingView() {
                       <span className={`inline-flex items-center justify-center rounded-full min-w-[18px] h-[18px] px-1 text-[9px] font-bold ${
                         isActive ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'
                       }`}>{deptCountMap.get(dept) ?? 0}</span>
+                      {(deptUnresolvedCount.get(dept) ?? 0) > 0 && (
+                        <span className="inline-flex items-center justify-center rounded-full min-w-[16px] h-[16px] px-1 text-[8px] font-bold bg-amber-200 text-amber-800"
+                          title={`${deptUnresolvedCount.get(dept)} unresolved subject(s)`}>
+                          {deptUnresolvedCount.get(dept)}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -965,8 +1161,24 @@ export default function FacultyLoadingView() {
                           <span className="ml-2">• remaining prep: <span className="font-semibold text-on-surface">{remainingPrep}</span></span>
                         )}
                       </p>
+                      {(() => {
+                        const rowDeptId = Number(row.department_id || 0);
+                        const gap = rowDeptId ? deptGapMap.find((g) => g.dept_id === rowDeptId) : null;
+                        if (!gap) return null;
+                        const label = gap.reasonTypes.has('schedule_conflict')
+                          ? `${gap.unresolved.length} unresolved in dept — schedule conflicts prevent auto-assign`
+                          : gap.reasonTypes.has('unit_exhaustion')
+                          ? `${gap.unresolved.length} unresolved in dept — unit capacity exhausted`
+                          : `${gap.unresolved.length} unresolved in dept — needs additional faculty`;
+                        return (
+                          <p className="mt-1.5 text-[10px] font-semibold text-amber-700 flex items-center gap-1">
+                            <AlertTriangle size={10} className="shrink-0" />
+                            {label}
+                          </p>
+                        );
+                      })()}
                       {canOpenModal && (
-                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">
+                        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">
                           Click to view assigned subjects
                         </p>
                       )}
