@@ -7,6 +7,17 @@ coverage/
 .env*
 !.env.example
 
+# Python
+__pycache__/
+*.py[cod]
+.venv*/
+
+# GA debug output
+GeneticAlgorithm/ga_*.json
+
+# Backup files
+*.bak
+
 # Explicitly ignore environment files in subfolders (ensure these stay out of commits)
 /Backend/.env
 /Backend/node-api/.env
