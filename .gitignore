@@ -9,6 +9,7 @@ coverage/
 
 # Explicitly ignore environment files in subfolders (ensure these stay out of commits)
 /Backend/.env
+/Backend/node-api/.env
 /Frontend/.env
 .env.local
 .env.*.local

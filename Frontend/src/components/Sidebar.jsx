@@ -5,33 +5,36 @@ import {
   DoorOpen,
   Calendar,
   NotebookTabs,
+  Sparkles,
+  Table2,
   LogOut,
   CircleUserRound,
 } from 'lucide-react';
 
-export default function Sidebar({ currentView, onViewChange, onLogout }) {
+function formatRole(role) {
+  return String(role || 'System Admin')
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export default function Sidebar({ currentView, onViewChange, onLogout, currentUser }) {
   const menuItems = [
-    { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
     { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
-    { id: 'faculty', icon: Users, label: 'Faculty' },
-    { id: 'subjects', icon: BookOpen, label: 'Subjects' },
-    { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
+    { id: 'course-offering', icon: NotebookTabs, label: 'Course Offering' },
     { id: 'schedule', icon: Calendar, label: 'Schedule' },
+    { id: 'subjects', icon: BookOpen, label: 'Subjects' },
+    { id: 'faculty-loading', icon: Sparkles, label: 'Faculty Loading' },
+    { id: 'faculty-loading-finalize', icon: Table2, label: 'Finalize Loading' },
+    { id: 'faculty', icon: Users, label: 'Faculty' },
+    { id: 'rooms', icon: DoorOpen, label: 'Rooms' },
   ];
 
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col overflow-y-auto border-r border-white/40 bg-white/70 p-6 shadow-[30px_0_40px_rgba(0,0,0,0.05)] backdrop-blur-[20px]">
       <div className="mb-4 border-b border-white/20 pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-on-primary-container shadow-sm">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-              schedule
-            </span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-indigo-600">Chronomaria</h1>
-            <p className="text-body-sm text-on-surface-variant/70">Faculty Loading</p>
-          </div>
+          <img src="/logo.png" alt="Logo" className="max-w-[210px]" />
         </div>
       </div>
 
@@ -42,10 +45,10 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className={`flex w-full scale-95 items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-all duration-300 active:scale-90 ${
+              className={`flex w-full scale-95 items-center gap-3 rounded-lg border-l-4 px-4 py-3 text-left text-sm font-medium transition-all duration-300 active:scale-90 ${
                 isActive
-                  ? 'bg-white/60 text-indigo-600 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/40 hover:text-indigo-500'
+                  ? 'border-indigo-600 bg-indigo-50/50 text-indigo-600 shadow-md font-bold'
+                  : 'border-transparent text-slate-500 hover:bg-white/50 hover:text-indigo-600'
               }`}
             >
               <item.icon size={18} />
@@ -61,18 +64,11 @@ export default function Sidebar({ currentView, onViewChange, onLogout }) {
             <CircleUserRound size={16} />
           </div>
           <div>
-            <p className="text-label-bold font-medium text-on-surface">Administrator</p>
-            <p className="text-[10px] text-on-surface-variant">System Admin</p>
+            <p className="text-label-bold font-medium text-on-surface">{currentUser?.username || 'Administrator'}</p>
+            <p className="text-[10px] text-on-surface-variant">{formatRole(currentUser?.role)}</p>
           </div>
         </div>
 
-        <button
-          onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-error transition-colors hover:bg-error-container/50"
-        >
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
       </div>
     </aside>
   );

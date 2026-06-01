@@ -5,12 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --experimental-test-module-mocks --test tests/**/*.test.js",
+    "run-subject-migration": "node tools/run_subject_migration.js",
+    "backfill:course-offerings": "node tools/backfill_course_offering_notifications.js",
+    "backfill:faculty-loading": "node tools/ga_backfill.js",
+    "backfill:faculty-preference-records": "node tools/backfill_faculty_preference_records.js",
+    "normalize:course-offering-hours-field": "node tools/normalize_course_offering_hours_field.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "pg": "^8.10.0"
   }
 }

@@ -1,8 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-export async function fetchSubjects({ page = 1, limit = 50, search = '', status = '' } = {}) {
+export async function fetchSubjects({ page = 1, limit = 50, search = '', searchField = 'all', status = '' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
+  if (searchField && searchField !== 'all') params.searchField = String(searchField);
   if (status) params.status = String(status);
   const query = new URLSearchParams(params);
   const response = await fetch(`${API_BASE_URL}/api/subjects?${query.toString()}`);
@@ -20,6 +21,17 @@ export async function fetchSubjects({ page = 1, limit = 50, search = '', status 
     page: Number(payload.page ?? 1),
     limit: Number(payload.limit ?? 50),
   };
+}
+
+export async function fetchSubjectPageNumber(id, { search = '', searchField = 'all', status = '', limit = 50 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (search) params.set('search', search);
+  if (searchField && searchField !== 'all') params.set('searchField', String(searchField));
+  if (status) params.set('status', status);
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}/page?${params.toString()}`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return typeof payload.page === 'number' ? payload.page : null;
 }
 
 export async function fetchSubjectById(id) {

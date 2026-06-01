@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(powershell -Command ' *)",
+      "Bash(xargs grep -l 'cross.*department\\\\|multi.*department\\\\|assign\\\\|override')"
+    ]
+  }
+}

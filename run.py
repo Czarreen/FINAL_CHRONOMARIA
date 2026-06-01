@@ -12,10 +12,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT / "Frontend"
 BACKEND_DIR = ROOT / "Backend" / "node-api"
+GA_DIR = ROOT / "GeneticAlgorithm"
 
 # Override these with env vars if needed.
 DEFAULT_FRONTEND_CMD = "npm run dev"
 DEFAULT_BACKEND_CMD = "npm run dev"
+DEFAULT_GA_CMD = f'"{sys.executable}" optimizer.py'
 
 
 def stream_output(name: str, process: subprocess.Popen) -> None:
@@ -72,6 +74,11 @@ def main() -> int:
         help="Backend command (override with BACKEND_DEV_CMD)",
     )
     parser.add_argument(
+        "--ga-cmd",
+        default=os.getenv("GA_DEV_CMD", DEFAULT_GA_CMD),
+        help="Python GA command (override with GA_DEV_CMD)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print commands and exit without starting processes.",
@@ -81,6 +88,8 @@ def main() -> int:
     if args.dry_run:
         print(f"Backend dir : {BACKEND_DIR}")
         print(f"Backend cmd : {args.backend_cmd}")
+        print(f"GA dir      : {GA_DIR}")
+        print(f"GA cmd      : {args.ga_cmd}")
         print(f"Frontend dir: {FRONTEND_DIR}")
         print(f"Frontend cmd: {args.frontend_cmd}")
         return 0
@@ -88,7 +97,7 @@ def main() -> int:
     processes: list[subprocess.Popen] = []
 
     def shutdown(*_: object) -> None:
-        print("\nShutting down dev servers...")
+        print("\nShutting down dev services...")
         for p in processes:
             terminate_process(p)
         sys.exit(0)
@@ -105,23 +114,34 @@ def main() -> int:
         return 1
 
     try:
+        ga_service = start_process("ga", args.ga_cmd, GA_DIR)
+        processes.append(ga_service)
+    except Exception as exc:
+        print(f"Failed to start GA command: {args.ga_cmd}")
+        print(f"Reason: {exc}")
+        terminate_process(backend)
+        return 1
+
+    try:
         frontend = start_process("frontend", args.frontend_cmd, FRONTEND_DIR)
         processes.append(frontend)
     except Exception as exc:
         print(f"Failed to start frontend command: {args.frontend_cmd}")
         print(f"Reason: {exc}")
+        terminate_process(ga_service)
         terminate_process(backend)
         return 1
 
     threads = [
         threading.Thread(target=stream_output, args=("backend", backend), daemon=True),
+        threading.Thread(target=stream_output, args=("ga", ga_service), daemon=True),
         threading.Thread(target=stream_output, args=("frontend", frontend), daemon=True),
     ]
     for thread in threads:
         thread.start()
 
     while True:
-        for name, proc in (("backend", backend), ("frontend", frontend)):
+        for name, proc in (("backend", backend), ("ga", ga_service), ("frontend", frontend)):
             code = proc.poll()
             if code is not None:
                 print(f"{name} exited with code {code}. Stopping both servers.")

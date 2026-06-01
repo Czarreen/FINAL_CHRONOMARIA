@@ -1,0 +1,91 @@
+[
+  {
+    "name": "eng_math_gpic_original_bug",
+    "description": "The bug that triggered this rewrite. Same section, overlapping times, overlapping rooms.",
+    "subject_a": {
+      "curr_id": 945,
+      "code": "4065",
+      "course_no": "Eng Math 2",
+      "department_id": "CE",
+      "section": "1A",
+      "mth_schedule": "1:00-2:30",
+      "mth_room": "1200/1195"
+    },
+    "subject_b": {
+      "curr_id": 946,
+      "code": "4070",
+      "course_no": "GPIC",
+      "department_id": "CE",
+      "section": "1A",
+      "mth_schedule": "1:30-3:00",
+      "mth_room": "1200"
+    },
+    "expected_conflict": true,
+    "expected_reasons": ["same_section", "room_overlap", "time_overlap"]
+  },
+  {
+    "name": "no_conflict_different_sections",
+    "description": "Same time, same room type, but different sections -- not a conflict.",
+    "subject_a": {
+      "section": "1A",
+      "mth_schedule": "1:00-2:30",
+      "mth_room": "E101"
+    },
+    "subject_b": {
+      "section": "1B",
+      "mth_schedule": "1:00-2:30",
+      "mth_room": "E102"
+    },
+    "expected_conflict": false
+  },
+  {
+    "name": "back_to_back_not_a_conflict",
+    "description": "End time of A equals start time of B -- must NOT be treated as overlap.",
+    "subject_a": {
+      "section": "1A",
+      "mth_schedule": "1:00-2:30",
+      "mth_room": "E101"
+    },
+    "subject_b": {
+      "section": "1A",
+      "mth_schedule": "2:30-4:00",
+      "mth_room": "E101"
+    },
+    "expected_conflict": false
+  },
+  {
+    "name": "compound_room_vs_simple_overlap",
+    "description": "Compound room '1200/1195' vs simple '1200' -- should detect room overlap.",
+    "subject_a": {
+      "section": "2A",
+      "mth_schedule": "9:00-10:30",
+      "mth_room": "1200/1195"
+    },
+    "subject_b": {
+      "section": "2B",
+      "mth_schedule": "9:30-11:00",
+      "mth_room": "1200"
+    },
+    "expected_conflict": true,
+    "expected_reasons": ["room_overlap", "time_overlap"]
+  },
+  {
+    "name": "different_slots_mth_vs_tfs",
+    "description": "A is on MTh slot, B is on TFS slot -- different days, no conflict.",
+    "subject_a": {
+      "section": "1A",
+      "mth_schedule": "1:00-2:30",
+      "mth_room": "E101",
+      "tfs_schedule": null,
+      "tfs_room": null
+    },
+    "subject_b": {
+      "section": "1A",
+      "mth_schedule": null,
+      "mth_room": null,
+      "tfs_schedule": "1:00-2:30",
+      "tfs_room": "E101"
+    },
+    "expected_conflict": false
+  }
+]

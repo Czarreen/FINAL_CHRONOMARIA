@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { upsertSubjectNotificationCache } from '../lib/subjectNotifications.js';
 
 const router = Router();
 
@@ -11,15 +12,32 @@ router.get('/', async (req, res) => {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     const search = req.query.search?.trim() || '';
+    const searchField = req.query.searchField || 'all';
     const status = req.query.status || '';
 
     let query = supabaseAdmin
       .from('subjects')
-      .select('*', { count: 'exact' });
+      .select('*, departments(department_id, department_name)', { count: 'exact' });
 
-// Apply search filter (search in code and descriptive title)
+    // Apply search filter based on searchField
     if (search) {
-      query = query.or(`subject_code.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%`);
+      const fieldMap = {
+        subject_code: `subject_code.ilike.%${search}%`,
+        subject_course_no: `subject_course_no.ilike.%${search}%`,
+        subject_descriptive_title: `subject_descriptive_title.ilike.%${search}%`,
+        curr_id: `curr_id.ilike.%${search}%`,
+      };
+
+      if (fieldMap[searchField]) {
+        // Search specific field
+        query = query.filter(searchField, 'ilike', `%${search}%`);
+      } else {
+        // Search all text columns (when searchField is 'all' or unrecognized)
+        // Note: curr_id is excluded because it's an integer; use specific field search for curr_id lookups
+        query = query.or(
+          `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
+        );
+      }
     }
 
     // Apply status filter
@@ -46,12 +64,55 @@ router.get('/', async (req, res) => {
       console.error('Error fetching active count:', activeCountError);
     }
 
+    // Enrich each subject row with resolved room names from the rooms table.
+    // subjects.mth_room / tfs_room store numeric room IDs as text (e.g. "5" or "5/10").
+    const rows = data ?? [];
+    const splitRoomIds = (val) => {
+      if (!val) return [];
+      return String(val)
+        .replace(/^[\[\]"]+|[\[\]"]+$/g, '')
+        .split(/\s*[,/]\s*/)
+        .map((t) => t.replace(/^(?:room|rm)\s*/i, '').trim())
+        .filter((t) => /^\d+$/.test(t))
+        .map(Number);
+    };
+
+    const roomIdSet = new Set();
+    for (const s of rows) {
+      splitRoomIds(s.mth_room).forEach((id) => roomIdSet.add(id));
+      splitRoomIds(s.tfs_room).forEach((id) => roomIdSet.add(id));
+    }
+
+    let roomNameMap = {};
+    if (roomIdSet.size > 0) {
+      const { data: roomRows } = await supabaseAdmin
+        .from('rooms')
+        .select('room_id, room_name')
+        .in('room_id', [...roomIdSet]);
+      for (const r of roomRows ?? []) {
+        roomNameMap[r.room_id] = r.room_name;
+      }
+    }
+
+    const resolveRoom = (val) => {
+      const ids = splitRoomIds(val);
+      if (!ids.length) return null;
+      const names = [...new Set(ids)].map((id) => roomNameMap[id]).filter(Boolean);
+      return names.length ? names.join(' / ') : null;
+    };
+
+    const enrichedRows = rows.map((s) => ({
+      ...s,
+      mth_room_name: resolveRoom(s.mth_room),
+      tfs_room_name: resolveRoom(s.tfs_room),
+    }));
+
     return res.json({
       page,
       limit,
       total: count ?? 0,
       activeCount: activeCount ?? 0,
-      rows: data ?? [],
+      rows: enrichedRows,
     });
   } catch (err) {
     console.error('Server error:', err);
@@ -66,15 +127,31 @@ router.post('/', async (req, res) => {
   try {
     const subjectData = req.body;
 
+    if ('mth_room_id' in subjectData && !('mth_room' in subjectData)) {
+      subjectData.mth_room = subjectData.mth_room_id;
+    }
+
+    if ('tfs_room_id' in subjectData && !('tfs_room' in subjectData)) {
+      subjectData.tfs_room = subjectData.tfs_room_id;
+    }
+
     // Define required and allowed fields
     const allowedFields = [
       'subject_code',
       'subject_course_no',
       'subject_descriptive_title',
+      'department_id',
+      'subject_section',
       'subject_units',
       'subject_lec_hrs',
       'subject_lab_hrs',
+      'is_general',
+      'mth_schedule',
+      'tfs_schedule',
+      'mth_room',
+      'tfs_room',
       'subject_status',
+      'curr_id',
     ];
 
     const sanitizedData = {};
@@ -104,12 +181,57 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    try {
+      await upsertSubjectNotificationCache(data);
+    } catch (notifErr) {
+      console.error('Failed to sync subject notifications after create:', notifErr);
+    }
+
     return res.status(201).json(data);
   } catch (err) {
     console.error('Server error:', err);
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Unknown error',
     });
+  }
+});
+
+// GET /api/subjects/:id/page — returns which page this subject falls on
+// Fetches only subject_id column (lightweight) to compute position quickly
+router.get('/:id/page', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid subject ID' });
+    }
+
+    const pageSize = Math.max(1, Number(req.query.limit || 50));
+    const search = req.query.search?.trim() || '';
+    const status = req.query.status || '';
+
+    let query = supabaseAdmin
+      .from('subjects')
+      .select('subject_id')
+      .order('subject_code', { ascending: true });
+
+if (search) {
+      query = query.or(
+        `subject_code.ilike.%${search}%,subject_course_no.ilike.%${search}%,subject_descriptive_title.ilike.%${search}%,mth_schedule.ilike.%${search}%,tfs_schedule.ilike.%${search}%,mth_room.ilike.%${search}%,tfs_room.ilike.%${search}%,subject_status.ilike.%${search}%`
+      );
+    }
+    if (status) {
+      query = query.eq('subject_status', status);
+    }
+
+    const { data: sortedIds, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const index = (sortedIds || []).findIndex((r) => r.subject_id === id);
+    if (index === -1) return res.status(404).json({ error: 'Subject not found' });
+
+    return res.json({ page: Math.ceil((index + 1) / pageSize) });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
@@ -120,7 +242,7 @@ router.get('/:id', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('subjects')
-      .select('*')
+      .select('*, departments(department_id, department_name)')
       .eq('subject_id', id)
       .single();
 
@@ -129,6 +251,12 @@ router.get('/:id', async (req, res) => {
         return res.status(404).json({ error: 'Subject not found' });
       }
       return res.status(500).json({ error: error.message });
+    }
+
+    try {
+      await upsertSubjectNotificationCache(data);
+    } catch (notifErr) {
+      console.error('Failed to sync subject notifications after update:', notifErr);
     }
 
     return res.json(data);
@@ -146,8 +274,16 @@ router.patch('/:id', async (req, res) => {
     const updates = req.body;
 
     // Only allow certain fields to be updated
-    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'subject_status'];
+    const allowedFields = ['subject_code', 'subject_course_no', 'subject_descriptive_title', 'department_id', 'subject_section', 'subject_units', 'subject_lec_hrs', 'subject_lab_hrs', 'is_general', 'mth_schedule', 'tfs_schedule', 'mth_room', 'tfs_room', 'subject_status', 'curr_id'];
     const sanitizedUpdates = {};
+
+    if ('mth_room_id' in updates && !('mth_room' in updates)) {
+      updates.mth_room = updates.mth_room_id;
+    }
+
+    if ('tfs_room_id' in updates && !('tfs_room' in updates)) {
+      updates.tfs_room = updates.tfs_room_id;
+    }
 
     for (const field of allowedFields) {
       if (field in updates) {
@@ -198,6 +334,15 @@ router.delete('/:id', async (req, res) => {
         return res.status(404).json({ error: 'Subject not found' });
       }
       return res.status(500).json({ error: error.message });
+    }
+
+    try {
+      await supabaseAdmin
+        .from('subject_notifications')
+        .delete()
+        .eq('entity_id', data.subject_id);
+    } catch (notifErr) {
+      console.error('Failed to clear subject notifications after delete:', notifErr);
     }
 
     return res.json({
