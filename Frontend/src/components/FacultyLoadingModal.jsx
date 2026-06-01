@@ -23,6 +23,7 @@ export default function FacultyLoadingModal({ faculty, onClose }) {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [lockingId, setLockingId] = useState(null);
+  const [lockError, setLockError] = useState(null);
 
   /* ── Fetch on mount (or when faculty changes) ── */
   useEffect(() => {
@@ -50,7 +51,12 @@ export default function FacultyLoadingModal({ faculty, onClose }) {
 
   /* ── Lock toggle with optimistic update ── */
   async function handleToggleLock(facloadingId, currentLocked) {
+    if (facloadingId == null) {
+      setLockError('Cannot lock: this row has no database record ID. Run the GA to save it first.');
+      return;
+    }
     if (lockingId === facloadingId) return;
+    setLockError(null);
     const newLocked = !currentLocked;
     setData((prev) =>
       prev.map((r) => r.facloading_id === facloadingId ? { ...r, locked: newLocked } : r)
@@ -58,11 +64,12 @@ export default function FacultyLoadingModal({ faculty, onClose }) {
     setLockingId(facloadingId);
     try {
       await updateFacultyLoadingLock(facloadingId, newLocked);
-    } catch {
-      // Revert on failure
+    } catch (err) {
+      // Revert on failure and surface the error
       setData((prev) =>
         prev.map((r) => r.facloading_id === facloadingId ? { ...r, locked: currentLocked } : r)
       );
+      setLockError(`Failed to ${newLocked ? 'lock' : 'unlock'} — ${err?.message ?? 'network error'}. Change reverted.`);
     } finally {
       setLockingId(null);
     }
@@ -136,11 +143,27 @@ export default function FacultyLoadingModal({ faculty, onClose }) {
             </div>
           )}
 
-          {/* Error */}
+          {/* Fetch error */}
           {error && !loading && (
             <div className="flex items-center gap-3 rounded-lg bg-red-50 p-3 text-red-700">
               <AlertCircle size={16} />
               <span className="text-sm">{error}</span>
+            </div>
+          )}
+
+          {/* Lock error */}
+          {lockError && (
+            <div className="mb-3 flex items-center gap-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-rose-700">
+              <AlertCircle size={16} className="shrink-0" />
+              <span className="text-sm">{lockError}</span>
+              <button
+                type="button"
+                onClick={() => setLockError(null)}
+                className="ml-auto shrink-0 text-rose-400 hover:text-rose-700"
+                aria-label="Dismiss"
+              >
+                <X size={14} />
+              </button>
             </div>
           )}
 

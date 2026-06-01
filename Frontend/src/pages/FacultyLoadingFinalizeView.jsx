@@ -243,6 +243,7 @@ function getExportValue(row, columnKey) {
     return total === 0 ? '' : total;
   }
   if (columnKey === 'merged') return value ? 'Yes' : 'No';
+  if (columnKey === 'locked') return value ? 'Yes' : 'No';
   if (columnKey === 'units') return value === '' || value === null || value === undefined ? '' : value;
   if (columnKey === 'mth_schedule' || columnKey === 'tfs_schedule') return formatScheduleTimeDisplay(value) || value || '';
   if (columnKey === 'mth_room' || columnKey === 'tfs_room') {
@@ -798,14 +799,13 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     const newLocked = !currentLocked;
 
     // Optimistic local update
-    setRows((current) => {
-      const next = current.map((r) => (r.id === rowId ? { ...r, locked: newLocked } : r));
-      setStatusMessage(newLocked ? 'Row locked.' : 'Row unlocked.');
-      return next;
-    });
+    setRows((current) =>
+      current.map((r) => (r.id === rowId ? { ...r, locked: newLocked } : r))
+    );
 
     // Persist to DB when the row has a known DB id
     if (facloadingId != null) {
+      setStatusMessage(newLocked ? 'Row locked.' : 'Row unlocked.');
       updateFacultyLoadingLock(facloadingId, newLocked).catch((err) => {
         console.error('Failed to persist lock to DB:', err);
         // Revert on failure
@@ -814,6 +814,12 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
         );
         setStatusMessage('Failed to update lock — reverted.');
       });
+    } else {
+      setStatusMessage(
+        newLocked
+          ? 'Row locked locally — not saved to DB (no record ID). Run the GA or reload to sync.'
+          : 'Row unlocked locally — not saved to DB (no record ID). Run the GA or reload to sync.',
+      );
     }
   };
 
