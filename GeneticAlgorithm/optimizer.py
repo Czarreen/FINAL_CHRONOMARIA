@@ -3421,6 +3421,124 @@ def run_schedule_ga(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================
+# POOL-BASED SCHEDULER (optimizer_sched.py pipeline, callable as HTTP)
+# ============================================================
+
+def run_pool_scheduler(payload: Dict[str, Any]) -> Dict[str, Any]:
+    import traceback as _tb
+    import uuid as _uuid
+    import time as _time
+    try:
+        from sched.io.parser import parse_input
+        from sched.io.formatter import format_output
+        from sched.flow.preflight import run_preflight
+        from sched.flow.census import assert_entity_invariant
+        from sched.pool.pool_builder import build_pools, ensure_all_room_pools
+        from sched.pool.conflict_resolver import resolve_pool_conflicts
+        from sched.pool.migration import migrate_conflicted_entities
+        from sched.pool.empty_placement import place_empty_entities
+        from sched.pool.conflict_resolver import detect_final_conflicts
+
+        subjects, rooms, constraints = parse_input(payload)
+
+        subjects = [
+            s for s in subjects
+            if s.subject_status is None or s.subject_status.strip().upper() == 'ACTIVE'
+        ]
+
+        global_budget_s = float(constraints.get('global_budget_seconds', 150.0))
+        global_start = _time.perf_counter()
+        run_id = str(_uuid.uuid4())
+
+        registry, entities = run_preflight(subjects, rooms)
+        assert_entity_invariant(subjects, entities, [], "post-preflight")
+
+        active_room_keys = {str(r.room_id) for r in rooms}
+        pools, unassigned = build_pools(entities, registry, active_room_keys)
+        pools = ensure_all_room_pools(pools, registry, active_room_keys)
+
+        pool_by_room = {
+            next(iter(p.room_keys)): p
+            for p in pools if not p.is_dual_room
+        }
+        for entity in unassigned:
+            if (entity.manual_review_reason is not None
+                    and entity.current_room_keys
+                    and entity.current_schedule_blocks):
+                for room_key in entity.current_room_keys:
+                    if room_key in pool_by_room:
+                        pool_by_room[room_key].locked_entities.append(entity)
+
+        diagnostics: dict = {
+            "pools_created": len(pools),
+            "conflicts_detected": 0,
+            "conflicts_resolved_by_migration": 0,
+            "manual_review_count": 0,
+            "warnings": [],
+        }
+
+        total_conflicted = 0
+        for pool in pools:
+            resolve_pool_conflicts(pool)
+            total_conflicted += len(pool.conflicted_entities)
+        diagnostics["conflicts_detected"] = total_conflicted
+
+        pools, migration_manual_review = migrate_conflicted_entities(
+            pools, registry, max_per_entity_s=5.0
+        )
+        resolved_by_migration = total_conflicted - len(migration_manual_review)
+        diagnostics["conflicts_resolved_by_migration"] = max(0, resolved_by_migration)
+
+        pools, _newly_placed, still_empty = place_empty_entities(
+            unassigned, pools, registry, global_start, global_budget_s
+        )
+        manual_review = migration_manual_review + still_empty
+
+        all_placed = [e for pool in pools for e in pool.entities]
+
+        late_conflict_pairs = detect_final_conflicts(all_placed)
+        if late_conflict_pairs:
+            placed_ids = {loser.entity_id for loser, _ in late_conflict_pairs}
+            all_placed = [e for e in all_placed if e.entity_id not in placed_ids]
+            late_conflicts = []
+            for loser, winner in late_conflict_pairs:
+                loser.manual_review_reason = "post_optimization_conflict"
+                if winner.members:
+                    m = winner.members[0]
+                    loser.conflict_partner_info = {
+                        "code": m.code,
+                        "course_no": m.course_no,
+                        "section": m.section,
+                        "descriptive_title": m.descriptive_title,
+                        "mth_schedule": m.mth_schedule,
+                        "mth_room": m.mth_room,
+                        "tfs_schedule": m.tfs_schedule,
+                        "tfs_room": m.tfs_room,
+                    }
+                late_conflicts.append(loser)
+            manual_review = manual_review + late_conflicts
+            diagnostics["warnings"].append(
+                f"post_ga_conflicts_detected: {len(late_conflicts)}"
+            )
+
+        assert_entity_invariant(subjects, all_placed, manual_review, "post-pipeline")
+
+        stats = {
+            "ga_run_id": run_id,
+            "elapsed_s": round(_time.perf_counter() - global_start, 2),
+        }
+        return format_output(all_placed, manual_review, diagnostics, stats)
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "traceback": _tb.format_exc(),
+        }
+
+
+# ============================================================
 # HTTP HANDLER
 # ============================================================
 
@@ -3443,7 +3561,7 @@ class GaHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.rstrip("/")
-        if path not in {"/generate", "/generate-schedule"}:
+        if path not in {"/generate", "/generate-schedule", "/run-sched"}:
             self._write_json(404, {"error": "Not found"})
             return
 
@@ -3457,7 +3575,9 @@ class GaHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            if path == "/generate-schedule":
+            if path == "/run-sched":
+                result = run_pool_scheduler(payload)
+            elif path == "/generate-schedule":
                 result = run_schedule_ga(payload)
             else:
                 result = run_ga(payload)

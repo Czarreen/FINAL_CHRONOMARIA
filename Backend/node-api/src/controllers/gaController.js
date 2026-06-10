@@ -1,16 +1,8 @@
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { env } from '../config/env.js';
 import { fetchFacultyPreferenceMapForGA } from '../lib/facultySubjectPreferences.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { query, withPgClient } from '../lib/postgres.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OPTIMIZER_SCHED_PATH = process.env.OPTIMIZER_SCHED_PATH ||
-  path.resolve(__dirname, '../../../../GeneticAlgorithm/optimizer_sched.py');
-const OPTIMIZER_PYTHON = process.env.OPTIMIZER_PYTHON || 'python';
 
 const REQUIRED_FACULTY_FIELDS = ['faculty_name', 'department_id', 'faculty_max_units', 'faculty_role', 'faculty_status'];
 const REQUIRED_OFFERING_FIELDS = ['curr_id', 'code', 'course_no', 'department_id', 'section', 'descriptive_title', 'units'];
@@ -3061,43 +3053,24 @@ export async function getAutomaticSchedulerPreFlight(_req, res) {
 
 // ── optimizer_sched.py subprocess helpers ────────────────────────────────────
 
-function spawnOptimizerSched(payload, timeoutMs = 120000) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(OPTIMIZER_PYTHON, [OPTIMIZER_SCHED_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-      reject(new Error(`optimizer_sched.py timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-      process.stderr.write(chunk);
+async function spawnOptimizerSched(payload, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${env.pythonServiceUrl}/run-sched`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
     });
-
-    child.on('close', () => {
-      clearTimeout(timer);
-      if (timedOut) return;
-      try {
-        resolve(JSON.parse(stdout));
-      } catch {
-        reject(new Error(`optimizer_sched.py stdout not valid JSON. stderr: ${stderr.slice(0, 500)}`));
-      }
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(new Error(`Failed to spawn optimizer_sched.py: ${err.message}`));
-    });
-
-    child.stdin.write(JSON.stringify(payload));
-    child.stdin.end();
-  });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(text || `Pool scheduler returned HTTP ${response.status}`);
+    }
+    return JSON.parse(text);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function toOptimizerSubject(subject, roomLookup) {
