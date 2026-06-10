@@ -3471,7 +3471,7 @@ class GaHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     host = os.getenv("GA_HOST", "0.0.0.0")
-    port = int(os.getenv("GA_PORT", "8000"))
+    port = int(os.getenv("PORT", os.getenv("GA_PORT", "8000")))
     server = ThreadingHTTPServer((host, port), GaHandler)
     print(f"[genetic-algorithm] listening on http://{host}:{port}")
     try:
