@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+﻿import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
@@ -322,7 +322,6 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
         .then(() => refreshNotifications())
         .catch(() => {});
     } catch (err) {
-      console.error('Inline save (subject) failed:', err);
     }
   };
 
@@ -335,7 +334,7 @@ export default function SubjectsView({ subjectMutationKey = 0 } = {}) {
 
     fetchRoomBookings()
       .then((rows) => { if (active) setRoomBookings(rows); })
-      .catch((err) => console.error('Failed to load room bookings:', err));
+      .catch(() => {});
 
     return () => { active = false; };
   }, []);

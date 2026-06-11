@@ -67,7 +67,7 @@ router.get('/course-offerings', async (req, res) => {
 router.patch('/course-offerings/:id/resolve', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
 
     const { data: existingRows, error: existingError } = await supabaseAdmin
       .from('data_quality_notifications')
@@ -397,7 +397,7 @@ router.get('/rooms/debug', async (_req, res) => {
 router.patch('/rooms/:id/resolve', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
 
     const { data: existingRows, error: existingError } = await supabaseAdmin
       .from('data_quality_notifications')
@@ -554,7 +554,7 @@ router.get('/faculty/persisted', async (req, res) => {
 router.patch('/faculty/:id/resolve', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
 
     const resp = await supabaseAdmin
       .from('faculty_notifications')
@@ -685,7 +685,7 @@ router.get('/subjects/persisted', async (req, res) => {
 router.patch('/subjects/:id/resolve', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
 
     const resp = await supabaseAdmin
       .from('subject_notifications')

@@ -360,6 +360,7 @@ async function fetchDepartmentLookup(options = {}) {
     }
 
     const insertedId = Number(inserted.department_id);
+    if (!Number.isFinite(insertedId) || insertedId <= 0) continue;
     byId.set(insertedId, inserted);
     byCode.set(code, insertedId);
 
@@ -1987,6 +1988,14 @@ router.delete('/:id', async (req, res) => {
     const subjectCode = normalizeCell(target?.code);
     if (subjectCode) {
       try {
+        // Only delete the subject if no other course offering still references this code
+        const { count: stillUsed } = await supabaseAdmin
+          .from('course_offerings')
+          .select('*', { count: 'exact', head: true })
+          .eq('code', subjectCode);
+        if (stillUsed > 0) {
+          subjectDelete = { action: 'skipped', reason: 'Subject code still used by other offerings.' };
+        } else {
         const { data: deletedSubjects, error: subjectDeleteError } = await supabaseAdmin
           .from('subjects')
           .delete()
@@ -2005,6 +2014,7 @@ router.delete('/:id', async (req, res) => {
             rows: deletedSubjects ?? [],
           };
         }
+        } // end else (no remaining offerings)
       } catch (subjectErr) {
         subjectDelete = {
           action: 'failed',

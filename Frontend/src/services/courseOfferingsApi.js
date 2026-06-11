@@ -3,7 +3,9 @@ import { getAuthHeaders } from './authContext.js';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function checkDuplicateCode(code) {
-  const response = await fetch(`${API_BASE_URL}/api/course-offerings/check-code/${encodeURIComponent(code)}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/check-code/${encodeURIComponent(code)}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -24,7 +26,9 @@ export async function fetchCourseOfferings({ page = 1, limit = 50, search = '', 
   if (sortBy) params.sortBy = String(sortBy);
   if (sortOrder) params.sortOrder = String(sortOrder);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/course-offerings?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings?${query.toString()}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -129,14 +133,18 @@ export async function importCourseOfferingsCsv({ csvText, fileName, replaceMode 
 
 export async function fetchCourseOfferingPageNumber(id, { sortBy = 'code', sortOrder = 'asc', pageSize = 50 } = {}) {
   const params = new URLSearchParams({ sortBy, sortOrder, pageSize: String(pageSize) });
-  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}/page?${params.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}/page?${params.toString()}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) return null;
   const payload = await response.json();
   return typeof payload.page === 'number' ? payload.page : null;
 }
 
 export async function fetchCourseOfferingById(id) {
-  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`);
+  const response = await fetch(`${API_BASE_URL}/api/course-offerings/${id}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();

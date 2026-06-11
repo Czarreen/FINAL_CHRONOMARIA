@@ -1,4 +1,4 @@
-const HIGHLIGHT_CLASSES = [
+﻿const HIGHLIGHT_CLASSES = [
   'row-highlighted',
   'row-highlighted-critical',
   'row-highlighted-medium',
@@ -87,7 +87,6 @@ export function highlightRowElement(rowId, options = {}) {
   if (tryApply()) return;
 
   if (!retry) {
-    console.warn(`[highlightRow] Element not found for row ID: ${rowId}`);
     if (typeof onFailed === 'function') onFailed();
     return;
   }
@@ -110,7 +109,6 @@ export function highlightRowElement(rowId, options = {}) {
   timeoutHandle = setTimeout(() => {
     cleanup();
     if (requestId !== activeHighlightRequestId) return;
-    console.warn(`[highlightRow] Timed out after ${maxWaitMs}ms waiting for row ID: ${rowId}`);
     if (typeof onFailed === 'function') onFailed();
   }, maxWaitMs);
 

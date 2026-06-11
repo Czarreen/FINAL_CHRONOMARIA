@@ -1,4 +1,5 @@
 let currentAuthUser = null;
+let currentAuthToken = null;
 
 function toSafeUser(user) {
   if (!user) return null;
@@ -15,8 +16,13 @@ export function setCurrentAuthUser(user) {
   currentAuthUser = toSafeUser(user);
 }
 
+export function setCurrentAuthToken(token) {
+  currentAuthToken = token || null;
+}
+
 export function clearCurrentAuthUser() {
   currentAuthUser = null;
+  currentAuthToken = null;
 }
 
 export function getCurrentAuthUser() {
@@ -24,12 +30,6 @@ export function getCurrentAuthUser() {
 }
 
 export function getAuthHeaders() {
-  const user = getCurrentAuthUser();
-  if (!user) return {};
-
-  return {
-    'X-User-Id': String(user.user_id || ''),
-    'X-Username': String(user.username || ''),
-    'X-User-Role': String(user.role || ''),
-  };
+  if (!currentAuthToken) return {};
+  return { Authorization: `Bearer ${currentAuthToken}` };
 }

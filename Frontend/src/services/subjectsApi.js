@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authContext.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export async function fetchSubjects({ page = 1, limit = 50, search = '', searchField = 'all', status = '' } = {}) {
@@ -6,7 +8,9 @@ export async function fetchSubjects({ page = 1, limit = 50, search = '', searchF
   if (searchField && searchField !== 'all') params.searchField = String(searchField);
   if (status) params.status = String(status);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/subjects?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/subjects?${query.toString()}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -28,14 +32,18 @@ export async function fetchSubjectPageNumber(id, { search = '', searchField = 'a
   if (search) params.set('search', search);
   if (searchField && searchField !== 'all') params.set('searchField', String(searchField));
   if (status) params.set('status', status);
-  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}/page?${params.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}/page?${params.toString()}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) return null;
   const payload = await response.json();
   return typeof payload.page === 'number' ? payload.page : null;
 }
 
 export async function fetchSubjectById(id) {
-  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`);
+  const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -48,9 +56,7 @@ export async function fetchSubjectById(id) {
 export async function updateSubjectStatus(id, status) {
   const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ subject_status: status }),
   });
 
@@ -65,9 +71,7 @@ export async function updateSubjectStatus(id, status) {
 export async function updateSubject(id, updates) {
   const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(updates),
   });
 
@@ -82,6 +86,7 @@ export async function updateSubject(id, updates) {
 export async function deleteSubject(id) {
   const response = await fetch(`${API_BASE_URL}/api/subjects/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
@@ -95,9 +100,7 @@ export async function deleteSubject(id) {
 export async function activateAllSubjects() {
   const response = await fetch(`${API_BASE_URL}/api/subjects/bulk/activate-all`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
   });
 
   if (!response.ok) {
@@ -111,9 +114,7 @@ export async function activateAllSubjects() {
 export async function createSubject(subjectData) {
   const response = await fetch(`${API_BASE_URL}/api/subjects`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(subjectData),
   });
 

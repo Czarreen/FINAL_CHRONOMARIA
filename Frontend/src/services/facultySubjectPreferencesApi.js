@@ -1,7 +1,4 @@
-/**
- * Faculty Subject Preferences API Service
- * Handles all API calls for faculty subject preferences feature
- */
+import { getAuthHeaders } from './authContext.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -12,7 +9,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
  */
 export async function fetchAllFacultySubjectPreferences() {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/faculty/subject-preferences/all`);
+    const response = await fetch(`${API_BASE_URL}/api/faculty/subject-preferences/all`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`API error (${response.status}): ${body}`);
@@ -31,7 +30,8 @@ export async function fetchAllFacultySubjectPreferences() {
 export async function fetchFacultySubjectPreferences(facultyId) {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences`
+      `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences`,
+      { headers: getAuthHeaders() }
     );
 
     if (!response.ok) {
@@ -66,18 +66,14 @@ export async function fetchFacultySubjectPreferences(facultyId) {
 export async function fetchAvailableSubjectsForFaculty(facultyId) {
   try {
     const url = `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences/available`;
-    console.log('🔍 Fetching available subjects from:', url);
-    
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
 
     if (!response.ok) {
       const body = await response.text();
-      console.error('❌ API Error Response:', { status: response.status, body });
       throw new Error(`API error (${response.status}): ${body}`);
     }
 
     const payload = await response.json();
-    console.log('✅ Available subjects response:', payload);
     
     return {
       subjects: Array.isArray(payload.subjects) ? payload.subjects : [],
@@ -107,9 +103,7 @@ export async function addFacultySubjectPreference(facultyId, { subjectTag, prior
       `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           subjectTag,
           priorityLevel,
@@ -146,6 +140,7 @@ export async function deleteFacultySubjectPreference(facultyId, subjectTag) {
       `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences/${encodeURIComponent(subjectTag)}`,
       {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       }
     );
 
@@ -173,7 +168,8 @@ export async function fetchFacultyPreferenceRecords(facultyId, { limit = 20, off
     params.set('offset', String(offset));
 
     const response = await fetch(
-      `${API_BASE_URL}/api/faculty/${facultyId}/preference-records?${params.toString()}`
+      `${API_BASE_URL}/api/faculty/${facultyId}/preference-records?${params.toString()}`,
+      { headers: getAuthHeaders() }
     );
 
     if (!response.ok) {
@@ -204,6 +200,7 @@ export async function deleteFacultyPreferenceRecord(facultyId, recordId) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/faculty/${facultyId}/preference-records/${recordId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -234,9 +231,7 @@ export async function autoGenerateFacultySubjectPreferences(facultyId) {
       `${API_BASE_URL}/api/faculty/${facultyId}/subject-preferences/auto-generate`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       }
     );
 
@@ -273,9 +268,7 @@ export async function autoGenerateSpecializationFromPreferences(facultyId) {
       `${API_BASE_URL}/api/faculty/${facultyId}/specialization/auto-generate`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       }
     );
 

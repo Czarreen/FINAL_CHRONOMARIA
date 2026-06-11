@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { recordAuditLog } from '../lib/auditLogger.js';
+import { generateToken } from '../lib/sessionToken.js';
 
 const router = Router();
 
@@ -26,7 +27,14 @@ function verifyPassword(password, storedHash) {
     return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(hash, 'hex'));
   }
 
-  return String(password) === hash;
+  try {
+    const a = Buffer.from(String(password));
+    const b = Buffer.from(hash);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 router.post('/login', async (req, res) => {
@@ -109,12 +117,13 @@ router.post('/login', async (req, res) => {
       },
     });
 
+    const token = generateToken({ user_id: data.user_id, username: data.username, role: data.role });
     return res.json({
+      token,
       user: {
         user_id: data.user_id,
         username: data.username,
         email: data.email,
-        password: password,
         role: data.role,
         status: data.status,
       },

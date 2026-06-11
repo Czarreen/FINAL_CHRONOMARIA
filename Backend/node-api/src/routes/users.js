@@ -123,7 +123,7 @@ router.post('/', async (req, res) => {
 router.patch('/:user_id', async (req, res) => {
   try {
     const userId = Number(req.params.user_id);
-    if (!userId) {
+    if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'invalid user_id' });
     }
 
@@ -238,7 +238,7 @@ router.patch('/:user_id', async (req, res) => {
 router.delete('/:user_id', async (req, res) => {
   try {
     const userId = Number(req.params.user_id);
-    if (!userId) {
+    if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'invalid user_id' });
     }
 

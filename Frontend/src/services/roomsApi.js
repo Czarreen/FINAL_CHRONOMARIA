@@ -10,7 +10,9 @@ export async function fetchRooms({ page = 1, limit = 50, search = '' } = {}) {
   const params = { page: String(page), limit: String(limit) };
   if (search) params.search = String(search);
   const query = new URLSearchParams(params);
-  const response = await fetch(`${API_BASE_URL}/api/rooms?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/api/rooms?${query.toString()}`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -88,7 +90,9 @@ export async function deleteRoom(room_id) {
 
 // GET - All room bookings across both tables for conflict detection
 export async function fetchRoomBookings() {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/bookings`);
+  const response = await fetch(`${API_BASE_URL}/api/rooms/bookings`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -101,7 +105,9 @@ export async function fetchRoomBookings() {
 
 // GET - Fetch all course offerings for a room
 export async function fetchRoomOfferings(room_id) {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}/offerings`);
+  const response = await fetch(`${API_BASE_URL}/api/rooms/${room_id}/offerings`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!response.ok) {
     const body = await response.text();

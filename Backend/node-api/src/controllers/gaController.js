@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+﻿import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -131,6 +131,9 @@ function parseScheduleText(scheduleText) {
     const minute = Number(timeMatch[2] || '0');
     const meridiem = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
 
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+    if (minute < 0 || minute > 59) return null;
+
     if (meridiem === 'AM') {
       if (hour === 12) hour = 0;
     } else if (meridiem === 'PM') {
@@ -139,6 +142,7 @@ function parseScheduleText(scheduleText) {
       hour += 12;
     }
 
+    if (hour < 0 || hour > 23) return null;
     return hour * 60 + minute;
   };
 
@@ -940,7 +944,6 @@ function buildPreflight(snapshot) {
       assignableOfferingsList.push(offering);
     } else {
       if (offering.code === '4733') {
-        console.log(`[preflight-debug] Offering code=4733 marked PROBLEMATIC. Reasons:`, offeringIssues);
       }
       problematicOfferingsMap.set(offering.id, {
         offering,
@@ -1221,7 +1224,7 @@ async function persistFacultyLoading(assignments, snapshot, historyMeta = {}) {
       mth_room_id: mthRoom.roomId,
       tfs_schedule: normalizeText(offering.tfs_schedule) || null,
       tfs_room_id: tfsRoom.roomId,
-      merged: toBoolean(offering.merged),
+      merged: toBoolean(offering.merged) ?? false,
       locked: flLockedByKey.has(offeringKey),
     };
   });
@@ -1469,14 +1472,10 @@ async function runFacultyLoadingWorkflow({ dryRun = false, constraints = {} } = 
   try {
     const facultyPreferences = await fetchFacultyPreferenceMapForGA();
     payload.faculty_preferences = facultyPreferences || {};
-    console.log('[ga] Included faculty_preferences with', Object.keys(payload.faculty_preferences).length, 'entries');
     const offering4733 = assignableOfferings.find((o) => String(o.code) === '4733');
-    console.log('[ga-debug-js] offering code=4733 in GA payload?', offering4733 ? `YES (id=${offering4733.id})` : 'NO — it is in problematic_offerings or filtered out');
     if (offering4733) {
-      console.log('[ga-debug-js] offering data:', JSON.stringify({ id: offering4733.id, code: offering4733.code, tfs_schedule: offering4733.tfs_schedule, tfs_room_id: offering4733.tfs_room_id, is_general: offering4733.is_general }));
     }
     const fac7 = gaFaculty.find((f) => String(f.faculty_id) === '7');
-    console.log('[ga-debug-js] faculty_id=7 in gaFaculty?', fac7 ? `YES (status=${fac7.faculty_status}, maxUnits=${fac7.faculty_max_units})` : 'NO — filtered out before GA!');
   } catch (prefErr) {
     console.warn('[ga] Warning: failed to fetch faculty preferences for GA:', prefErr && prefErr.message ? prefErr.message : prefErr);
     // continue without preferences
@@ -1936,7 +1935,6 @@ async function fixMergeGroupConflicts(mergedSubjects, existingPile, activeRooms,
     return groups.flat().map((c) => candidateToOutputRow(c, roomLookup, true, 'original'));
   }
 
-  console.log(`[preflight][merge-fix] ${conflictingGroupIndices.size} conflicting merge group(s) — calling GA to re-assign`);
 
   // Build GA subjects: one representative per conflicting group (schedule cleared)
   const conflictingGroups = [...conflictingGroupIndices].map((i) => groups[i]);
@@ -2098,13 +2096,11 @@ function buildAutomaticSchedulerPreflight(snapshot) {
           department_name: describeDepartment(c.department_id, departmentLookup),
         });
       }
-      console.log(`[preflight][merge] merged sub-group (ids=[${srGroup.map((s) => s.subject_id).join(',')}])`);
     }
 
     // Note: singletons with different schedule/room from a merged class are NOT conflicts.
     // They are valid unique schedules — handled by the unique-clean detection pass below.
   }
-  console.log(`[preflight][merge] candidates=${candidates.length}, merged sub-groups=${mergeGroupCount}`);
 
   // Pass B — catch subjects that share the exact same physical slot (schedule + room)
   // but were not caught by Pass A's identity-based grouping. Restricted to subjects
@@ -2152,9 +2148,7 @@ function buildAutomaticSchedulerPreflight(snapshot) {
         department_name: describeDepartment(c.department_id, departmentLookup),
       });
     }
-    console.log(`[preflight][merge-b] room+time merged group: ids=[${srGroup.map((s) => s.subject_id).join(',')}]`);
   }
-  console.log(`[preflight][merge-b] total merged sub-groups after pass B=${mergeGroupCount}`);
 
   // Tag merged groups: if any member is EMPTY (no schedule or room), the whole group
   // is MERGED_NEEDS_GENERATION; otherwise it is SCHEDULED (all members have a slot).
@@ -2247,7 +2241,6 @@ function buildAutomaticSchedulerPreflight(snapshot) {
     }
 
     const uniqueCleanCount = candidates.filter((c) => c.unique_clean).length;
-    console.log(`[preflight][scenario1] unique_clean=${uniqueCleanCount}`);
   }
 
   const mergedSubjects        = candidates.filter((row) => row.merged);
@@ -3263,7 +3256,6 @@ export async function postRunAutomaticScheduler(req, res) {
     let persistence = { persisted: 0, dry_run: true };
     if (!dryRun) {
       persistence = await persistAutomaticScheduler(allAssignments);
-      console.log(`[run][automatic] persisted=${persistence.persisted}`);
     }
 
     const humanReview = allUnresolved.filter((u) => u.reason_type === 'unresolvable_conflict');

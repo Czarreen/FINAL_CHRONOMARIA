@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Faculty Subject Preferences Library
  * Handles CRUD operations for faculty subject preferences with auto-generation from specialization
  */
@@ -846,7 +846,6 @@ export async function fetchFacultyPreferenceMapForGA() {
 export async function fetchAvailableSubjectsForFaculty(facultyId) {
   try {
     // Fetch all active subjects across all departments
-    console.log(`[fetchAvailableSubjectsForFaculty] Starting for facultyId=${facultyId}`);
     
     const { data: subjectsData, error: subjectsError } = await supabaseAdmin
       .from('subjects')
@@ -859,7 +858,6 @@ export async function fetchAvailableSubjectsForFaculty(facultyId) {
       throw subjectsError;
     }
     
-    console.log(`[fetchAvailableSubjectsForFaculty] Found ${subjectsData?.length || 0} active subjects`);
     
     if (!subjectsData || subjectsData.length === 0) {
       console.warn(`[fetchAvailableSubjectsForFaculty] No ACTIVE subjects found in database`);
@@ -867,7 +865,6 @@ export async function fetchAvailableSubjectsForFaculty(facultyId) {
         .from('subjects')
         .select('subject_code, subject_status')
         .limit(5);
-      console.log(`[fetchAvailableSubjectsForFaculty] All subjects sample:`, allSubjects);
     }
 
     return subjectsData || [];

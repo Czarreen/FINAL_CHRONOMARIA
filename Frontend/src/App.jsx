@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Sidebar from './components/Sidebar';
 import TopAppBar from './components/TopAppBar';
@@ -14,9 +14,10 @@ import CourseOfferingView from './pages/CourseOfferingView';
 import SettingsView from './pages/SettingsView';
 import { clearAllNotifications } from './services/notificationsApi';
 import { recordLogout } from './services/auditLogsApi.js';
-import { clearCurrentAuthUser, setCurrentAuthUser } from './services/authContext.js';
+import { clearCurrentAuthUser, setCurrentAuthUser, setCurrentAuthToken } from './services/authContext.js';
 import { RowHighlightProvider } from './hooks/RowHighlightProvider.jsx';
 import { NotificationProvider } from './hooks/NotificationProvider.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -44,11 +45,13 @@ export default function App() {
   const handleCurrentUserUpdate = (user) => {
     setCurrentUser(user);
     setCurrentAuthUser(user);
+    // token is not updated on profile edits — it remains valid until expiry
   };
 
-  const handleLogin = async (user) => {
+  const handleLogin = async (user, token) => {
     setCurrentUser(user);
     setCurrentAuthUser(user);
+    setCurrentAuthToken(token);
     setAuthRefreshKey((value) => value + 1);
     setCurrentView('dashboard');
     setIsAuthenticated(true);
@@ -58,13 +61,11 @@ export default function App() {
     try {
       await recordLogout();
     } catch (err) {
-      console.error('Failed to record logout audit log:', err);
     }
 
     try {
       await clearAllNotifications();
     } catch (err) {
-      console.error('Failed to clear notifications on logout:', err);
     }
     clearCurrentAuthUser();
     setCurrentUser(null);
@@ -125,22 +126,24 @@ export default function App() {
               />
 
               <div className="px-margin py-gutter max-w-7xl mx-auto w-full min-w-0 pb-16">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={currentView}
-                    className="min-w-0"
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.28, ease: 'easeOut' }}
-                  >
-                    {currentView === 'dashboard' ? (
-                      <DashboardView onNavigate={handleViewChange} />
-                    ) : (
-                      renderView()
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                <ErrorBoundary>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentView}
+                      className="min-w-0"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                    >
+                      {currentView === 'dashboard' ? (
+                        <DashboardView onNavigate={handleViewChange} />
+                      ) : (
+                        renderView()
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </ErrorBoundary>
               </div>
 
               <footer className="px-margin pb-8 pt-2 text-center">

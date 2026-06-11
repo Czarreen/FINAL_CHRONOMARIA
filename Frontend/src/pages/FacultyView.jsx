@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
+﻿import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowUpDown,
@@ -205,7 +205,6 @@ export default function FacultyView() {
       try { await syncFacultyNotifications(id); } catch (_) {}
       await loadFacultyNotifications();
     } catch (err) {
-      console.error('Inline save (faculty) failed:', err);
     }
   };
 
@@ -241,7 +240,6 @@ export default function FacultyView() {
 
       return Math.ceil((facultyIndex + 1) / limit);
     } catch (err) {
-      console.error('Failed to find faculty page number:', err);
       return null;
     }
   }
@@ -256,7 +254,6 @@ export default function FacultyView() {
       }));
       setNotifications(normalized);
     } catch (err) {
-      console.error('Failed to load faculty notifications:', err);
       setNotifications([]);
     }
   }
@@ -267,7 +264,6 @@ export default function FacultyView() {
       // Refresh notifications after resolving
       await loadFacultyNotifications();
     } catch (err) {
-      console.error('Failed to resolve notification:', err);
     }
   }
 
@@ -288,10 +284,8 @@ export default function FacultyView() {
           setHighlight(item.faculty_id, 'FacultyView', item.severity || null, { retry: true, maxWaitMs: 1200, pollIntervalMs: 16 });
         }
       } else {
-        console.error('Faculty member not found');
       }
     } catch (err) {
-      console.error('Failed to fetch faculty for editing:', err);
     }
   }
 
@@ -310,7 +304,6 @@ export default function FacultyView() {
             setPage(pageNum);
             setPendingScrollTo({ id: item.faculty_id, severity: item.severity || null });
           } else if (!pageNum) {
-            console.warn('Faculty member not found');
           }
         })
         .finally(() => setFindingRow(false));
@@ -343,7 +336,6 @@ export default function FacultyView() {
       const rows = await fetchDepartments();
       setDepartments(rows);
     } catch (err) {
-      console.error('Failed to load departments:', err);
       setDepartments([]);
     }
   }
@@ -569,14 +561,12 @@ export default function FacultyView() {
       setSavingEdit(true);
       setEditError(null);
       const normalized = normalizePayload(editingData);
-      console.log('Sending PATCH data:', normalized);
       await updateFaculty(editingFaculty.faculty_id, normalized);
       setShowEditModal(false);
       setEditingFaculty(null);
       await loadFaculty();
       await loadFacultyNotifications(); // ← Refresh notifications after edit
     } catch (err) {
-      console.error('Edit error details:', err);
       if (String(err.message || '').includes('404')) {
         setShowEditModal(false);
         setEditingFaculty(null);
@@ -1522,12 +1512,10 @@ export default function FacultyView() {
             try {
               await loadFaculty();
             } catch (e) {
-              console.warn('Error refreshing faculty list after closing modal', e);
             }
             try {
               await fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
             } catch (e) {
-              console.warn('Error refreshing preferences map after closing modal', e);
             }
           }}
           onSaved={async () => {
@@ -1536,7 +1524,6 @@ export default function FacultyView() {
               await loadFaculty();
               await fetchAllFacultySubjectPreferences().then(setAllSubjectPreferences).catch(() => {});
             } catch (e) {
-              console.warn('Error refreshing after modal save', e);
             }
           }}
         />

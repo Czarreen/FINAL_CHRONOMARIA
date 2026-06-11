@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, CheckCircle2, DoorOpen, BookOpen, Users, UserPlus, FileUp, Upload, AlertCircle, Info, X, Bell } from 'lucide-react';
 import { fetchFacultyPage } from '../services/facultyApi.js';
@@ -46,7 +46,6 @@ export default function DashboardView({ onNavigate }) {
         if (subNotifRes.status === 'fulfilled') setSubjectIssueCount(subNotifRes.value.total || 0);
         if (roomNotifRes.status === 'fulfilled') setRoomIssueCount(roomNotifRes.value.total || 0);
       } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
       } finally {
         setLoading(false);
       }

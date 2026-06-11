@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowDown,
@@ -376,7 +376,6 @@ export default function AuditLogsView({ currentUser, embedded = false }) {
         );
       })
       .catch((err) => {
-        console.error('Failed to load departments for audit details:', err);
         if (isMounted) setDepartmentNameById(new Map());
       });
 

@@ -12,6 +12,8 @@ export default function LoginView({ onLogin }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!username.trim()) { setError('Username is required'); return; }
+    if (!password) { setError('Password is required'); return; }
     setLoading(true);
     setError('');
 
@@ -28,7 +30,7 @@ export default function LoginView({ onLogin }) {
         throw new Error(payload.error || 'Login failed');
       }
 
-      onLogin(payload.user);
+      onLogin(payload.user, payload.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

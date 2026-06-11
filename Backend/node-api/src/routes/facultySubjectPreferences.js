@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Faculty Subject Preferences Routes
  * Endpoints for managing faculty subject preferences
  */
@@ -420,7 +420,6 @@ router.post('/:facultyId/specialization/auto-generate', async (req, res) => {
 
       const savedValue = mergedValues.join(', ');
 
-      console.log(`[auto-generate specialization] facultyId=${facultyId} existingCount=${existingValues.length} generatedCount=${generated.length} savedValue='${savedValue}'`);
       const { data: savedRow, error: updateErr } = await supabaseAdmin
         .from('faculty')
         .update({ faculty_specialization: savedValue })
@@ -428,7 +427,6 @@ router.post('/:facultyId/specialization/auto-generate', async (req, res) => {
         .select()
         .single();
 
-      console.log('[auto-generate specialization] supabase update result:', { savedRow, updateErr });
 
       if (updateErr) {
         console.error('Error saving generated specialization:', updateErr);

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+﻿import { useState, useRef, useCallback, useEffect } from 'react';
 import { NotificationContext } from './NotificationContext';
 import { useEntityNotifications } from './useEntityNotifications';
 import { rescanAllEntities } from '../services/notificationsApi';
@@ -44,7 +44,6 @@ export function NotificationProvider({ children, authRefreshKey = 0 }) {
       setCoKey((k) => k + 1);
       setSubjectKey((k) => k + 1);
     } catch (err) {
-      console.error('Failed to rescan notifications:', err);
     } finally {
       setRescanning(false);
     }

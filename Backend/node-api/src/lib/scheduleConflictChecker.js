@@ -88,6 +88,7 @@ function parseTimeBlock(blockStr, scheduleType) {
   }
 
   if (days.size === 0 || startMin === null || endMin === null) return null;
+  if (endMin <= startMin) return null;
   return {
     days: [...days].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)),
     startMin,

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
+import { requireAuth } from './middleware/requireAuth.js';
+import { safeErrorMessage } from './lib/apiError.js';
 import courseOfferingsRouter from './routes/courseOfferings.js';
 import departmentsRouter from './routes/departments.js';
 import facultyRouter from './routes/faculty.js';
@@ -15,9 +17,20 @@ import auditLogsRouter from './routes/auditLogs.js';
 
 const app = express();
 
+const allowedOrigins = env.frontendOrigin
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [env.frontendOrigin, 'http://localhost:3002', 'http://localhost:3001', 'http://localhost:3000'],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS: origin not allowed'));
+      }
+    },
     credentials: false,
   })
 );
@@ -27,6 +40,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'node-api' });
 });
 
+app.use('/api/auth', authRouter);
+
 // Give the CSV import endpoint a long timeout — large files can take several minutes
 app.use('/api/course-offerings/import-csv', (req, res, next) => {
   req.setTimeout(10 * 60 * 1000); // 10 minutes
@@ -34,17 +49,22 @@ app.use('/api/course-offerings/import-csv', (req, res, next) => {
   next();
 });
 
-app.use('/api/faculty', facultyRouter);
-app.use('/api/faculty', facultySubjectPreferencesRouter);
-app.use('/api/departments', departmentsRouter);
-app.use('/api/rooms', roomsRouter);
-app.use('/api/course-offerings', courseOfferingsRouter);
-app.use('/api/subjects', subjectsRouter);
-app.use('/api/notifications', notificationsRouter);
-app.use('/api/ga', gaRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/auth', authRouter);
-app.use('/api/audit-logs', auditLogsRouter);
+app.use('/api/faculty', requireAuth, facultyRouter);
+app.use('/api/faculty', requireAuth, facultySubjectPreferencesRouter);
+app.use('/api/departments', requireAuth, departmentsRouter);
+app.use('/api/rooms', requireAuth, roomsRouter);
+app.use('/api/course-offerings', requireAuth, courseOfferingsRouter);
+app.use('/api/subjects', requireAuth, subjectsRouter);
+app.use('/api/notifications', requireAuth, notificationsRouter);
+app.use('/api/ga', requireAuth, gaRouter);
+app.use('/api/users', requireAuth, usersRouter);
+app.use('/api/audit-logs', requireAuth, auditLogsRouter);
+
+// Global error handler — catches any unhandled errors thrown by route handlers
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  res.status(err.status || 500).json({ error: safeErrorMessage(err) });
+});
 
 const server = app.listen(env.port, () => {
   console.log(`[node-api] listening on http://localhost:${env.port}`);

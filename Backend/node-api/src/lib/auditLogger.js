@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase.js';
+import { query as pgQuery } from './postgres.js';
 
 const SENSITIVE_KEYS = new Set(['password', 'password_hash']);
 const MAX_AUDIT_LOGS = 1000;
@@ -70,48 +71,23 @@ export async function pruneAuditLogsToLimit(limit = MAX_AUDIT_LOGS) {
       .from('audit_logs')
       .select('id', { count: 'exact', head: true });
 
-    if (countError) {
-      console.error('[audit] prune count failed:', countError.message);
-      return 0;
-    }
+    if (countError) return 0;
 
-    let remainingOverflow = Number(count ?? 0) - safeLimit;
-    let deletedCount = 0;
+    const overflow = Number(count ?? 0) - safeLimit;
+    if (overflow <= 0) return 0;
 
-    while (remainingOverflow > 0) {
-      const batchSize = Math.min(remainingOverflow, AUDIT_PRUNE_BATCH_SIZE);
-      const { data: oldestRows, error: selectError } = await supabaseAdmin
-        .from('audit_logs')
-        .select('id')
-        .order('timestamp', { ascending: true })
-        .order('created_at', { ascending: true })
-        .range(0, batchSize - 1);
-
-      if (selectError) {
-        console.error('[audit] prune select failed:', selectError.message);
-        break;
-      }
-
-      const ids = (oldestRows ?? []).map((row) => row.id).filter(Boolean);
-      if (ids.length === 0) break;
-
-      const { error: deleteError } = await supabaseAdmin
-        .from('audit_logs')
-        .delete()
-        .in('id', ids);
-
-      if (deleteError) {
-        console.error('[audit] prune delete failed:', deleteError.message);
-        break;
-      }
-
-      deletedCount += ids.length;
-      remainingOverflow -= ids.length;
-    }
-
-    return deletedCount;
-  } catch (error) {
-    console.error('[audit] prune failed:', error);
+    // Single atomic DELETE using a subquery — avoids race conditions from JS-side loops
+    const result = await pgQuery(
+      `DELETE FROM audit_logs
+       WHERE id IN (
+         SELECT id FROM audit_logs
+         ORDER BY "timestamp" ASC, created_at ASC
+         LIMIT $1
+       )`,
+      [overflow]
+    );
+    return result.rowCount ?? 0;
+  } catch {
     return 0;
   }
 }

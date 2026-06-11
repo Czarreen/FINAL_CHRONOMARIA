@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   fetchCourseOfferingNotifications,
   rescanAllCourseOfferingNotifications,
@@ -82,7 +82,6 @@ export function useEntityNotifications(type, { refreshTrigger = 0 } = {}) {
 
         setNotifications(transformRows(type, rows));
       } catch (err) {
-        console.error(`Failed to load ${type} notifications:`, err);
         if (active) setNotifications([]);
       } finally {
         if (active) setLoading(false);
@@ -111,7 +110,6 @@ export function useEntityNotifications(type, { refreshTrigger = 0 } = {}) {
       try {
         await Promise.all((item.dbIds || []).map((dbId) => resolveOne(type, dbId)));
       } catch (err) {
-        console.error('Failed to resolve notification:', err);
         // Restore by re-fetching
         load().catch(() => {});
       }

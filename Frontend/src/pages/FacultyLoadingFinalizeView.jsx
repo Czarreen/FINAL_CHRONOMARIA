@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowDown,
@@ -807,7 +807,6 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     if (facloadingId != null) {
       setStatusMessage(newLocked ? 'Row locked.' : 'Row unlocked.');
       updateFacultyLoadingLock(facloadingId, newLocked).catch((err) => {
-        console.error('Failed to persist lock to DB:', err);
         // Revert on failure
         setRows((current) =>
           current.map((r) => (r.id === rowId ? { ...r, locked: currentLocked } : r))
@@ -823,12 +822,7 @@ export default function FacultyLoadingFinalizeView({ onNavigate } = {}) {
     }
   };
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-    // Expose a helper to retrieve only unlocked rows for refaculty-loading operations
-    window.getFinalizedRowsForRefacultyLoad = () => rows.filter((r) => !r.locked);
-    return () => { delete window.getFinalizedRowsForRefacultyLoad; };
-  }, [rows]);
+  const getUnlockedRows = () => rows.filter((r) => !r.locked);
 
   const restoreSourceRows = () => {
     const sourceRows = extractLatestSourceRows();

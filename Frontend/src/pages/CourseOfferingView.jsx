@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
+﻿import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
@@ -307,7 +307,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           setRooms(rows);
         }
       } catch (err) {
-        console.error('Failed to load rooms:', err);
       }
     }
 
@@ -322,7 +321,7 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
     let active = true;
     fetchRoomBookings()
       .then((rows) => { if (active) setRoomBookings(rows); })
-      .catch((err) => console.error('Failed to load room bookings:', err));
+      .catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -337,7 +336,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           setDepartments(Array.isArray(rows) ? rows : []);
         }
       } catch (err) {
-        console.error('Failed to load departments:', err);
         setDepartments([]);
       }
     }
@@ -403,7 +401,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         pageSize: PAGE_SIZE,
       });
     } catch (err) {
-      console.error('Failed to find offering page number:', err);
       return null;
     }
   }
@@ -441,7 +438,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
       const result = await checkDuplicateCode(code.trim());
       setDuplicateCodeSuggestions(result.suggestions || []);
     } catch (err) {
-      console.error('Failed to check duplicate code:', err);
       setDuplicateCodeSuggestions([]);
     } finally {
       setCheckingDuplicateCode(false);
@@ -852,7 +848,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
             setPage(pageNum);
             setPendingScrollToOffering({ id: item.offeringId, severity: item.severity || null });
           } else if (!pageNum) {
-            console.warn('Offering not found');
           }
         })
         .finally(() => setFindingNotificationRow(false));
@@ -889,7 +884,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
           }
         })
         .catch((err) => {
-          console.error('Failed to edit offering from notification:', err);
           setOfferingError('Could not load offering for editing');
         })
         .finally(() => setFindingNotificationRow(false));
@@ -910,7 +904,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
         .then(() => { refreshNotifications(); refreshSubjectNotifications(); })
         .catch(() => {});
     } catch (err) {
-      console.error('Inline save failed:', err);
     }
   };
 
@@ -1012,7 +1005,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               const roomId = room?.room_id !== undefined ? room.room_id : (room?.id !== undefined ? room.id : null);
 
               if (roomId === null || roomId === undefined) {
-                console.warn('Room at index', idx, 'has no valid ID:', room);
                 return null;
               }
 
@@ -1224,7 +1216,6 @@ export default function CourseOfferingView({ onSubjectMutated } = {}) {
               : null),
         }));
       } catch (err) {
-        console.error('Failed to fetch all offerings for export:', err);
         setUpdateError('Failed to fetch all offerings. Exporting current page only.');
         usedCurrentPageFallback = true;
       }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
+﻿import { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, DoorOpen, Plus, MapPin, Monitor, Maximize2, Trash2, Edit2, ChevronLeft, ChevronRight, X, Search, AlertCircle, Settings, RefreshCw, BookOpen } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -182,7 +182,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
               room_type: inferredType,
             };
           } catch (err) {
-            console.error(`Failed to infer room type for room ${room.room_id}:`, err);
             return {
               ...room,
               room_type: 'Lecture',
@@ -219,7 +218,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         window.setTimeout(() => setRefreshStatus(null), 1800);
       }
     } catch (err) {
-      console.error('Failed to fetch rooms:', err);
       setError(err.message);
       setRooms([]);
       setRefreshStatus(null);
@@ -311,7 +309,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
           await loadRooms();
           await loadRoomNotifications();
         } catch (err) {
-          console.error('Failed to delete rooms:', err);
         } finally {
           setConfirmDialog(null);
         }
@@ -397,7 +394,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       setNotifications(transformedNotifications);
       setNotificationStats(stats);
     } catch (err) {
-      console.error('Failed to fetch room notifications:', err);
       setNotifications([]);
       setNotificationStats({ total: 0, critical: 0, medium: 0, low: 0 });
     } finally {
@@ -415,7 +411,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
         const rows = await fetchDepartments();
         setDepartments(Array.isArray(rows) ? rows : []);
       } catch (err) {
-        console.error('Failed to fetch departments:', err);
         setDepartments([]);
       }
     };
@@ -677,7 +672,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       // Clear message after 3 seconds
       setTimeout(() => setResolveMessage(null), 3000);
     } catch (err) {
-      console.error('Failed to resolve notification:', err);
       setResolveMessage('Issue is not yet Resolved');
       setResolveMessageType('error');
       // Clear message after 3 seconds
@@ -722,7 +716,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       const rows = await fetchRoomOfferings(room.room_id);
       setSubjectsOfferings(rows);
     } catch (err) {
-      console.error('Failed to fetch room offerings:', err);
     } finally {
       setSubjectsLoading(false);
     }
@@ -770,7 +763,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       resetForm();
       await loadRoomNotifications();
     } catch (err) {
-      console.error('Failed to create room:', err);
       setFormError(err.message);
     } finally {
       setIsSubmitting(false);
@@ -802,7 +794,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       resetForm();
       await loadRoomNotifications();
     } catch (err) {
-      console.error('Failed to update room:', err);
       setFormError(err.message);
     } finally {
       setIsSubmitting(false);
@@ -820,7 +811,6 @@ export default function RoomsView({ authRefreshKey = 0 } = {}) {
       setDeleteTargetRoom(null);
       await loadRoomNotifications();
     } catch (err) {
-      console.error('Failed to delete room:', err);
       setFormError(err.message);
     } finally {
       setIsSubmitting(false);

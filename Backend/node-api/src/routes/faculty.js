@@ -37,17 +37,10 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    const { data: allStatuses, error: activeCountError } = await supabaseAdmin
+    const { count: activeCount } = await supabaseAdmin
       .from('faculty')
-      .select('faculty_status');
-
-    if (activeCountError) {
-      console.error('Faculty active count error:', activeCountError);
-    }
-
-    const activeCount = Array.isArray(allStatuses)
-      ? allStatuses.filter((member) => String(member.faculty_status ?? '').trim().toLowerCase() === 'active').length
-      : 0;
+      .select('*', { count: 'exact', head: true })
+      .ilike('faculty_status', 'active');
 
     return res.json({
       page,

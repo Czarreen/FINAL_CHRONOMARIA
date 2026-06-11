@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
@@ -1046,7 +1046,6 @@ export default function ScheduleView({ onNavigate }) {
       setRows(rowsArray);
       setIsDryRunRows(false);
     } catch (err) {
-      console.error('Failed to load scheduler rows:', err);
       setRows([]);
       setIsDryRunRows(false);
     } finally {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Faculty Subject Preferences Modal Component
  * Modal for managing faculty subject preferences with manual and auto-generation capabilities
  * Uses subject_tag (text) instead of subject_id for historical preservation
@@ -121,7 +121,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
         setPreferenceRecordsTotal(Number(recordsData.count || recordsData.records?.length || 0));
         setPreferenceRecordsHasMore(Boolean(recordsData.hasMore));
       } catch (err) {
-        console.error('❌ Error loading data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
         setLoading(false);
@@ -214,7 +213,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error adding preference:', err);
       setError(err instanceof Error ? err.message : 'Failed to add preference');
     } finally {
       setIsAdding(false);
@@ -240,7 +238,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       setSuccessMessage('Subject preference deleted successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error deleting preference:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete preference');
     }
   };
@@ -279,7 +276,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       setSuccessMessage('Priority updated successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error updating priority:', err);
       setError(err instanceof Error ? err.message : 'Failed to update priority');
     }
   };
@@ -311,12 +307,10 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
         try {
           onSaved();
         } catch (e) {
-          console.warn('onSaved callback failed', e);
         }
       }
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error auto-generating preferences:', err);
       setError(err instanceof Error ? err.message : 'Failed to auto-generate preferences');
     } finally {
       setIsAutoGenerating(false);
@@ -490,7 +484,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       setSuccessMessage('Preference record deleted successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error deleting preference record:', err);
       setRecordError(err instanceof Error ? err.message : 'Failed to delete preference record');
     } finally {
       setRecordActionId(null);
@@ -550,7 +543,6 @@ export default function FacultySubjectPreferencesModal({ facultyId, facultyName,
       setSuccessMessage('Preference re-added successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error re-adding preference record:', err);
       setRecordError(err instanceof Error ? err.message : 'Failed to re-add preference record');
     } finally {
       setRecordActionId(null);
